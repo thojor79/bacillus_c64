@@ -1,12 +1,34 @@
+; Bacillus_c64
+; Copyright (C) 2016-2017  Thorsten Jordan.
+; 
+; This program is free software; you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation; either version 2 of the License, or
+; (at your option) any later version.
+; 
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+; ***************************************************************************************
+;
 ; All stuff related to actor handling
+;
+; ***************************************************************************************
+
 
 MAX_ACTOR_COUNT = 8
-FALL_DOWN_ACCL = 2	; 1 seems to slow, 2 is nearly too fast...
+FALL_DOWN_ACCL = 3	; 1 seems to slow, 2 is nearly too fast...
 ACTOR_DISABLED = 0
 ACTOR_ON_GROUND = 1
 ACTOR_IN_AIR = 2
 PLAYER_SPEED_X = PIXELTOPOS * 2	; must be same as screen scroll speed, otherwise jerky movement occurs!
-JUMP_VELOCITY = 80
+JUMP_VELOCITY = 110
 JUMP_FRAMES = 10
 
 ; ------------- How movement works! -------------------------

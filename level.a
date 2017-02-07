@@ -1,3 +1,20 @@
+; Bacillus_c64
+; Copyright (C) 2016-2017  Thorsten Jordan.
+; 
+; This program is free software; you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation; either version 2 of the License, or
+; (at your option) any later version.
+; 
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
 !to "level.o", cbm	; Program name
 !cpu 6510
 
@@ -16,17 +33,6 @@
 ; We can do parallax scrolling by having two background masks moving with different speed
 ; and just doing AND or OR with them, i.e. an X grid in front of some other forms.
 ; This can easily be done with big effect.
-
-; rotate some chars around or modify them to bring more action to the screen!
-; e.g. background cheese running down, use 4 or 8 chars for it, rotate
-; animation data over chars.
-; rotate background char data right (set carry from last byte, ror *4)
-; animated (jumping) fat drop as diamond
-; add tiles with traps (knife/fire)
-; animated cheese flowing down or animated (jumping) fat drops for diamonds (later).
-; just have N versions of a character, copied to its place every nth frame.
-; Very easy with big effect.
-; See giana sisters as example
 
 ; Sprite scroller for intro... with empty lines between text lines we have enough time to
 ; set sprite pointers so multiplexing isn't that critical so we can do 9 or 10
@@ -62,29 +68,51 @@
 ; -------------------------- ToDo - Higher Priority First-------------------------------
 
 ; Collision reaction: game over / scores - flash border when hit?
-; When kill enemy 50 pts, less for boni. use bcd/decimal flag for score accounting!
+; When kill enemy 50 pts, less for boni.
 ; Show player double sized or falling out of screen when dead. Count down lives then.
-
-; bonus accounting! list number of diamonds in score bar?!
+; in actor set some flag and react on them in main loop.
+; e.g. show "game over" sprites.
 
 ; describe enemy type and set vx and color and shape from it! and also behaviour!
 ; Implement actor behaviours (atm only fall down y/n) and store it to level data...
 ; just store enemy type. types 0-7=8-15 only with different behaviour.
+; So some enemies have same shape but different behaviour.
 
-; Fix sprite generator to change bit combinations for colors
+; account for kill in points.
+
+; Check if player is at level end
+
+; Fix sprite generator to change bit combinations for colors (maybe just exchange in export)
+; seems ok now, but converter can't do hires.
+; a generic hires option would be cool!
+
+; --------------------------- absolute needed topics above for a playable game ---------------------------------------
+
+; Create a Makefile for all data!
+; converter scripts there as well, to generate graphic .a data for including from png!!!
+
+; Add tiles with traps (knifes, fire)
+
+; Animate bonus tile(s).
+; jumping fat drop or some yellow cheese pill, maybe rotating around z
+
+; enemy collision is too strict, enemys are smaller, only check for collision with overlap of 16, not 24.
+
+; bonus accounting! list number of diamonds in score bar?!
+; atm only collects score
+
+; maybe tile with EXIT sign for level end
 
 ; New enemy sprites like pills or T-cells ghost like etc. with animation! The Tcell ghosts could be single color white hires!
 ; c64fy has no hires option yet (for sprites and maybe also for images)
 
-; start screen, also with highscore display would be good (combination of graphic/text mode)
+; start screen, also with highscore display would be good (combination of graphic/text mode). Use blend-in effect
 
 ; sometimes enemy is spawned within wall and when killed replaced with boni tile. strange. LATER.
 
 ; boni in uppermost line are not removed... LATER
 
 ; level has one boni where island should be, strange, LATER
-
-; turrican jumps higher if joy up is pressed longer... maybe? LATER
 
 ; move video init and everything to game.a, except video mode set.
 ; bank setting etc to main code..
@@ -94,21 +122,20 @@
 ; Maybe don't start scrolling immediatly but delay 1 frame? But it would only delay the
 ; lag. FIX LATER
 
+; maybe also add boni as sprites and code a sprite multiplexer!
+
 ; move scroll code to own file?
 
 ; when making second level, see what it is hardcoded...
 
 ; render more tiles and use them!
 ;
-; Background animation
-; Add wobbling fat drops as boni (kind of diamonds) jumping fat drop or so.
-; or some yellow cheese pill, maybe rotating around z
-;
-; use defines for IRQ registers etc.
-; Have IRQ there to start color ram shift etc.
-;
-; Write macros and functions to own file(s)
 
+; use more background animation
+
+; use defines for IRQ registers etc.
+; Have IRQ there to start color ram shift etc. no, not needed
+;
 ; Allow character Y to be a bit outside screen - fixme this is implicitly tested because we check tile above actor
 ; which wraps around to low!
 ;
@@ -124,11 +151,11 @@
 ; implement makelevel.py in c64 code to store level data as simple RLE code with only small number of
 ; data per tile and some semirandom stuff, packs well with rle!
 
-; put raster stuff in own .a file.
-; all raster interrupts go there.
+; Now jumping much better with higher gravity and higher jump speed, seems ok! test with joystick.
+; jumping is ok, but too slow when starting to fall down, needs some rework.
+; Higher jumps when pressing joystick longer works, but not as good as in turrican
 
-; use decimal flag sed/cld for score counting
-
+; ---------------------- How screen enter/exit effect works ---------------------
 ; Screen enter/exit animation like Turrican 2, the spirals:
 ; use 7x6 double sized sprites with multiplexing (just one sprite data).
 ; Set/clear bits (64 total, 8x8 bytes) in 64 or 128 frames. Easy to store,
@@ -221,7 +248,6 @@ CIA1_DATAPORT_A = $DC00
 CIA2_DATAPORT_A = $DD00
 SCROLL_RIGHT = 1
 SCROLL_LEFT = 2
-SCORE_LINE_Y = 240
 
 ; ------------------------ macros --------------------------
 
@@ -317,7 +343,10 @@ main
 ; clear screen
 	+memset1K SCREEN0, $20
 
-; Set up sprite based blend in effect
+; Set up the raster IRQ for score line etc.
+	jsr setup_rasterirq
+
+; Set up sprite based blend in effect (also sets up a raster irq!)
 	jsr blend_in_init
 
 ; fill visible screen with tiles of level
@@ -345,20 +374,6 @@ main
 	+memcopy64 VICSPRITES, spritedata0
 	+memcopy64 VICSPRITES+64, spritedata1
 	+memcopy64 VICSPRITES+128, enemy01_sprite_data
-
-; Set up the raster IRQ for score line etc.
-	sei
-	+set16im $0314, rasterirq	; set vector to interrupt routine
-	+set8im VICRASTER, SCORE_LINE_Y
-	lda VICCTRL1		; clear 9th bit of raster line selector
-	and #$7F
-	sta VICCTRL1
-	+set8im $D01A, $01	; Set only raster as source for IRQ of VIC
-	lda #$7F		; disable timer IRQs
-	sta $DC0D
-	lda $DC0D
-	+set8im $D019, $01	; Acknowledge possible pending raster irq
-	cli
 
 ; Set up score panel
 	ldx #40
@@ -492,61 +507,11 @@ framecounter
 ; Actor handling
 !src "actor.a"
 
-rasterirq
-; We disabled all IRQ sources, so we only have raster IRQs here!
-;	lda $D019		; check if IRQ was from raster line
-;	bmi dorasterirq		; Bit 7 set: raster IRQ was interrupt reason
-;	lda $DC0D		; ACK other irq
-;	cli			; enable IRQs
-;	jmp $EA31		; jump to system IRQ handler
-; Note that if we would disable kernal rom as well, system would directly jump
-; to our interrupt handler which means 2-9 cycles after raster line occours.
-; Register storing needs to be done then anyway. Additional 14 cycles (ca.)
-; Are used in kernal to check for BRK flag, which we don't have.
-;dorasterirq
-	; score panel reached, so raster is somewhere after SCORE_LINE_Y, so 240 or 241
-	ldx rasterbar_colors
-	ldy #$10
-	lda #242	; we trigger at 240 so we are late in line 240 or early in 241, wait for 242.
--	cmp VICRASTER
-	bcs -
-	; We are now stable in line 242.
-	stx VICFGCOL	; Paint line 242 with first raster bar color, and also 243.
-	; Set scroll to neutral for score panel
-	sty VICCTRL2	; this delays painting up to 1 raster line, so afterwards display is unstable!
-	; so we have to wait for absolute line to appear.
-	ldy rasterbar_colors+1
-	lda #244
--	cmp VICRASTER
-	bcs -
-	sty VICFGCOL
-
-!for COUNT, 2, 7 {
-	ldy rasterbar_colors+COUNT
-	lda VICRASTER
--	cmp VICRASTER
-	beq -
-	sty VICFGCOL
-}
-	+copy8 VICCTRL2, last_value_of_vicctrl2
-
-	lda #$01
-	sta $D019		; clear interrupt flag - do it at end or other raster IRQs could occur!
-	pla			; could do jmp $EA81 here.
-	tay
-	pla
-	tax
-	pla
-	rti
-
-last_value_of_vicctrl2
-!byte 0
-
-rasterbar_colors
-!byte 6,14,13,1,13,14,6, 9
-;!byte 9,8,7,1,7,8,9, 9
+; Raster IRQ
+!src "rasterirq.a"
 
 ; ----------------------- cycle raster bar colors for score panel -----------------
+; Uses	A, X, Y
 cycle_score_panel_colors
 	lda framecounter
 	and #3
@@ -1275,6 +1240,10 @@ BLEND_IN_SPRITE = VICSPRITES+4096-64*5	; must not collide with main game sprites
 BLEND_IN_SPRITE_PTR = 64-5
 blend_in_init
 	; set sprite data. Fill 4 full sprites and 12 lines (36 bytes) of fifth sprite.
+	; We have to cover 192 lines (200-8) of screen. Sprite Y starts at raster line 50.
+	; 192 lines are 96 lines of double sized sprites.
+	; This is 4 full sprites (4*21=84 lines) and a half sprite (12 lines).
+	; So fill 4*64 bytes with $FF and then 12 lines (36 bytes) with $FF, rest with $00
 	; this means set 4*64+36 bytes to $FF and then 28 bytes to 0.
 	ldx #0
 	lda #$FF
@@ -1282,6 +1251,7 @@ blend_in_init
 	dex
 	bne -
 	ldx #36
+	lda #$FF
 -	sta BLEND_IN_SPRITE+256-1,x
 	dex
 	bne -
@@ -1293,7 +1263,7 @@ blend_in_init
 	; set sprite data of 7 sprites
 	ldx #7
 -	+set8imx SCREEN0+$3F8-1, BLEND_IN_SPRITE_PTR	; sprite pointers
-	+set8imx $D027-1, 3 ;fixme 0	; all sprites black color
+	+set8imx $D027-1, 0	; all sprites black color
 	dex
 	bne -
 	; set initial positions
@@ -1317,131 +1287,95 @@ blend_in_init
 	; enable 7 sprites 
 	lda #$7F
 	sta $D015
-	; fixme establish raster irq here!
+	; start blend in raster irq here!
+	jmp setup_rasterirq_blendin
 
-	; We need to set up a new raster routine here.
-	; Raster IRQ needs to be triggered several times, shortly before new sprite line is reached,
-	; so we can increase sprite pointers in the exact line before they are displayed again.
-	; After that line set new Y coord (wait 1 line with busy waiting in IRQ).
-	; We show 5 lines of sprites, hence we need to trigger it 5 times per frame.
-	; Last call sets initial Y coords and sprite pointers.
-	; Ideally handle score color cycling here as well!
-
-	; done
-	rts
-
-; fixme needs raster? or do multiplex more easy? yes like old sprite code
-
-; Uses TEMP0, TEMP1, TEMP2
+; Uses TEMP0, TEMP1, TEMP2, TEMP3
 blend_in_do
 	; Wait for N frames, then run next animation phase
-	; we have to busy wait for raster line...
-	; Wait for certain raster line
-
 	; set frame counter.
 	+set8im TEMP0, 0
----
-	+set8im TEMP2, 6; 2, - 6 for test!
+blend_in_next_frame
+	+set8im TEMP1, 1
 --
 	; wait until raster is at bottom and then back at top of screen
 -	lda VICCTRL1
 	bpl -
 -	lda VICCTRL1
 	bmi -
+	inc framecounter
+	jsr cycle_score_panel_colors
+	dec TEMP1
+	bne --
 
-	; Set initial sprite pointers and y coords for 7 sprites.
-	lda #BLEND_IN_SPRITE_PTR
-	ldx #50
-!for COUNT, 0, 6 {
-	sta SCREEN0+$3F8+COUNT
-	stx $D001+COUNT*2
-}
-	; Wait until raster line 51 is reached to increase y position
-	ldx #(50+42*1)
-	lda #(50+1)
--	cmp VICRASTER
-	bcs -
-!for COUNT, 0, 6 {
-	stx $D001+COUNT*2
-}
-	; Wait until raster line 50+42 is reached, next line we need to increase sprite pointers
-	ldx #(BLEND_IN_SPRITE_PTR+1)
-	lda #(50+42*1-3)	; fixme need to react earlier...may not work! we need rasters...
--	cmp VICRASTER
-	bcs -
-	; now waste at least 6 cycles so first sprite is drawn
-	nop
-	nop
-	nop
-!for COUNT, 0, 6 {
-	stx SCREEN0+$3F8+COUNT
-	nop
-	nop
-}
-	
-
-	; Now wait for specific raster line and then increase Y position of sprites
-	; we wait for 25+N*32 with N=0...5 and set 24+32+N*32...
-	; shit this doesn't work!!! sprite frame display must finish before we can display
-	; next sprite, so we must display full 21 lines! we can set y coord afterwards,
-	; everything else stays the same.
-	; This makes everything very difficult!!! animation has height 8 and sprite 21,
-	; so this means offset is different for every row, as first multiple would be after
-	; 8 sprites. We need 6 sprites vertical, so we have 6 different sprites to write data
-	; to, so animation must write data to 6 sprites - no, now less.
-	; 24 lines = 192 chars = 96 double lines = 5 sprites.
-	; We have to set sprite pointer then very exactly in timing to make it work!
-	; 12 spirals can be seen, so 12*3 bytes have to be written every frame, no problem.
-	; offset from byte nr 0-7 to sprite data per table?
-	; so next y coord can easily be set for all 7 sprites, but next sprite pointer
-	; is very timing critical, do inc on register...
-	; This may need stable raster!!
-
-	dec TEMP2
-	beq +
-	jmp --
-
-+	inc TEMP0
+	; check next animation frame
+	inc TEMP0
 	lda TEMP0
 	cmp #64
 	bne +
-	rts
-	; next animation frame
-+	ldx TEMP0
+	; restore original IRQ!
+	jmp setup_rasterirq_scoreline
++	; read next frame data
+	ldx TEMP0
 	lda blend_in_data-1,x
 	; Extract byte number and compute byte offset
 	lsr
 	lsr
 	lsr
 	lsr
-	sta TEMP1
+	sta TEMP3	; store byte number
 	asl
 	clc
+	adc TEMP3
+	sta TEMP1	; store byte number * 3 as start offset
+	; compute start address
+	lda #<BLEND_IN_SPRITE
+	clc
 	adc TEMP1
-	sta TEMP1
+	sta TEMPADR0
+	lda #>BLEND_IN_SPRITE
+	adc #0
+	sta TEMPADR0+1
+	; read bitnumber and create AND-mask from it
 	lda blend_in_data-1,x
 	and #$0F
 	tay
 	lda blend_in_andval,y
-	sta TEMP2
-	ldx TEMP1
-	ldy #3
--	lda BLEND_IN_SPRITE,x
+	sta TEMP2	; store AND-mask to set
+	; now AND the mask to bytenumber + 0..2 and then to more bytes
+	ldx #0
+--	ldy #0
+-	lda (TEMPADR0),y
 	and TEMP2
-	sta BLEND_IN_SPRITE,x
-	inx
-	dey
+	sta (TEMPADR0),y
+	iny
+	cpy #3
 	bne -
-	+addx 21
-	ldy #3
--	lda BLEND_IN_SPRITE,x
-	and TEMP2
-	sta BLEND_IN_SPRITE,x
+	; increase address by offset - as first compute bytenr*16 to get address to offset table
+	lda TEMP3
+	asl
+	asl
+	asl
+	asl
+	clc
+	adc #<blend_in_offsets
+	sta blend_in_read+1
+	lda #>blend_in_offsets
+	adc #0
+	sta blend_in_read+2
+blend_in_read
+	lda blend_in_offsets,x
+	clc
+	adc TEMPADR0
+	sta TEMPADR0
+	lda TEMPADR0+1
+	adc #0
+	sta TEMPADR0+1
+	; next row of spirals, 12 total
 	inx
-
-	dey
-	bne -
-	jmp ---
+	cpx #12
+	bne --
+	jmp blend_in_next_frame
 
 blend_in_data	; 64 frames of data
 !byte $07, $06, $05, $04, $03, $02, $01, $00
@@ -1455,6 +1389,16 @@ blend_in_data	; 64 frames of data
 
 blend_in_andval
 !byte 255-128, 255-64, 255-32, 255-16, 255-8, 255-4, 255-2, 255-1
+
+blend_in_offsets	; 8 rows of 16 byte each
+!byte 24, 24, 25, 24, 24, 25, 24, 25, 24, 24, 25, 0, 0, 0, 0, 0
+!byte 24, 24, 25, 24, 24, 25, 24, 25, 24, 24, 25, 0, 0, 0, 0, 0
+!byte 24, 24, 25, 24, 25, 24, 24, 25, 24, 24, 25, 0, 0, 0, 0, 0
+!byte 24, 24, 25, 24, 25, 24, 24, 25, 24, 24, 25, 0, 0, 0, 0, 0
+!byte 24, 24, 25, 24, 25, 24, 24, 25, 24, 25, 24, 0, 0, 0, 0, 0
+!byte 24, 25, 24, 24, 25, 24, 24, 25, 24, 25, 24, 0, 0, 0, 0, 0
+!byte 24, 25, 24, 24, 25, 24, 24, 25, 24, 25, 24, 0, 0, 0, 0, 0
+!byte 24, 25, 24, 24, 25, 24, 25, 24, 24, 25, 24, 0, 0, 0, 0, 0
 
 ; ----------------------------------- data -------------------------------
 
