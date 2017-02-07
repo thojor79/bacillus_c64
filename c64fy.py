@@ -1,5 +1,23 @@
 #!/usr/bin/python
 # coding=utf8
+
+# PC to C64 image data converter
+# Copyright (C) 2013-2017  Thorsten Jordan.
+# 
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
 import Image
 import random
 import sys
@@ -14,22 +32,22 @@ enable_mixing = True
 default_uv_color_distance = 0.1333333
 uv_distance_grey_limit = default_uv_color_distance / 3
 colors_y_uvangle_nearest = [
-	(0, -1, [11, 6, 9]),		# Schwarz, am ähnlichsten die dunkelsten blau, braun und dunkelgrau
-	(32, -1, [15, 7, 13]),		# Weiß, am ähnlichsten hellgrau und die hellsten gelb und hellgrün
-	(10, 5, [8,9,4,10]),		# Rot, ähnlich orange, braun, lila und hellrot
-	(20, 13, [5,6,13,14,15]),	# Türkis, ähnlich grün, blau, hellgrün, hellblau, hellgrau
-	(12, 2, [2,6,11]),		# Lila, ähnlich rot, blau, dunkelgrau
-	(16, 10, [13,3,6,12]),		# Grün, ähnlich hellgrün,türkis,blau,mittelgrau
-	(8, 0, [14,4,3,11]),		# Blau ähnlich hellblau,türkis,lila,dunkelgrau
-	(24, 8, [8,15,13,1]),		# Gelb ähnlich orange,hellgrau,hellgrün,weiß
-	(12, 6, [9,7,15,10]),		# Orange ähnlich braun,gelb,rosa,hellgrau
-	(8, 7, [8,2,11,0]),		# Braun ähnlich orange,rot,dunkelgrau,schwarz
-	(16, 5, [8,2,4,15]),		# Hellrot ähnlich orange,rot,lila,hellgrau
-	(10, -1.0, [0,12]),		# Dunkelgrau ähnlich schwarz,mittelgrau
-	(15, -1.0, [11,15]),		# Mittelgrau ähnlich dunkelgrau,hellgrau
-	(24, 10, [7,5,2,15]),		# Hellgrün ähnlich gelb,grün,weiß,hellgrau
-	(15, 0, [6,3,15,13]),		# Hellblau ähnlich blau,türkis,hellgrau,hellgrün
-	(20, -1, [1,9])			# Hellgrau ähnlich mittelgrau,weiß
+	(0, -1, [11, 6, 9]),		# black, most similar the darkest colors blue, brown and dark grey
+	(32, -1, [15, 7, 13, 14]),	# white, most similar light grey and the brightest colors yellow and light green and also light blue
+	(10, 5, [8,9,4,10]),		# red, similar orange, brown, purple and light red
+	(20, 13, [5,6,13,14,15]),	# cyan, similar green, blue, light green, light blue, light grey
+	(12, 2, [2,6,11]),		# purple, similar red, blue, dark grey
+	(16, 10, [13,3,6,12]),		# green, similar light green,cyan,blue,medium grey
+	(8, 0, [14,4,3,11]),		# blue similar light blue,cyan,purple,dark grey
+	(24, 8, [8,15,13,1]),		# yellow similar orange,light grey,light green,white
+	(12, 6, [9,7,15,10]),		# Orange similar brown,yellow,rosa,light grey
+	(8, 7, [8,2,11,0]),		# brown similar orange,red,dark grey,black
+	(16, 5, [8,2,4,15]),		# light red similar orange,red,purple,light grey
+	(10, -1.0, [0,12]),		# dark grey similar black,medium grey
+	(15, -1.0, [11,15]),		# medium grey similar dark grey,light grey
+	(24, 10, [7,5,2,15]),		# light green similar yellow,green,white,light grey
+	(15, 0, [6,3,15,13]),		# light blue similar blue,cyan,light grey,light green
+	(20, -1, [1,9])			# light grey similar medium grey,white
 ]
 
 colors_c64_yuv = []
@@ -69,17 +87,39 @@ infinity = 1000000000.0
 # Dann Daten ausgeben: Char/Color/Bitmap oder Charset/Color/Char
 # Versuche später auch Interlace-Mix-Farben zu benutzen, bei halber vertikaler Auflösung.
 # Es gibt 7 bzw. 14 Mixfarben, aber nur wenige taugen.
-# Zusammen mit acme könnte man gleich auch fertiges PRG erzeugen, das auf x64 gestartet wird.
 
-#  Original eher YUV statt HLS, siehe http://www.pepto.de/projects/colorvic/2001/index.html
+# Original c64 color handling is YUV not HLS, see http://www.pepto.de/projects/colorvic/2001/index.html
 
 # Chardaten direkt aus Bildern zu generieren macht so keinen Sinn.
 # Lieber die festen Farben vorgeben bei Char-Umwandlung oder eben optional.
 # fixme Ähnlichkeiten von chars testen nur Farbe ab, aber ersetze die austauschbare Farbe durch andere,
 # nur so kann man gemeinsame chars finden, brauchen wir erstmal nicht...
+# steht unten so auch noch mal im code, wird aber so nicht verwendet, da ja 3 von 4 Farben erstmal
+# sowieso gleich sind, es kann aber etwas bringen, das mal durchzuprobieren.
+
+# We need a general flag for hires to encode hires bitmaps as well, needed for sprites!
+# Handle this with a generic flag for block generation.
+# We can do MC blocks, MC blocks with hires single low color (in char mode) and only Hires
+# blocks with 0 or 2 fix colors (Bitmap or Sprite).
+# Sprite color can be determined automatically from image data or give it from command line.
+# fixme offer hires mode for sprites!
 
 # fixme blocks with just one color are encoded as multicolor in char mode, rather prefer hires mode?
 # otherwise hires backgrounds could have problem, but we can't generalize this...
+
+# Old version was sometimes better, had more details, but darker colors were worse.
+# Other colors were used as dark variants.
+# New algorithm not always better.
+# Old code used YIQ or some mix.
+# What is missing here is a mix of 3 or 4 colors to generate 1 color if there are free colors left.
+# Maybe one day find out why old version was sometimes better.
+# Nearest color for YUV too bad? or rather mix in other color?
+# Was contrast higher because no gamma correction was used?
+# Increase contrast first? Like e.g. picture of Wehrheim with yellow lawn in foreground -> just one yellow area, no details left!
+
+# fixme try results of hires bitmap encoding
+
+# Very much later we could offer FLI modes, but that is out of topic.
 
 def RGBToYUV(c):
 	r = c[0]
@@ -203,20 +243,24 @@ def ComputeMixFactorAndDistance(yuv, index0, index1):
 	else:
 		return (veclen(vecsub(yuv, vecadd(yuv0, vecscal(delta, d)))), d)
 
-def GenerateBestBlock(colorblock, fixed_indices, charmode):
-	# Eingabe sind 8x8=64 RGB Farben (für Multicolor nur jede zweite verwenden)
-	# Eine oder drei Farben können frei gewählt werden, im charmode die eine
-	# freie nur aus Indices 0-7.
-	# Gehe für Charmode alle möglichen Farben 0-7 durch und vergleiche feinste
-	# Auflösung, also jeweils Fehlerfunktion zu Original.
+def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode):
+	# Input is a block of 8x8=64 RGB colors (for multicolor mode use only every second value)
+	# Zero, one, two or three colors can be chosen freely, depending on the mode.
+	# In charmode the only free color may come only from indices 0-7.
+	# In hires mode we have two free colors (or zero for sprites).
+	# In multicolor mode, three colors can be chosen freely.
+	# For charmode iterate over all free colors with index 0-7 and compare block in hires,
+	# this means compute error to original.
 	inputblock = colorblock
 	num_free_indices = 4 - len(fixed_indices)
+	if hiresmode:
+		num_free_indices = 2 - len(fixed_indices)
 	lowcolorblockerror = infinity
 	resultblocklowcolor = []
 	resultindiceslowcolor = []
 	lowindex = 0
 	if charmode:
-		# Zähle häufigste Farbe außer Hintergrund in 32*32 Block und nehme das als Vergleichsblock
+		# Find most used color except background in block and use this for comparison
 		index_count = [0] * 16
 		for i in range(0, 8*8):
 			yuv = inputblock[i]
@@ -229,9 +273,9 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode):
 			if index_count[i] > max_count:
 				max_count = index_count[i]
 				index = i
-		# Finde eine Farbe unter den ersten 8 die index am ähnlichsten ist
+		# Find a color of the first 8 that is most similar to index
 		lowindex = FindBestLowIndexColor(index)
-		# Jetzt ersetze jeden Pixel entweder durch Hintergrundfarbe oder lowindex
+		# Replace every pixel by background color or by lowindex color
 		blockerror = 0
 		for i in range(0, 8*8):
 			yuv = inputblock[i]
@@ -243,9 +287,11 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode):
 			resultblocklowcolor += [colors_c64_yuv[idx]]
 			resultindiceslowcolor += [idx]
 			blockerror += min(error0, error1)
-		# Fehler halbieren für Vergleich mit Multicolor
+		# Half error for comparison with multicolor
 		lowcolorblockerror = blockerror * 0.5
-	inputblock = BlockHiResToMultiColor(colorblock)
+	# For multicolor half x resolution!
+	if not hiresmode:
+		inputblock = BlockHiResToMultiColor(colorblock)
 	# Finde die vier häufigsten Farben im Block, also jeweils passenste und zweitpassenste Farbe ermitteln,
 	# deren Verwendung merken (Anteile aufsummieren).
 	# Sind feste Farben dabei, nehme die ansonsten freie Farbe(n) auf die nächsthäufigsten setzen.
@@ -256,8 +302,7 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode):
 	resultblock = []
 	resultindices = []
 	index_use_count = [0.0] * 16
-	for i in range(0, 4*8):
-		yuv = inputblock[i]
+	for yuv in inputblock:
 		index0 = FindBestColorForYUV(yuv)
 		mixfactor = 0.0
 		index1 = index0
@@ -296,8 +341,7 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode):
 	# Bestimme dann pro Pixel wieder Mixfaktor aus bester und zweitbester Farbe.
 	randfactorn = 0
 	anycolorblockerror = 0.0
-	for i in range(0, 4*8):
-		yuv = inputblock[i]
+	for yuv in inputblock:
 		minerror = infinity
 		index0 = 0
 		for ci in fixed_indices_this_block:
@@ -342,6 +386,18 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode):
 				byte = byte * 2 + bit
 			resultbytes += [byte]
 		fixed_indices_this_block[3] = lowindex
+	elif hiresmode:
+		# A block is always 8 bytes in a row, so 8x8 pixels.
+		for y in range(0, 8):
+			byte = 0
+			for x in range(0, 8):
+				index = resultindices[y*8+x]
+				bits = 0
+				for i in range(0, 2):
+					if fixed_indices_this_block[i] == index:
+						bits = i
+				byte = byte * 2 + bits
+			resultbytes += [byte]
 	else:
 		# Ein Block sind immer 8 Byte übereinander, also 8x8 Pixel (4x8 im Multicolor).
 		# Daten sind immer 8 Byte für Bitmap, Farben 1,2 falls individuell und Farbe 3 als Colorcode.
@@ -358,10 +414,15 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode):
 			resultbytes += [byte]
 		resultblock = BlockMultiColorToHiRes(resultblock)
 		if charmode:
-			fixed_indices_this_block[3] += 8	# Setze Multicolor Flag!
+			fixed_indices_this_block[3] += 8	# Set multicolor flag
 	if charmode:
+		# Return image data, encoded bytes and 1 color in color ram
 		return (resultblock, resultbytes, fixed_indices_this_block[3])
+	elif hiresmode:
+		# Return image data, encoded bytes, 2 colors in char
+		return (resultblock, resultbytes, fixed_indices_this_block[0]*16 + fixed_indices_this_block[1])	# fixme order?
 	else:
+		# Return image data, encoded bytes, 2 colors in char and 1 color in color ram
 		return (resultblock, resultbytes, fixed_indices_this_block[1]*16 + fixed_indices_this_block[2], fixed_indices_this_block[3])
 	
 # Bild vergrößert anzeigen
@@ -417,6 +478,19 @@ def RLEncode(bytes):
 	print 'RLE encoded',len(bytes),'bytes to',len(result),'bytes (',len(result)*100/len(bytes),'%).'
 	return result
 
+# Sprites have different encoding, swap bit-values (11 and 10)
+# not for hires!
+swaptable = [0, 1, 3, 2]
+def sprite_recode_byte(b, hiresmode):
+	if hiresmode:
+		return b
+	bresult = 0
+	for i in range(0, 4):
+		b2 = (b >> (i*2)) & 3
+		b2 = swaptable[b2]
+		bresult += b2 << (i * 2)
+	return bresult
+
 ###########################################################################################
 #
 #                  Hauptprogramm
@@ -426,6 +500,7 @@ def RLEncode(bytes):
 random.seed()
 
 # Bild laden
+hiresmode = False
 charmode = False
 firstchar = 0
 numchars = 0
@@ -440,6 +515,7 @@ if len(sys.argv) < 2:
 	print 'INPUTFILENAME is a picture. Without any further arguments it is converted'
 	print 'to a C64 multicolor bitmap.'
 	print 'Options:'
+	print '-hires N\t\tTurn hires mode on/off (default off)'
 	print '-charset N\t\tConvert to a charset with N characters (no scaling of input, must be multiple of 8)'
 	print '-firstchar N\t\tUse this as first char number.'
 	print '-tilewidth N\t\tUse this width of tile in chars in charmode.'
@@ -450,13 +526,17 @@ if len(sys.argv) < 2:
 	print '-mixing N\t\tEnable/Disable pixel mixing.'
 	sys.exit(1)
 inputfilename = sys.argv[len(sys.argv) - 1]
+inputbasefilename = inputfilename[0:inputfilename.rfind('.')]
+outputbasefilename = 'output/' + inputbasefilename
 if len(sys.argv) > 2:
 	ic = 1
 	while ic + 1 < len(sys.argv):
 		p0 = sys.argv[ic]
 		p1 = sys.argv[ic + 1]
 		ic += 2
-		if p0 == '-charset':
+		if p0 == '-hires':
+			hiresmode = int(p1) != 0
+		elif p0 == '-charset':
 			if spritemode:
 				print 'Illegal parameters.'
 				sys.exit(0)
@@ -498,6 +578,8 @@ if charmode:
 	print 'Generating character set of', numchars, 'characters.'
 elif spritemode:
 	print 'Generating sprite, neutral color:', spriteneutralindex
+elif hiresmode:
+	print 'Generating HiRes Bitmap.'
 else:
 	print 'Generating MultiColor Bitmap.'
 
@@ -515,6 +597,11 @@ elif spritemode:
 		print 'Invalid sprite image inputfile.'
 		sys.exit(0)
 	img_h = 24
+elif hiresmode:
+	# Skaliere auf 320x200
+	im = im.resize((320, 200), Image.BICUBIC)
+	img_w = 320
+	img_h = 200
 else:
 	# Skaliere auf Multicolor, dann wieder auf korrekte Größe, für generischen Vergleich
 	im = im.resize((160, 200), Image.BICUBIC).resize((320, 200), Image.NEAREST)
@@ -558,6 +645,9 @@ elif spritemode:
 	addlines = [colors_c64_yuv[spriteneutralindex]] * (24 * 3)
 	pxyuv += addlines
 	im = im.resize((24, 24), Image.NEAREST)
+elif hiresmode:
+	# We can chose two colors freely every char, no background color!
+	num_most_used_indices = 0
 fixindices += givencolors
 if num_most_used_indices > len(fixindices):
 	for j in range(0, num_most_used_indices - len(fixindices)):
@@ -577,7 +667,9 @@ numblockstotal = 0
 bitmapbytes = []	# Bytes für Bitmap
 chardata = []		# Passende Character-Daten für Bitmap (0-255)
 colordata = []		# Colorcode für Bitmap/Char 11 (Mit Bit4 als MC-Marker bei Char) (0-15)
-backgroundindex = fixindices[0]
+backgroundindex = 0
+if not hiresmode:
+	backgroundindex = fixindices[0]
 for y in range(0, img_h/8):
 	for x in range(0, img_w/8):
 		numblockstotal += 1
@@ -585,10 +677,12 @@ for y in range(0, img_h/8):
 		for yy in range(0, 8):
 			for xx in range(0, 8):
 				colorblock += [pxyuv[(y * 8 + yy) * img_w + (x * 8 + xx)]]
-		bbd = GenerateBestBlock(colorblock, fixindices, charmode)
+		bbd = GenerateBestBlock(colorblock, fixindices, charmode, hiresmode)
 		bitmapbytes += bbd[1]
 		if charmode:
 			colordata += [bbd[2]]
+		elif hiresmode:
+			chardata += [bbd[2]]
 		else:
 			chardata += [bbd[2]]
 			colordata += [bbd[3]]
@@ -634,6 +728,9 @@ def dumpbytes(v):
 
 # Im Charmode sortiere noch Blöcke aus (Verringere auf vorfügbare Zahl)
 # Idealerweise Daten gleich als acme source ausgeben für's Einbinden!
+# fixme hier wird direkt nach Farben geguckt, aber jeder vorhandene Block an Indices wäre auch ok,
+# man kann ja einfach Farben tauschen! Wobei nur eine Farbe getauscht werden kann im char mode.
+# das fehlt hier wohl noch!
 if charmode:
 	print 'Num Chars initial',len(blocks),'of',numblockstotal
 	while len(blocks) > numchars:
@@ -706,7 +803,7 @@ if charmode:
 	dfl += hexstr(fixindices[0]) + ', ' + hexstr(fixindices[1]) + ', ' + hexstr(fixindices[2]) + '\n'
 	dfl += '\n!align 255,0\ncharsetdata\n'
 	if firstchar > 0:
-		dfl += '!src "' + inputfilename + '_chardata0_' + str(firstchar-1) +'.a"\n'
+		dfl += '!src "' + inputbasefilename + '_chardata0_' + str(firstchar-1) +'.a"\n'
 	dfl += dumpbytes(charsetbytes)
 	# Fasse nun immer NxM Blöcke zu Tiles zusammen
 	num_char_x = img_w / 8
@@ -739,53 +836,60 @@ if charmode:
 	else:
 		dfl += '\n!align 255,0\ntiledata\n'
 		dfl += dumpbytes(tiledata)
-	f = open(inputfilename + '_chardata.a','wt')
+	f = open(outputbasefilename + '_chardata.a','wt')
 	f.writelines(dfl)
 elif spritemode:
-	# Sprite-Modus, gebe die ersten 63 Bytes als Daten aus, ergänze mit Nullbyte
+	# Sprite-mode, output the first 63 bytes as data, complete with one null byte to get 64 in total
 	spritebytes = []
 	for y in range(0, 21):
 		yl = y / 8
 		ysl = y % 8
 		for x in range(0, 3):
-			spritebytes += [bitmapbytes[yl * 24 + x * 8 + ysl]]
+			spritebytes += [sprite_recode_byte(bitmapbytes[yl * 24 + x * 8 + ysl], hiresmode)]
 	spritebytes += [0]
 	# Generate .a data file
-	dataname = inputfilename[0:inputfilename.find('.')]
-	dfl = '!align 63, 0\n' + dataname + '_data\n'
+	dfl = '!align 63, 0\n' + inputbasefilename + '_data\n'
 	dfl += dumpbytes(spritebytes)
-	f = open(inputfilename + '_sprdata.a','wt')
+	f = open(outputbasefilename + '_sprdata.a','wt')
 	f.writelines(dfl)
 else:
 	# Bitmap-Mode: Gebe Daten aus (als RGB Bild) und als PRG für Bitmap-Modus
-	im.resize((320, 200), Image.NEAREST).save(inputfilename + '_c64.png')
+	im.resize((320, 200), Image.NEAREST).save(outputbasefilename + '_c64.png')
 	# Generate .a data file
-	dfl = 'backgroundcolor\n!byte '
-	dfl += hexstr(backgroundindex)
+	dfl = ''
+	if not hiresmode:
+		dfl += 'backgroundcolor\n!byte '
+		dfl += hexstr(backgroundindex)
 	dfl += '\n\nbitmapdata\n'
 	dfl += dumpbytes(bitmapbytes)
 	dfl += '\n\nchardata\n'
 	dfl += dumpbytes(chardata)
-	dfl += '\n\ncolordata\n'
-	dfl += dumpbytes(colordata)
-	f = open(inputfilename + '_bmpdata.a','wt')
+	if not hiresmode:
+		dfl += '\n\ncolordata\n'
+		dfl += dumpbytes(colordata)
+	f = open(outputbasefilename + '_bmpdata.a','wt')
 	f.writelines(dfl)
 	f.close()
 	# Versuch: RLE-Encoding der Daten
 	rlebytes0 = RLEncode(bitmapbytes)
 	rlebytes1 = RLEncode(chardata)
-	rlebytes2 = RLEncode(colordata)
+	rlebytes2 = []
+	if not hiresmode:
+		rlebytes2 = RLEncode(colordata)
 	totallen = len(rlebytes0)+len(rlebytes1)+len(rlebytes2)
 	print 'Total:',totallen,'bytes of 10000.'
-	dfl = 'backgroundcolor\n!byte '
-	dfl += hexstr(backgroundindex)
+	dfl = ''
+	if not hiresmode:
+		dfl += 'backgroundcolor\n!byte '
+		dfl += hexstr(backgroundindex)
 	dfl += '\n\nbitmapdata_rle\n'
 	dfl += dumpbytes(rlebytes0)
 	dfl += '\n\nchardata_rle\n'
 	dfl += dumpbytes(rlebytes1)
-	dfl += '\n\ncolordata_rle\n'
-	dfl += dumpbytes(rlebytes2)
-	f = open(inputfilename + '_bmpdata_rle.a','wt')
+	if not hiresmode:
+		dfl += '\n\ncolordata_rle\n'
+		dfl += dumpbytes(rlebytes2)
+	f = open(outputbasefilename + '_bmpdata_rle.a','wt')
 	f.writelines(dfl)
 	f.close()
 
