@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # coding=utf8
 
 # PC to C64 image data converter
@@ -18,13 +18,12 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-import Image
+import PIL.Image
 import random
 import sys
 import math
 
 # Some global parameters
-yweightsqr = 0.5	# y weight is sqrt(0.5)
 enable_mixing = True
 
 # Colors of c64 - y is luminance (0...32), uv as angle (0...16), most similar colors as lest as third parameter
@@ -166,7 +165,7 @@ def ErrorInYUV(yuv0, yuv1):
 	y = yuv0[0] - yuv1[0]
 	u = yuv0[1] - yuv1[1]
 	v = yuv0[2] - yuv1[2]
-	return y*y*yweightsqr + u*u + v*v
+	return y*y + u*u + v*v
 
 def ComputeBlockError(b0, b1):
 	error = 0.0
@@ -196,7 +195,7 @@ def FindBestLowIndexColor(index):
 
 def BlockHiResToMultiColor(colorblock):
 	result = []
-	for i in range(0, len(colorblock)/2):
+	for i in range(0, len(colorblock)//2):
 		c0 = colorblock[i*2+0]
 		c1 = colorblock[i*2+1]
 		c = ((c0[0] + c1[0]) / 2, (c0[1] + c1[1]) / 2, (c0[2] + c1[2]) / 2)
@@ -234,7 +233,6 @@ def ComputeMixFactorAndDistance(yuv, index0, index1):
 	deltasqrlen = veclensqr(delta)
 	delta2 = vecsub(yuv, yuv0)
 	d = vecmul(delta, delta2) / deltasqrlen
-	# Note! Y is not weighted as in normal error function, but doing this would make results much worse!
 	limit = 0.4
 	if d <= limit:
 		return (veclen(delta2), 0.0)
@@ -310,8 +308,9 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode):
 		# Also berechne jeweils Segment von Farbe1 zu Farbe2 und nächsten Abstand zu Segment,
 		# mit Mischfaktor wo auf dem Segment man ist.
 		# Je größer mixfactor, desto eher zweite Farbe!
+		# wieso nicht einfach mix mit allen Farben probieren?!
 		minerror = infinity
-		#print 'test nearest of',index0,'are',colors_y_uvangle_nearest[index0][2]
+		#print('test nearest of',index0,'are',colors_y_uvangle_nearest[index0][2])
 		for ci in colors_y_uvangle_nearest[index0][2]:
 			errormf = ComputeMixFactorAndDistance(yuv, index0, ci)
 			if errormf[0] < minerror:
@@ -374,7 +373,7 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode):
 	# Ausgeben
 	resultbytes = []
 	if charmode and lowcolorblockerror < anycolorblockerror:
-		#print 'use low color block',lowcolorblockerror,'<',anycolorblockerror
+		#print('use low color block',lowcolorblockerror,'<',anycolorblockerror)
 		resultblock = resultblocklowcolor
 		for y in range(0, 8):
 			byte = 0
@@ -427,7 +426,7 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode):
 	
 # Bild vergrößert anzeigen
 def Show(im):
-	im2 = im.resize((im.size[0] * 2, im.size[1] * 2), Image.NEAREST)
+	im2 = im.resize((im.size[0] * 2, im.size[1] * 2), PIL.Image.NEAREST)
 	im2.show()
 
 # We use clever encoding. Bit 7 indicates repeating.
@@ -475,7 +474,7 @@ def RLEncode(bytes):
 	result += [255]
 
 	#print result
-	print 'RLE encoded',len(bytes),'bytes to',len(result),'bytes (',len(result)*100/len(bytes),'%).'
+	print('RLE encoded',len(bytes),'bytes to',len(result),'bytes (',len(result)*100/len(bytes),'%).')
 	return result
 
 # Sprites have different encoding, swap bit-values (11 and 10)
@@ -511,19 +510,19 @@ quiet = False
 tilex = 2
 tiley = 2
 if len(sys.argv) < 2:
-	print 'Usage: ', sys.argv[0], ' [Options] INPUTFILENAME'
-	print 'INPUTFILENAME is a picture. Without any further arguments it is converted'
-	print 'to a C64 multicolor bitmap.'
-	print 'Options:'
-	print '-hires N\t\tTurn hires mode on/off (default off)'
-	print '-charset N\t\tConvert to a charset with N characters (no scaling of input, must be multiple of 8)'
-	print '-firstchar N\t\tUse this as first char number.'
-	print '-tilewidth N\t\tUse this width of tile in chars in charmode.'
-	print '-tileheight N\t\tUse this as height of tile in chars in charmode.'
-	print '-sprite N\t\tConvert to a sprite (input must be 24x21 pixel), neutral color is N.'
-	print '-color N\t\tUse color number N as fix color - for sprites best define all!'
-	print '-quiet N\t\tEnable/Disable output.'
-	print '-mixing N\t\tEnable/Disable pixel mixing.'
+	print('Usage: ', sys.argv[0], ' [Options] INPUTFILENAME')
+	print('INPUTFILENAME is a picture. Without any further arguments it is converted')
+	print('to a C64 multicolor bitmap.')
+	print('Options:')
+	print('-hires N\t\tTurn hires mode on/off (default off)')
+	print('-charset N\t\tConvert to a charset with N characters (no scaling of input, must be multiple of 8)')
+	print('-firstchar N\t\tUse this as first char number.')
+	print('-tilewidth N\t\tUse this width of tile in chars in charmode.')
+	print('-tileheight N\t\tUse this as height of tile in chars in charmode.')
+	print('-sprite N\t\tConvert to a sprite (input must be 24x21 pixel), neutral color is N.')
+	print('-color N\t\tUse color number N as fix color - for sprites best define all!')
+	print('-quiet N\t\tEnable/Disable output.')
+	print('-mixing N\t\tEnable/Disable pixel mixing.')
 	sys.exit(1)
 inputfilename = sys.argv[len(sys.argv) - 1]
 inputbasefilename = inputfilename[0:inputfilename.rfind('.')]
@@ -538,23 +537,23 @@ if len(sys.argv) > 2:
 			hiresmode = int(p1) != 0
 		elif p0 == '-charset':
 			if spritemode:
-				print 'Illegal parameters.'
+				print('Illegal parameters.')
 				sys.exit(0)
 			charmode = True
 			numchars = int(p1)
 			if numchars < 1 or numchars > 256 or firstchar + numchars > 256:
-				print 'Illegal parameters.'
+				print('Illegal parameters.')
 				sys.exit(0)
 		elif p0 == '-sprite':
 			if charmode:
-				print 'Illegal parameters.'
+				print('Illegal parameters.')
 				sys.exit(0)
 			spritemode = True
 			spriteneutralindex = int(p1)
 		elif p0 == '-color':
 			n = int(p1)
 			if n < 0 or n > 15:
-				print 'Illegal parameters.'
+				print('Illegal parameters.')
 				sys.exit(0)
 			givencolors += [n]
 		elif p0 == '-quiet':
@@ -564,47 +563,47 @@ if len(sys.argv) > 2:
 		elif p0 == '-firstchar':
 			firstchar = int(p1)
 			if firstchar + numchars > 256:
-				print 'Illegal parameters.'
+				print('Illegal parameters.')
 				sys.exit(0)
 		elif p0 == '-tilewidth':
 			tilex = int(p1)
 		elif p0 == '-tileheight':
 			tiley = int(p1)
 		else:
-			print 'Illegal parameters.'
+			print('Illegal parameters.')
 			sys.exit(0)
-print 'Inputfile:',inputfilename
+print('Inputfile:',inputfilename)
 if charmode:
-	print 'Generating character set of', numchars, 'characters.'
+	print('Generating character set of', numchars, 'characters.')
 elif spritemode:
-	print 'Generating sprite, neutral color:', spriteneutralindex
+	print('Generating sprite, neutral color:', spriteneutralindex)
 elif hiresmode:
-	print 'Generating HiRes Bitmap.'
+	print('Generating HiRes Bitmap.')
 else:
-	print 'Generating MultiColor Bitmap.'
+	print('Generating MultiColor Bitmap.')
 
-im = Image.open(inputfilename)
+im = PIL.Image.open(inputfilename)
 
 # skalieren/zuschneiden
 img_w = im.size[0]
 img_h = im.size[1]
 if charmode:
-	img_w = (img_w / 8) * 8
-	img_h = (img_h / 8) * 8
+	img_w = (img_w // 8) * 8
+	img_h = (img_h // 8) * 8
 	im = im.crop((0, 0, img_w, img_h))
 elif spritemode:
 	if img_w != 24 or img_h != 21:
-		print 'Invalid sprite image inputfile.'
+		print('Invalid sprite image inputfile.')
 		sys.exit(0)
 	img_h = 24
 elif hiresmode:
 	# Skaliere auf 320x200
-	im = im.resize((320, 200), Image.BICUBIC)
+	im = im.resize((320, 200), PIL.Image.BICUBIC)
 	img_w = 320
 	img_h = 200
 else:
 	# Skaliere auf Multicolor, dann wieder auf korrekte Größe, für generischen Vergleich
-	im = im.resize((160, 200), Image.BICUBIC).resize((320, 200), Image.NEAREST)
+	im = im.resize((160, 200), PIL.Image.BICUBIC).resize((320, 200), PIL.Image.NEAREST)
 	img_w = 320
 	img_h = 200
 if not quiet:
@@ -644,7 +643,7 @@ elif spritemode:
 	# add three lines of neutral colors to make sprite fit in block
 	addlines = [colors_c64_yuv[spriteneutralindex]] * (24 * 3)
 	pxyuv += addlines
-	im = im.resize((24, 24), Image.NEAREST)
+	im = im.resize((24, 24), PIL.Image.NEAREST)
 elif hiresmode:
 	# We can chose two colors freely every char, no background color!
 	num_most_used_indices = 0
@@ -656,7 +655,7 @@ if num_most_used_indices > len(fixindices):
 			if index_use_count[i] > index_use_count[mui] and i not in fixindices:
 				mui = i
 		fixindices += [mui]
-print 'Fix indices for image:', fixindices
+print('Fix indices for image:', fixindices)
 
 # Gehe dann über alle Blöcke und berechne jeweils ähnlichsten Block mit den
 # festen und freien Farben unter Verwendung von Mischmustern.
@@ -670,8 +669,8 @@ colordata = []		# Colorcode für Bitmap/Char 11 (Mit Bit4 als MC-Marker bei Char
 backgroundindex = 0
 if not hiresmode:
 	backgroundindex = fixindices[0]
-for y in range(0, img_h/8):
-	for x in range(0, img_w/8):
+for y in range(0, img_h//8):
+	for x in range(0, img_w//8):
 		numblockstotal += 1
 		colorblock = []
 		for yy in range(0, 8):
@@ -692,7 +691,7 @@ for y in range(0, img_h/8):
 				if bbd[0] == blocks[i][0]:
 					blockusecount[i] += 1
 					blockfound = True
-					break # print 'Reusable char found!'
+					break # print('Reusable char found!')
 			if not blockfound:
 				blocks += [bbd]
 				blockusecount += [1]
@@ -732,7 +731,7 @@ def dumpbytes(v):
 # man kann ja einfach Farben tauschen! Wobei nur eine Farbe getauscht werden kann im char mode.
 # das fehlt hier wohl noch!
 if charmode:
-	print 'Num Chars initial',len(blocks),'of',numblockstotal
+	print('Num Chars initial',len(blocks),'of',numblockstotal)
 	while len(blocks) > numchars:
 		# Finde seltensten Block
 		mincount = 10000000
@@ -751,17 +750,17 @@ if charmode:
 					minerror = error
 					bai = i
 		# Ersetze bi durch bai
-		print 'Replace',bi,'by',bai,' Num blocks:',len(blocks)-1,'of',numchars,'remain.'
+		print('Replace',bi,'by',bai,' Num blocks:',len(blocks)-1,'of',numchars,'remain.')
 		newblocks = blocks[0:bi] + blocks[bi+1:]
 		blockusecount[bai] += blockusecount[bi]
 		newblockusecount = blockusecount[0:bi] + blockusecount[bi+1:]
 		blocks = newblocks
 		blockusecount = newblockusecount
-	print 'Block use count:', blockusecount
+	print('Block use count:', blockusecount)
 	# Gehe dann wieder über alle Blöcke und finde den am besten passensten Block
 	charnumbers = []
-	for y in range(0, img_h/8):
-		for x in range(0, img_w/8):
+	for y in range(0, img_h//8):
+		for x in range(0, img_w//8):
 			colorblock = []
 			for yy in range(0, 8):
 				for xx in range(0, 8):
@@ -775,7 +774,7 @@ if charmode:
 					bestchar = i
 			bestblock = blocks[bestchar][0]
 			charnumbers += [firstchar + bestchar]
-			#print 'Using Char',bestchar,'for block'
+			#print('Using Char',bestchar,'for block')
 			n = 0
 			for yy in range(0, 8):
 				for xx in range(0, 8):
@@ -806,12 +805,12 @@ if charmode:
 		dfl += '!src "' + inputbasefilename + '_chardata0_' + str(firstchar-1) +'.a"\n'
 	dfl += dumpbytes(charsetbytes)
 	# Fasse nun immer NxM Blöcke zu Tiles zusammen
-	num_char_x = img_w / 8
-	num_char_y = img_h / 8
-	num_tiles_x = num_char_x / tilex
-	num_tiles_y = num_char_y / tiley
+	num_char_x = img_w // 8
+	num_char_y = img_h // 8
+	num_tiles_x = num_char_x // tilex
+	num_tiles_y = num_char_y // tiley
 	num_tiles = num_tiles_x * num_tiles_y
-	print 'Tile count',num_tiles_x,'*',num_tiles_y,', #CharBlocks',len(blocks),'of max',num_char_x*num_char_y
+	print('Tile count',num_tiles_x,'*',num_tiles_y,', #CharBlocks',len(blocks),'of max',num_char_x*num_char_y)
 	tiledata = []
 	for y in range(0, num_tiles_y):
 		for x in range(0, num_tiles_x):
@@ -829,7 +828,7 @@ if charmode:
 		for i in range(0, numtables):
 			dfl += '\ntiledata_' + str(i) + '\n'
 			nthcopy = []
-			count = len(tiledata) / numtables
+			count = len(tiledata) // numtables
 			for j in range(0, count):
 				nthcopy += [tiledata[j * numtables + i]]
 			dfl += dumpbytes(nthcopy)
@@ -842,7 +841,7 @@ elif spritemode:
 	# Sprite-mode, output the first 63 bytes as data, complete with one null byte to get 64 in total
 	spritebytes = []
 	for y in range(0, 21):
-		yl = y / 8
+		yl = y // 8
 		ysl = y % 8
 		for x in range(0, 3):
 			spritebytes += [sprite_recode_byte(bitmapbytes[yl * 24 + x * 8 + ysl], hiresmode)]
@@ -854,7 +853,7 @@ elif spritemode:
 	f.writelines(dfl)
 else:
 	# Bitmap-Mode: Gebe Daten aus (als RGB Bild) und als PRG für Bitmap-Modus
-	im.resize((320, 200), Image.NEAREST).save(outputbasefilename + '_c64.png')
+	im.resize((320, 200), PIL.Image.NEAREST).save(outputbasefilename + '_c64.png')
 	# Generate .a data file
 	dfl = ''
 	if not hiresmode:
@@ -877,7 +876,7 @@ else:
 	if not hiresmode:
 		rlebytes2 = RLEncode(colordata)
 	totallen = len(rlebytes0)+len(rlebytes1)+len(rlebytes2)
-	print 'Total:',totallen,'bytes of 10000.'
+	print('Total:',totallen,'bytes of 10000.')
 	dfl = ''
 	if not hiresmode:
 		dfl += 'backgroundcolor\n!byte '
