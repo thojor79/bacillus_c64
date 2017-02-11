@@ -68,16 +68,9 @@ color_scale_factor = 1.0 / 255.0
 
 infinity = 1000000000.0
 
-# fixme allow large sprites to be generated in batch, so images are multiple of 24x21 and NxM sprites are generated automatically
-
-# fixme: yellow is often used, maybe scale brightness or y of input better.
-# no wonder why, it fits to YUV. we should rather scale down UV or equalize it to 0...0.2 or so before conversion!
-# scaling it up helps for some images, scaling down makes them grey, we can't decide automatically.
-# high uv scaling shows some strange color chose strategy for blocks, e.g. bacillus takes light blue when yellow is in the
-# near but next block only black and dark grey, there must still be some kind of bug!
-# fixme maybe make grey limit for UV distance as part of available UV range to adjust it but not lower than some limit!
-
 # fixme order of color data for hires is not checked if correct
+
+# fixme test large sprite generator if it works
 
 # Bilder umwandeln funktioniert, aber:
 # Wir brauchen auch eine Teilfunktionalität, die Charsetdaten generiert.
@@ -117,7 +110,7 @@ infinity = 1000000000.0
 # We can do MC blocks, MC blocks with hires single low color (in char mode) and only Hires
 # blocks with 0 or 2 fix colors (Bitmap or Sprite).
 # Sprite color can be determined automatically from image data or give it from command line.
-# fixme offer hires mode for sprites!
+# fixme test hires mode for sprites!
 
 # Note! blocks with just one color are encoded as multicolor in char mode, rather prefer hires mode?
 # otherwise hires backgrounds could have problem, but we can't generalize this...
@@ -174,13 +167,6 @@ def PartToByte(x):
 	y = int(x / color_scale_factor + 0.5)
 	y = max(0, min(255, y))
 	return y
-
-colors_c64_rgb = []
-for c in colors_c64_yuv:
-	rgb = YUVToRGB(c)
-	rgb = AddGammaCorrection(rgb)
-	colors_c64_rgb += [(PartToByte(rgb[0]), PartToByte(rgb[1]), PartToByte(rgb[2]))]
-	#print hex(PartToByte(rgb[0])), hex(PartToByte(rgb[1])), hex(PartToByte(rgb[2]))
 
 def vecadd(a, b):
 	return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
@@ -349,16 +335,19 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode):
 				max_count = index_count[i]
 				index = i
 		# Find a color of the first 8 that is most similar to index
-		lowindex = FindBestLowIndexColor(index)
+		if index != 16:
+			lowindex = FindBestLowIndexColor(index)
 		# Replace every pixel by background color or by lowindex color
 		blockerror = 0
 		for i in range(0, 8*8):
 			yuv = inputblock[i]
 			error0 = ErrorInYUV(colors_c64_yuv[fixed_indices[0]], yuv)
-			error1 = ErrorInYUV(colors_c64_yuv[lowindex], yuv)
-			idx = lowindex
-			if error0 < error1:
-				idx = fixed_indices[0]
+			error1 = error0
+			idx = fixed_indices[0]
+			if lowindex != 16:
+				error1 = ErrorInYUV(colors_c64_yuv[lowindex], yuv)
+				if error1 < error0:
+					idx = lowindex
 			resultblocklowcolor += [colors_c64_yuv[idx]]
 			resultindiceslowcolor += [idx]
 			blockerror += min(error0, error1)
@@ -426,7 +415,8 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode):
 					bit = 0
 				byte = byte * 2 + bit
 			resultbytes += [byte]
-		fixed_indices_this_block[3] = lowindex
+		if len(fixed_indices_this_block) == 4:
+			fixed_indices_this_block[3] = lowindex
 	elif hiresmode:
 		# A block is always 8 bytes in a row, so 8x8 pixels.
 		for y in range(0, 8):
@@ -456,9 +446,13 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode):
 			resultbytes += [byte]
 		resultblock = BlockMultiColorToHiRes(resultblock)
 		if charmode:
+			if len(fixed_indices_this_block) < 4:
+				fixed_indices_this_block += [0] * (4 - len(fixed_indices_this_block))
 			fixed_indices_this_block[3] += 8	# Set multicolor flag
 	if charmode:
 		# Return image data, encoded bytes and 1 color in color ram
+		if len(fixed_indices_this_block) < 4:
+			fixed_indices_this_block += [0] * (4 - len(fixed_indices_this_block))
 		return (resultblock, resultbytes, fixed_indices_this_block[3])
 	elif hiresmode:
 		# Return image data, encoded bytes, 2 colors in char
@@ -571,7 +565,7 @@ if len(sys.argv) < 2:
 	print('-quiet N\t\tEnable/Disable output.')
 	print('-mixing N\t\tEnable/Disable pixel mixing.')
 	print('-maxuv F\t\tMax value if UV to be used in [0...0.5] range, higher values are clamped.')
-	print('-dynamicgreylimit N\t\tenable or disable dynamic grey limit for UV values.')
+	print('-dynamicgreylimit N\tenable or disable dynamic grey limit for UV values.')
 	sys.exit(1)
 inputfilename = sys.argv[len(sys.argv) - 1]
 inputbasefilename = inputfilename[0:inputfilename.rfind('.')]
@@ -638,18 +632,43 @@ else:
 
 im = PIL.Image.open(inputfilename)
 
-# skalieren/zuschneiden
+##########################################################
+#
+# Prepare color data
+#
+##########################################################
+
+colors_c64_rgb = []
+for c in colors_c64_yuv:
+	rgb = YUVToRGB(c)
+	rgb = AddGammaCorrection(rgb)
+	colors_c64_rgb += [(PartToByte(rgb[0]), PartToByte(rgb[1]), PartToByte(rgb[2]))]
+	#print hex(PartToByte(rgb[0])), hex(PartToByte(rgb[1])), hex(PartToByte(rgb[2]))
+
+index_to_index_error = []
+if charmode:
+	for y in range(0, 16):
+		for x in range(0, 16):
+			index_to_index_error += [ErrorInYUV(colors_c64_rgb[x], colors_c64_rgb[y])]
+
+# Scale/Crop image
 img_w = im.size[0]
 img_h = im.size[1]
+num_sprites_x = 0
+num_sprites_y = 0
 if charmode:
 	img_w = (img_w // 8) * 8
 	img_h = (img_h // 8) * 8
 	im = im.crop((0, 0, img_w, img_h))
 elif spritemode:
-	if img_w != 24 or img_h != 21:
+	img_w2 = (img_w // 24) * 24
+	img_h2 = (img_h // 21) * 21
+	if img_w != img_w2 or img_h != img_h2:
 		print('Invalid sprite image inputfile.')
 		sys.exit(0)
-	img_h = 24
+	# Later extend every 24x21 block to 24x24 blocks.
+	num_sprites_x = img_w // 24
+	num_sprites_y = img_h // 21
 elif hiresmode:
 	# Skaliere auf 320x200
 	im = im.resize((320, 200), PIL.Image.BICUBIC)
@@ -715,14 +734,26 @@ if charmode:
 	dynamicgreylimit = False
 elif spritemode:
 	num_most_used_indices = 4
+	if hiresmode:
+		num_most_used_indices = 2
 	enable_mixing = False
 	dynamicgreylimit = False
 	fixindices += [spriteneutralindex]
-	# add three lines of neutral colors to make sprite fit in block
-	# fixme expand image here, allow new sprite color for every 24x21 block (rather extend to 24x24 blocks!)
-	addlines = [colors_c64_yuv[spriteneutralindex]] * (24 * 3)
-	pxyuv += addlines
-	im = im.resize((24, 24), PIL.Image.NEAREST)
+	# add three lines of neutral colors to make sprite fit in block with neutral color,
+	# for every row of sprites.
+	pxyuv_extended = []
+	ptr = 0
+	for yr in range(0, num_sprites_y):
+		for yl in range(0, 21):
+			for x in range(0, img_w):
+				pxyuv_extended += [pxyuv[ptr]]
+				ptr += 1
+		pxyuv_extended += [colors_c64_yuv[spriteneutralindex]] * (img_w * 3)
+	pxyuv = pxyuv_extended
+	img_h = num_sprites_y * 24
+	im = im.resize((img_w, img_h), PIL.Image.NEAREST)
+	# fixme later we can chose one sprite color for every sprite as free color,
+	# may help for large sprites
 elif hiresmode:
 	# We can chose two colors freely every char, no background color!
 	num_most_used_indices = 0
@@ -804,8 +835,23 @@ def dumpbytes(v):
 		n += 16
 	return z
 
+# In charmode reduce all used blocks to the given number.
+# Compare every pair of blocks and replace one where pair has least error.
+# However replace that one that is used less.
+# Hmm blocks that are often used should not be replaced...
+# here we can implement some strategy...
+# Sum up errors by comparing indices.
+# Replace free color of one block by 8 possible low color indices for comparison.
+# Compare two blocks of 8x8 pixels (64 indices) with other blocks by looking up
+# the errors in the matrix and summing them up.
+# Fastest way to do it - but how to eleminate blocks?
+# If error is low between two blocks but both are often used, rather keep both
+# of them.
+# Here a good strategy is missing but we don't really need that mode...
+
+# alt:
 # Im Charmode sortiere noch Blöcke aus (Verringere auf vorfügbare Zahl)
-# Idealerweise Daten gleich als acme source ausgeben für's Einbinden!
+# Idealerweise Daten gleich als acm e source ausgeben für's Einbinden!
 # fixme hier wird direkt nach Farben geguckt, aber jeder vorhandene Block an Indices wäre auch ok,
 # man kann ja einfach Farben tauschen! Wobei nur eine Farbe getauscht werden kann im char mode.
 # das fehlt hier wohl noch!
@@ -918,20 +964,25 @@ if charmode:
 	f.writelines(dfl)
 elif spritemode:
 	# Sprite-mode, output the first 63 bytes as data, complete with one null byte to get 64 in total
+	# Order of bytes is different than in bitmaps, 3 bytes every line, 21 lines, then next sprite in row.
 	spritebytes = []
-	for y in range(0, 21):
-		yl = y // 8
-		ysl = y % 8
-		for x in range(0, 3):
-			spritebytes += [sprite_recode_byte(bitmapbytes[yl * 24 + x * 8 + ysl], hiresmode)]
-	spritebytes += [0]
+	for sy in range(0, num_sprites_y):
+		for sx in range(0, num_sprites_x):
+			for y in range(0, 21):
+				yl = sy * 3 + y
+				ysl = yl % 8
+				yl = yl // 8
+				for x in range(0, 3):
+					idx = yl * 8 * (3 * num_sprites_x) + (sx * 3 + x) * 8 + ysl
+					spritebytes += [sprite_recode_byte(bitmapbytes[idx], hiresmode)]
+			spritebytes += [0]
 	# Generate .a data file
 	dfl = '!align 63, 0\n' + inputbasefilename + '_data\n'
 	dfl += dumpbytes(spritebytes)
 	f = open(outputbasefilename + '_sprdata.a','wt')
 	f.writelines(dfl)
 else:
-	# Bitmap-Mode: Gebe Daten aus (als RGB Bild) und als PRG für Bitmap-Modus
+	# Bitmap-Mode: Show data as RGB image and save as binary data
 	im.resize((320, 200), PIL.Image.NEAREST).save(outputbasefilename + '_c64.png')
 	# Generate .a data file
 	dfl = ''
@@ -948,7 +999,7 @@ else:
 	f = open(outputbasefilename + '_bmpdata.a','wt')
 	f.writelines(dfl)
 	f.close()
-	# Versuch: RLE-Encoding der Daten
+	# RLE encoding of data
 	rlebytes0 = RLEncode(bitmapbytes)
 	rlebytes1 = RLEncode(chardata)
 	rlebytes2 = []
