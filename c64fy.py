@@ -24,16 +24,15 @@ import sys
 import math
 
 # Some global parameters
-enable_mixing = True
-equalize_uv = False	# helps for some images
-equalize_max_uv = 0.3	# max value that should be used then
+enable_mixing = True	# Enable color mixing
+adjust_uv = False	# helps for some images
+uv_dist_limit = 0.2	# max UV distance to 0
+uv_limit_grey = 0.05	# UV distance below this is considered as grey value
+dynamic_uv_grey_limit = False	# Adjust it automatically?
 
 # Colors of c64 - y is luminance (0...32), uv as angle (0...16)
 # Distance of colors (not grey) to center of yuv space is always 0.1333333.
 default_uv_color_distance = 0.1333333
-y_limit_grey = 0.1	# very close to color y dist, but lower is worse, don't go higher!
-if equalize_uv:
-	y_limit_grey = 0.3
 colors_y_uvangle = [
 	(0, -1),		# black
 	(32, -1),		# white
@@ -76,6 +75,7 @@ infinity = 1000000000.0
 # scaling it up helps for some images, scaling down makes them grey, we can't decide automatically.
 # high uv scaling shows some strange color chose strategy for blocks, e.g. bacillus takes light blue when yellow is in the
 # near but next block only black and dark grey, there must still be some kind of bug!
+# fixme maybe make grey limit for UV distance as part of available UV range to adjust it but not lower than some limit!
 
 # fixme order of color data for hires is not checked if correct
 
@@ -213,7 +213,7 @@ def ComputeBlockError(b0, b1):
 def FindBestColorForYUV(yuv):
 	index = 16
 	minerror = infinity
-	if yuv[0] < y_limit_grey:
+	if max(abs(yuv[1]), abs(yuv[2])) < uv_limit_grey:
 		for i in [0, 1, 11, 12, 15]:
 			error = ErrorInYUV(yuv, colors_c64_yuv[i])
 			if error < minerror:
@@ -243,7 +243,7 @@ def FindBestTwoColorsForYUV(yuv, available_indices):
 			elif error < minerror2:
 				minerror2 = error
 				index2 = i
-	elif yuv[0] < y_limit_grey:
+	elif max(abs(yuv[1]), abs(yuv[2])) < uv_limit_grey:
 		for i in [0, 1, 11, 12, 15]:
 			error = ErrorInYUV(yuv, colors_c64_yuv[i])
 			if error < minerror:
@@ -570,6 +570,8 @@ if len(sys.argv) < 2:
 	print('-color N\t\tUse color number N as fix color - for sprites best define all!')
 	print('-quiet N\t\tEnable/Disable output.')
 	print('-mixing N\t\tEnable/Disable pixel mixing.')
+	print('-maxuv F\t\tMax value if UV to be used in [0...0.5] range, higher values are clamped.')
+	print('-dynamicgreylimit N\t\tenable or disable dynamic grey limit for UV values.')
 	sys.exit(1)
 inputfilename = sys.argv[len(sys.argv) - 1]
 inputbasefilename = inputfilename[0:inputfilename.rfind('.')]
@@ -616,6 +618,11 @@ if len(sys.argv) > 2:
 			tilex = int(p1)
 		elif p0 == '-tileheight':
 			tiley = int(p1)
+		elif p0 == '-maxuv':
+			adjust_uv = True
+			uv_dist_limit = min(0.5, max(0.0, float(p1)))
+		elif p0 == '-dynamicgreylimit':
+			dynamic_uv_grey_limit = int(p1) != 0
 		else:
 			print('Illegal parameters.')
 			sys.exit(0)
@@ -656,12 +663,11 @@ else:
 if not quiet:
 	Show(im)
 
-# Finde nächste Farbe jeweils auf YUV bezogen und zeige das an
+# Get pixel data
 px = im.getdata()
-pxnearest = []
-closestcolorindices = []
-index_use_count = [0] * 16
-pxyuv = []
+
+# If we should adjust UV values, compute coefficients first
+uv_scale = 1.0
 meanuvdist = 0.0
 maxuvdist = 0.0
 for p in px:
@@ -670,45 +676,50 @@ for p in px:
 	yuv = RGBToYUV(rgb)
 	meanuvdist += abs(yuv[1]) + abs(yuv[2])
 	maxuvdist = max(max(maxuvdist, abs(yuv[1])), abs(yuv[2]))
-	#yuv = (yuv[0], yuv[1] * 0.5, yuv[2] * 0.5)	#fixme test, rather sqrt/square for scaling!
-	if not equalize_uv:
-		pxyuv += [yuv]
-		# Finde passensten Index nach Farbzuordnung
-		index = FindBestColorForYUV(yuv)
-		pxnearest += [colors_c64_rgb[index]]
-		closestcolorindices += [index]
-		index_use_count[index] += 1
 meanuvdist /= len(px) * 2	#  * 2 for count
-maxuvdist /= equalize_max_uv	# to have equalize_max_uv as result, not 1!
-if equalize_uv:
-	print('Mean UV distance', meanuvdist, ' Max UV distance', maxuvdist)
-	for p in px:
-		rgb = (p[0] * color_scale_factor, p[1] * color_scale_factor, p[2] * color_scale_factor)
-		rgb = RemoveGammaCorrection(rgb)
-		yuv = RGBToYUV(rgb)
-		yuv = (yuv[0], yuv[1] / maxuvdist, yuv[2] / maxuvdist)
-		pxyuv += [yuv]
-		# Finde passensten Index nach Farbzuordnung
-		index = FindBestColorForYUV(yuv)
-		pxnearest += [colors_c64_rgb[index]]
-		closestcolorindices += [index]
-		index_use_count[index] += 1
+print('Mean UV distance', meanuvdist, ' Max UV distance', maxuvdist)
+# If max UV is larger than 0.2 scale it down
+if adjust_uv and maxuvdist > uv_dist_limit:
+	uv_scale = uv_dist_limit / maxuvdist
+	maxuvdist = uv_dist_limit
+if dynamic_uv_grey_limit:
+	uv_limit_grey = max(0.02, maxuvdist / 5.0)
+
+# Find best matching color for every pixel and show it
+pxnearest = []
+closestcolorindices = []
+index_use_count = [0] * 16
+pxyuv = []
+for p in px:
+	rgb = (p[0] * color_scale_factor, p[1] * color_scale_factor, p[2] * color_scale_factor)
+	rgb = RemoveGammaCorrection(rgb)
+	yuv = RGBToYUV(rgb)
+	yuv = (yuv[0], yuv[1] * uv_scale, yuv[2] * uv_scale)
+	pxyuv += [yuv]
+	# Finde passensten Index nach Farbzuordnung
+	index = FindBestColorForYUV(yuv)
+	pxnearest += [colors_c64_rgb[index]]
+	closestcolorindices += [index]
+	index_use_count[index] += 1
 	
 im.putdata(pxnearest)
 if not quiet:
 	Show(im)
 
-# Zähle welche Farbe am häufigsten ist, bzw welche drei
+# Count which color or which three are used mostly
 num_most_used_indices = 1
 fixindices = []
 if charmode:
 	num_most_used_indices = 3
 	enable_mixing = False
+	dynamicgreylimit = False
 elif spritemode:
 	num_most_used_indices = 4
 	enable_mixing = False
+	dynamicgreylimit = False
 	fixindices += [spriteneutralindex]
 	# add three lines of neutral colors to make sprite fit in block
+	# fixme expand image here, allow new sprite color for every 24x21 block (rather extend to 24x24 blocks!)
 	addlines = [colors_c64_yuv[spriteneutralindex]] * (24 * 3)
 	pxyuv += addlines
 	im = im.resize((24, 24), PIL.Image.NEAREST)
@@ -725,8 +736,8 @@ if num_most_used_indices > len(fixindices):
 		fixindices += [mui]
 print('Fix indices for image:', fixindices)
 
-# Gehe dann über alle Blöcke und berechne jeweils ähnlichsten Block mit den
-# festen und freien Farben unter Verwendung von Mischmustern.
+# Iterate over all 8x8 blocks and compute best fit block with c64 coding rules with
+# fix and free colors and mixing if enabled.
 stretchedcolors = [(0, 0, 0)] * len(pxyuv)
 blocks = []
 blockusecount = []
@@ -774,7 +785,7 @@ for y in range(0, img_h//8):
 				b = int(rgb[2] / color_scale_factor)
 				stretchedcolors[(y * 8 + yy) * img_w + (x * 8 + xx)] = (r, g, b)
 				n += 1
-# Zeige ideale Blöcke (für Bitmap schon Ergebnis)
+# Show best result blocks (for bitmap mode already final result)
 im.putdata(stretchedcolors)
 if not quiet:
 	Show(im)
