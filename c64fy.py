@@ -2,7 +2,7 @@
 # coding=utf8
 
 # PC to C64 image data converter
-# Copyright (C) 2013-2017  Thorsten Jordan.
+# Copyright (C) 2012-2017  Thorsten Jordan.
 # 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -25,32 +25,36 @@ import math
 
 # Some global parameters
 enable_mixing = True
+equalize_uv = False	# helps for some images
+equalize_max_uv = 0.3	# max value that should be used then
 
-# Colors of c64 - y is luminance (0...32), uv as angle (0...16), most similar colors as lest as third parameter
+# Colors of c64 - y is luminance (0...32), uv as angle (0...16)
 # Distance of colors (not grey) to center of yuv space is always 0.1333333.
 default_uv_color_distance = 0.1333333
-uv_distance_grey_limit = default_uv_color_distance / 3
-colors_y_uvangle_nearest = [
-	(0, -1, [11, 6, 9]),		# black, most similar the darkest colors blue, brown and dark grey
-	(32, -1, [15, 7, 13, 14]),	# white, most similar light grey and the brightest colors yellow and light green and also light blue
-	(10, 5, [8,9,4,10]),		# red, similar orange, brown, purple and light red
-	(20, 13, [5,6,13,14,15]),	# cyan, similar green, blue, light green, light blue, light grey
-	(12, 2, [2,6,11]),		# purple, similar red, blue, dark grey
-	(16, 10, [13,3,6,12]),		# green, similar light green,cyan,blue,medium grey
-	(8, 0, [14,4,3,11]),		# blue similar light blue,cyan,purple,dark grey
-	(24, 8, [8,15,13,1]),		# yellow similar orange,light grey,light green,white
-	(12, 6, [9,7,15,10]),		# Orange similar brown,yellow,rosa,light grey
-	(8, 7, [8,2,11,0]),		# brown similar orange,red,dark grey,black
-	(16, 5, [8,2,4,15]),		# light red similar orange,red,purple,light grey
-	(10, -1.0, [0,12]),		# dark grey similar black,medium grey
-	(15, -1.0, [11,15]),		# medium grey similar dark grey,light grey
-	(24, 10, [7,5,2,15]),		# light green similar yellow,green,white,light grey
-	(15, 0, [6,3,15,13]),		# light blue similar blue,cyan,light grey,light green
-	(20, -1, [1,9])			# light grey similar medium grey,white
+y_limit_grey = 0.1	# very close to color y dist, but lower is worse, don't go higher!
+if equalize_uv:
+	y_limit_grey = 0.3
+colors_y_uvangle = [
+	(0, -1),		# black
+	(32, -1),		# white
+	(10, 5),		# red
+	(20, 13),		# cyan
+	(12, 2),		# purple
+	(16, 10),		# green
+	(8, 0),			# blue
+	(24, 8),		# yellow
+	(12, 6),		# orange
+	(8, 7),			# brown
+	(16, 5),		# light red
+	(10, -1.0),		# dark grey
+	(15, -1.0),		# medium grey
+	(24, 10),		# light green
+	(15, 0),		# light blue
+	(20, -1)		# light grey
 ]
 
 colors_c64_yuv = []
-for c in colors_y_uvangle_nearest:
+for c in colors_y_uvangle:
 	y = c[0]/32.0
 	if c[1] < 0:
 		colors_c64_yuv += [(y, 0.0, 0.0)]
@@ -64,6 +68,16 @@ for c in colors_y_uvangle_nearest:
 color_scale_factor = 1.0 / 255.0
 
 infinity = 1000000000.0
+
+# fixme allow large sprites to be generated in batch, so images are multiple of 24x21 and NxM sprites are generated automatically
+
+# fixme: yellow is often used, maybe scale brightness or y of input better.
+# no wonder why, it fits to YUV. we should rather scale down UV or equalize it to 0...0.2 or so before conversion!
+# scaling it up helps for some images, scaling down makes them grey, we can't decide automatically.
+# high uv scaling shows some strange color chose strategy for blocks, e.g. bacillus takes light blue when yellow is in the
+# near but next block only black and dark grey, there must still be some kind of bug!
+
+# fixme order of color data for hires is not checked if correct
 
 # Bilder umwandeln funktioniert, aber:
 # Wir brauchen auch eine Teilfunktionalität, die Charsetdaten generiert.
@@ -87,6 +101,8 @@ infinity = 1000000000.0
 # Versuche später auch Interlace-Mix-Farben zu benutzen, bei halber vertikaler Auflösung.
 # Es gibt 7 bzw. 14 Mixfarben, aber nur wenige taugen.
 
+# fixme charset option zum aussortieren eher ausbauen
+
 # Original c64 color handling is YUV not HLS, see http://www.pepto.de/projects/colorvic/2001/index.html
 
 # Chardaten direkt aus Bildern zu generieren macht so keinen Sinn.
@@ -103,7 +119,7 @@ infinity = 1000000000.0
 # Sprite color can be determined automatically from image data or give it from command line.
 # fixme offer hires mode for sprites!
 
-# fixme blocks with just one color are encoded as multicolor in char mode, rather prefer hires mode?
+# Note! blocks with just one color are encoded as multicolor in char mode, rather prefer hires mode?
 # otherwise hires backgrounds could have problem, but we can't generalize this...
 
 # Old version was sometimes better, had more details, but darker colors were worse.
@@ -116,7 +132,12 @@ infinity = 1000000000.0
 # Was contrast higher because no gamma correction was used?
 # Increase contrast first? Like e.g. picture of Wehrheim with yellow lawn in foreground -> just one yellow area, no details left!
 
-# fixme try results of hires bitmap encoding
+# Older version didn't really have more detail!
+# light green and yellow was used less, but not fully correct. Newer version seems better.
+# Mixing any pair of colors is NOT correct! Mixing e.g. white and blue may give in theory a good match but it doesn't look that
+# way on screen as both colors don't really mix on screen!
+
+# Note! last ninja picture conversion is not exact because its colors are not correct
 
 # Very much later we could offer FLI modes, but that is out of topic.
 
@@ -161,11 +182,27 @@ for c in colors_c64_yuv:
 	colors_c64_rgb += [(PartToByte(rgb[0]), PartToByte(rgb[1]), PartToByte(rgb[2]))]
 	#print hex(PartToByte(rgb[0])), hex(PartToByte(rgb[1])), hex(PartToByte(rgb[2]))
 
+def vecadd(a, b):
+	return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
+
+def vecsub(a, b):
+	return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+def veclensqr(v):
+	return v[0]*v[0] + v[1]*v[1] + v[2]*v[2]
+
+def veclen(v):
+	return math.sqrt(veclensqr(v))
+
+def vecmul(a, b):
+	return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]
+
+def vecscal(v, a):
+	return (v[0]*a, v[1]*a, v[2]*a)
+
 def ErrorInYUV(yuv0, yuv1):
-	y = yuv0[0] - yuv1[0]
-	u = yuv0[1] - yuv1[1]
-	v = yuv0[2] - yuv1[2]
-	return y*y + u*u + v*v
+	d = vecsub(yuv0, yuv1)
+	return math.sqrt(vecmul(d, d))
 
 def ComputeBlockError(b0, b1):
 	error = 0.0
@@ -174,18 +211,76 @@ def ComputeBlockError(b0, b1):
 	return error
 
 def FindBestColorForYUV(yuv):
-	index = 0
+	index = 16
 	minerror = infinity
-	for i in range(0, 16):
-		error = ErrorInYUV(yuv, colors_c64_yuv[i])
-		if error < minerror:
-			minerror = error
-			index = i
+	if yuv[0] < y_limit_grey:
+		for i in [0, 1, 11, 12, 15]:
+			error = ErrorInYUV(yuv, colors_c64_yuv[i])
+			if error < minerror:
+				minerror = error
+				index = i
+	else:
+		for i in range(0, 16):
+			error = ErrorInYUV(yuv, colors_c64_yuv[i])
+			if error < minerror:
+				minerror = error
+				index = i
 	return index
+
+def FindBestTwoColorsForYUV(yuv, available_indices):
+	index = 16
+	index2 = 16
+	minerror = infinity
+	minerror2 = infinity
+	if len(available_indices) > 0:
+		for i in available_indices:
+			error = ErrorInYUV(yuv, colors_c64_yuv[i])
+			if error < minerror:
+				minerror2 = minerror
+				index2 = index
+				minerror = error
+				index = i
+			elif error < minerror2:
+				minerror2 = error
+				index2 = i
+	elif yuv[0] < y_limit_grey:
+		for i in [0, 1, 11, 12, 15]:
+			error = ErrorInYUV(yuv, colors_c64_yuv[i])
+			if error < minerror:
+				minerror2 = minerror
+				index2 = index
+				minerror = error
+				index = i
+			elif error < minerror2:
+				minerror2 = error
+				index2 = i
+	else:
+		for i in range(0, 16):
+			error = ErrorInYUV(yuv, colors_c64_yuv[i])
+			if error < minerror:
+				minerror2 = minerror
+				index2 = index
+				minerror = error
+				index = i
+			elif error < minerror2:
+				minerror2 = error
+				index2 = i
+	return (index, index2)
+
+def ComputeBestColorOfTwo(yuv, best_two_colors):
+	indexresult = best_two_colors[0]
+	if enable_mixing and best_two_colors[1] != 16:
+		errormf = ComputeMixFactorAndDistance(yuv, best_two_colors[0], best_two_colors[1])
+		# Larger mixfactor means rather 2nd color (index1), and as larger the random range is
+		if enable_mixing:
+			r = random.random()
+			if r < errormf[1]:
+				indexresult = best_two_colors[1]
+	return indexresult
 
 def FindBestLowIndexColor(index):
 	minerror = infinity
-	lowindex = 0
+	lowindex = 16
 	for i in range(0, 8):
 		error = ErrorInYUV(colors_c64_yuv[i], colors_c64_yuv[index])
 		if error < minerror:
@@ -207,24 +302,6 @@ def BlockMultiColorToHiRes(colorblock):
 	for i in colorblock:
 		result += [i, i]
 	return result
-
-def vecadd(a, b):
-	return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
-
-def vecsub(a, b):
-	return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
-
-def veclensqr(v):
-	return v[0]*v[0] + v[1]*v[1] + v[2]*v[2]
-
-def veclen(v):
-	return math.sqrt(veclensqr(v))
-
-def vecmul(a, b):
-	return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]
-
-def vecscal(v, a):
-	return (v[0]*a, v[1]*a, v[2]*a)
 
 def ComputeMixFactorAndDistance(yuv, index0, index1):
 	yuv0 = colors_c64_yuv[index0]
@@ -256,7 +333,7 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode):
 	lowcolorblockerror = infinity
 	resultblocklowcolor = []
 	resultindiceslowcolor = []
-	lowindex = 0
+	lowindex = 16
 	if charmode:
 		# Find most used color except background in block and use this for comparison
 		index_count = [0] * 16
@@ -266,7 +343,7 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode):
 			if index != fixed_indices[0]:
 				index_count[index] += 1
 		max_count = 0
-		index = 0
+		index = 16
 		for i in range(0, 16):
 			if index_count[i] > max_count:
 				max_count = index_count[i]
@@ -290,87 +367,52 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode):
 	# For multicolor half x resolution!
 	if not hiresmode:
 		inputblock = BlockHiResToMultiColor(colorblock)
-	# Finde die vier häufigsten Farben im Block, also jeweils passenste und zweitpassenste Farbe ermitteln,
-	# deren Verwendung merken (Anteile aufsummieren).
-	# Sind feste Farben dabei, nehme die ansonsten freie Farbe(n) auf die nächsthäufigsten setzen.
-	# Für jedes Pixel dann beste Mischung aus vorhandenen Farben bestimmen (zwei Werte und Mischfaktor).
-	# Farbe ist dann wenn zufällig 0...1 > Mischfaktor eben Farbe 2 sonst Farbe 1.
-	# Dafür brauchen wir eine Ähnlichkeitsfunktion für Farben.
-	# 3D-Abstand in YUV, wobei Y-Abstand ggf. halbiert
 	resultblock = []
 	resultindices = []
-	index_use_count = [0.0] * 16
+	# For every pixel find the two most similar colors and the best mix between them to represent the
+	# original color. Either take the best color or mix between the two.
+	# Account the finally chosen color for index use counting.
+	index_use_count = [0] * 16
 	for yuv in inputblock:
-		index0 = FindBestColorForYUV(yuv)
-		mixfactor = 0.0
-		index1 = index0
-		# Finde aus ähnlichen Farben, die die am besten paßt (kleinster Fehler)
-		# Also berechne jeweils Segment von Farbe1 zu Farbe2 und nächsten Abstand zu Segment,
-		# mit Mischfaktor wo auf dem Segment man ist.
-		# Je größer mixfactor, desto eher zweite Farbe!
-		# wieso nicht einfach mix mit allen Farben probieren?!
-		minerror = infinity
-		#print('test nearest of',index0,'are',colors_y_uvangle_nearest[index0][2])
-		for ci in colors_y_uvangle_nearest[index0][2]:
-			errormf = ComputeMixFactorAndDistance(yuv, index0, ci)
-			if errormf[0] < minerror:
-				minerror = errormf[0]
-				index1 = ci
-				mixfactor = errormf[1]
-		# Zähle nun verwendete Farben mal Mixfaktor
-		index_use_count[index0] += 1.0 - mixfactor
-		index_use_count[index1] += mixfactor
-	# Ersetze verwendete Farben durch verfügbare. Also häufigste Farbe, die noch nicht vorhanden ist,
-	# durch freie Farbe ersetzen. Gibt es keine freie mehr, nehme die, die als nächstes paßt,
-	# bzw. mach das dann pro Pixel.
-	# ergänze einfach fixed_indices-Array
+		# Find best matching two colors
+		btc = FindBestTwoColorsForYUV(yuv, [])
+		# Compute best match between them
+		indexresult = ComputeBestColorOfTwo(yuv, btc)
+		# Account color index
+		index_use_count[indexresult] += 1
+	#print(index_use_count)
+	# Now take the most used colors that are not already available and set them as fixed colors.
+	# Afterwards replace every color that can not be represented by available colors, also with mixing.
+	# Take most used color as fix color for this block if there are still free colors available.
+	# Color is put at back of fixed_indices so it isn't reused.
 	fixed_indices_this_block = [x for x in fixed_indices]
 	for i in range(0, num_free_indices):
-		mui = 0
-		maxcount = 0.0
+		mui = 16
+		maxcount = 0
 		for j in range(0, 16):
 			if j not in fixed_indices_this_block:
 				if index_use_count[j] > maxcount:
 					maxcount = index_use_count[j]
 					mui = j
-		# Im Charmode ersetze durch ähnlichste Farbe unter den ersten 8.
-		if charmode:
-			mui = FindBestLowIndexColor(mui)
-		fixed_indices_this_block += [mui]
-	# Bestimme dann pro Pixel wieder Mixfaktor aus bester und zweitbester Farbe.
+		# In charmode replace it by most similar low index color.
+		if mui != 16:
+			if charmode:
+				mui = FindBestLowIndexColor(mui)
+			fixed_indices_this_block += [mui]
+	# For every pixel determine best two colors from available colors of this block.
+	# Compute segment in color-3-space between the two and determine closest position to segment for
+	# the given color. The segment parameter determines mixing factor.
 	randfactorn = 0
 	anycolorblockerror = 0.0
 	for yuv in inputblock:
-		minerror = infinity
-		index0 = 0
-		for ci in fixed_indices_this_block:
-			error = ErrorInYUV(yuv, colors_c64_yuv[ci])
-			if error < minerror:
-				minerror = error
-				index0 = ci
-		minerror = infinity
-		mixfactor = 0.0
-		index1 = index0
-		for ci in fixed_indices_this_block:
-			if ci != index0:
-				errormf = ComputeMixFactorAndDistance(yuv, index0, ci)
-				if errormf[0] < minerror:
-					minerror = errormf[0]
-					index1 = ci
-					mixfactor = errormf[1]
-		# Je größer Mixfactor, desto eher zweite Farbe, desto größer auch Random-Bereich
-		if enable_mixing:
-			r = random.random()
-			indexresult = index1
-			if r > mixfactor:
-				indexresult = index0
-		else:
-			indexresult = index0
-			if charmode:
-				anycolorblockerror += ErrorInYUV(yuv, colors_c64_yuv[indexresult])
+		# Find best two colors out of available ones
+		btc = FindBestTwoColorsForYUV(yuv, fixed_indices_this_block)
+		indexresult = ComputeBestColorOfTwo(yuv, btc)
+		if charmode:
+			anycolorblockerror += ErrorInYUV(yuv, colors_c64_yuv[indexresult])
 		resultblock += [colors_c64_yuv[indexresult]]
 		resultindices += [indexresult]
-	# Ausgeben
+	# Put out data
 	resultbytes = []
 	if charmode and lowcolorblockerror < anycolorblockerror:
 		#print('use low color block',lowcolorblockerror,'<',anycolorblockerror)
@@ -392,9 +434,10 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode):
 			for x in range(0, 8):
 				index = resultindices[y*8+x]
 				bits = 0
-				for i in range(0, 2):
+				for i in range(0, len(fixed_indices_this_block)):
 					if fixed_indices_this_block[i] == index:
 						bits = i
+						break
 				byte = byte * 2 + bits
 			resultbytes += [byte]
 	else:
@@ -406,7 +449,7 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode):
 			for x in range(0, 4):
 				index = resultindices[y*4+x]
 				bits = 0
-				for i in range(0, 4):
+				for i in range(0, len(fixed_indices_this_block)):
 					if fixed_indices_this_block[i] == index:
 						bits = i
 				byte = byte * 4 + bits
@@ -419,12 +462,16 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode):
 		return (resultblock, resultbytes, fixed_indices_this_block[3])
 	elif hiresmode:
 		# Return image data, encoded bytes, 2 colors in char
-		return (resultblock, resultbytes, fixed_indices_this_block[0]*16 + fixed_indices_this_block[1])	# fixme order?
+		if len(fixed_indices_this_block) < 2:
+			fixed_indices_this_block += [0] * (2 - len(fixed_indices_this_block))
+		return (resultblock, resultbytes, fixed_indices_this_block[0]*16 + fixed_indices_this_block[1])
 	else:
 		# Return image data, encoded bytes, 2 colors in char and 1 color in color ram
+		if len(fixed_indices_this_block) < 4:
+			fixed_indices_this_block += [0] * (4 - len(fixed_indices_this_block))
 		return (resultblock, resultbytes, fixed_indices_this_block[1]*16 + fixed_indices_this_block[2], fixed_indices_this_block[3])
 	
-# Bild vergrößert anzeigen
+# Show image enlarged
 def Show(im):
 	im2 = im.resize((im.size[0] * 2, im.size[1] * 2), PIL.Image.NEAREST)
 	im2.show()
@@ -615,16 +662,37 @@ pxnearest = []
 closestcolorindices = []
 index_use_count = [0] * 16
 pxyuv = []
+meanuvdist = 0.0
+maxuvdist = 0.0
 for p in px:
 	rgb = (p[0] * color_scale_factor, p[1] * color_scale_factor, p[2] * color_scale_factor)
 	rgb = RemoveGammaCorrection(rgb)
 	yuv = RGBToYUV(rgb)
-	pxyuv += [yuv]
-	# Finde passensten Index nach Farbzuordnung
-	index = FindBestColorForYUV(yuv)
-	pxnearest += [colors_c64_rgb[index]]
-	closestcolorindices += [index]
-	index_use_count[index] += 1
+	meanuvdist += abs(yuv[1]) + abs(yuv[2])
+	maxuvdist = max(max(maxuvdist, abs(yuv[1])), abs(yuv[2]))
+	#yuv = (yuv[0], yuv[1] * 0.5, yuv[2] * 0.5)	#fixme test, rather sqrt/square for scaling!
+	if not equalize_uv:
+		pxyuv += [yuv]
+		# Finde passensten Index nach Farbzuordnung
+		index = FindBestColorForYUV(yuv)
+		pxnearest += [colors_c64_rgb[index]]
+		closestcolorindices += [index]
+		index_use_count[index] += 1
+meanuvdist /= len(px) * 2	#  * 2 for count
+maxuvdist /= equalize_max_uv	# to have equalize_max_uv as result, not 1!
+if equalize_uv:
+	print('Mean UV distance', meanuvdist, ' Max UV distance', maxuvdist)
+	for p in px:
+		rgb = (p[0] * color_scale_factor, p[1] * color_scale_factor, p[2] * color_scale_factor)
+		rgb = RemoveGammaCorrection(rgb)
+		yuv = RGBToYUV(rgb)
+		yuv = (yuv[0], yuv[1] / maxuvdist, yuv[2] / maxuvdist)
+		pxyuv += [yuv]
+		# Finde passensten Index nach Farbzuordnung
+		index = FindBestColorForYUV(yuv)
+		pxnearest += [colors_c64_rgb[index]]
+		closestcolorindices += [index]
+		index_use_count[index] += 1
 	
 im.putdata(pxnearest)
 if not quiet:
@@ -666,7 +734,7 @@ numblockstotal = 0
 bitmapbytes = []	# Bytes für Bitmap
 chardata = []		# Passende Character-Daten für Bitmap (0-255)
 colordata = []		# Colorcode für Bitmap/Char 11 (Mit Bit4 als MC-Marker bei Char) (0-15)
-backgroundindex = 0
+backgroundindex = 16
 if not hiresmode:
 	backgroundindex = fixindices[0]
 for y in range(0, img_h//8):
