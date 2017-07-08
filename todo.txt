@@ -1,8 +1,7 @@
 ToDo - higher priority first
 ============================
 
-upload code to github, write better readme.md and include screenshots!
-use git repo for code and c64fy!
+github, write better readme.md and include screenshots!
 
 fix level init: animated characters, player pos and every data needed to run the level
 first identify all data that is needed, scrolling data at least.
