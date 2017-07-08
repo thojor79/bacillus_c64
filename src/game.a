@@ -338,7 +338,7 @@ VICSPRITECOMMONCOLOR1 = $D026
 
 ; ------------------------ macros --------------------------
 
-!src "macros.a"
+!src "src/macros.a"
 
 !macro addscore .SC2, .SC1, .SC0 {
 	sed
@@ -604,25 +604,25 @@ rle_decode_repeat
 ; 32 versions of two chars for animation
 !align 255, 0	; aligning is important!
 bganimation_data0
-!src "cheese_bganimation0.png_phases.png_chardata.a"
+!src "src/cheese_bganimation0.png_phases.png_chardata.a"
 
 ; Raster IRQ
-!src "rasterirq.a"
+!src "src/rasterirq.a"
 
 ; Intro
-!src "intro.a"
+!src "src/intro.a"
 
 ; handling of main screen
-!src "mainscreen.a"
+!src "src/mainscreen.a"
 
 ; handling of level
-!src "level.a"
+!src "src/level.a"
 
 ; handling of blend in effect at level start
-!src "blendin.a"
+!src "src/blendin.a"
 
 ; handling of scrolling
-!src "scrolling.a"
+!src "src/scrolling.a"
 
 ; ===========================================================================
 ; All the *** DATA ***

@@ -223,7 +223,7 @@ framecounter
 !byte 0
 
 ; Actor handling
-!src "actor.a"
+!src "src/actor.a"
 
 ; ----------------------- show score in score panel
 ; Uses	A, X

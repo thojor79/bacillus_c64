@@ -1,4 +1,4 @@
-!src "cheese_alltiles_chardata0_19.a"
+!src "data/cheese_alltiles_chardata0_19.a"
 !byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $fe, $ff, $ff, $fe, $f9, $f7, $cf, $3f, $ff
 !byte $8f, $73, $fd, $fe, $cf, $b7, $77, $77, $ff, $ff, $ff, $7f, $bf, $df, $ef, $f7
 !byte $fd, $f3, $ef, $9f, $7f, $00, $bf, $bf, $ff, $ff, $ff, $f8, $e7, $1f, $ff, $ff
