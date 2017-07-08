@@ -1,0 +1,70 @@
+; Bacillus_c64
+; Copyright (C) 2016-2017  Thorsten Jordan.
+; 
+; This program is free software; you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation; either version 2 of the License, or
+; (at your option) any later version.
+; 
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+; ***************************************************************************************
+;
+; stuff related to raster interrupt handling not specific to certain code parts
+;
+; ***************************************************************************************
+
+; IMPORTANT
+; Raster lines are shifted to sprite coordinates by 1 !
+; First visible raster line at top of screen is $33 = 51, but sprite coordinate there is 50 !
+; So we have to handle this!!!
+; Also note that when we request a raster IRQ for line X, it takes many cycles to save registers
+; so we are late in line X, sometimes even early in line X+1.
+; (We save some time by disabling kernal).
+; However to be stable at begin of a certain line, we have to busy wait for line X+2.
+; So we have to trigger raster IRQ two lines before we need it.
+; Also busy waiting should be done with >= comparison and not == / != in case a line is missed.
+; This is done with the scheme:
+; lda #LINE
+; - cmp VICRASTER
+; bcs -
+; To react as soon as possible to a line change. But "bcs" goes back as long as LINE >= VICRASTER,
+; so we have to load a value ONE LESS than the desired line!
+; Beware also that decimal flag may be set, so if we compute something in IRQ, we need to run cld
+; first!
+
+only_the_rts			; only the rts command for reset vector
+	rts
+
+; ------------------------------- no op routine that only acknowledges raster irq
+; can we clear irq flag by inc $D019 ? then we don't need to save registers
+; yes by doing asl!
+rasterirq_noop
+	asl $D019
+	rti	
+
+; code that is needed on every interrupt entry:
+;	PHA
+;	TXA
+;	PHA
+;	TYA
+;	PHA
+
+; ------------------------------- routine to acknowledge the raster irq and end it
+rasterirq_ack_and_end
+	asl $D019		; clear interrupt flag - do it at end or other raster IRQs could occur!
+	pla			; could do jmp $EA81 here if we have kernal, but we don't have kernal.
+	tay
+	pla
+	tax
+	pla
+only_the_rti			; only the rti command for nmi vector
+	rti
+

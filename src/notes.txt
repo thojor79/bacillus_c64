@@ -1,0 +1,29 @@
+Interlacing for more than 16 colors:
+combine any of 16 with any other of 15 colors, gives 16*15/2=120
+combinations plus the 16 basic colors, so 136 colors.
+Changing color every frame of 50fps flickers badly and doesn't work. Multi
+color interlaced (MCI) mode rather works by shifting image by 1 hi res pixel
+every frame (50fps) and this leads to mixing.
+Idea: try special character that has bytes 85 everywhere (every 2nd bit set)
+and use this together with various foreground/background colors. maybe it
+has to be exchanged with second character that is 170 (other bits set) every
+frame...
+no this doesn't help, at least bitmaps with constant 85 / 170 are clearly
+visible. Maybe changing the offset 1 pixel every frame of 50fps helps.
+turricans colors tricks are alternating colors every second line!
+try this in assembler!
+
+
+
+
+C64 kann bcd für score!
+Handleactormovement setzt bei collision einfach state player auf dead oder addiert actor_pts to frame score
+Nach h.a.m. checke beides, dann keine var Konflikte!
+Gameover etc Anzeige mit 8 dicken sprites wie bei supernatural
+Screenpos etc in zeropage speichern, auch häufige andere variablen, sogar actordaten?
+Makelevel.py auf c64 impl, so dass man nur Rohdaten hat die sich einfach rle encoden lassen!!!
+T2 like level ein/ausblenden mit double sized sprites! 64 frames die nur 128byte Daten brauchen oder weniger, gebe 1-8 bytenr an und welches bit. Schreibe das in 3*2 bytes in ein sprite. Multiplexer stellt immer nur das da.
+7x6 sprites reichen dann. Kann auch andere Effekte machen, zB grandprixcircuit einblenden!
+Mit 8 Wege scroll kann man große levels auch generieren. Raume wie Labyrinth graben. Ränder uneben. Inseln in großen Räumen machen. Fertig
+
+

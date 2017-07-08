@@ -1,0 +1,398 @@
+; Bacillus_c64
+; Copyright (C) 2016-2017  Thorsten Jordan.
+; 
+; This program is free software; you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation; either version 2 of the License, or
+; (at your option) any later version.
+; 
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+; ***************************************************************************************
+;
+; all code related to playing a level
+;
+; ***************************************************************************************
+
+SCORE_LINE_Y = 243
+
+run_level
+; setup VIC bitmap multicolor mode
+	+set8im VICCTRL1, $0B	; Bitmap mode off, display off
+	lda #$13		; Bit 4: Multicolor on, Bit 3:0 38 Column mode, Bits 0-2: offset left border (4 neutral, so 7-4=3)
+	sta VICCTRL2
+	sta last_value_of_vicctrl2
+
+; sprite multicolor off for all sprites
+	+set8im $D01C, 0	; disable multicolor for all sprites
+
+; fill visible screen with tiles of level
+; Note! This sets sprite registers like color and multicolor flag.
+; either write from renderer to spawn buffer and run that later,
+; so spawn routine doesnt need to save registers or blend_in needs
+; to read and backup mc register and colors (9 byte)
+	jsr render_tiles_on_screen
+
+; Set up sprite based blend in effect (also sets up a raster irq!)
+	jsr blend_in_init
+
+; Initialize back buffer data
+	lda #>SCREEN1
+	sta backframebuffer_adrmsb
+	lda #>SCREEN0
+	sta visibleframebuffer_adrmsb
+	sta renderframebuffer_adrmsb
+	lda #0
+	sta visibleframebuffer
+	sta colorramshift_to_renderpos
+	lda #0
+	sta background_animation_phase
+	lda #0	; Tile #0
+	sta screen_pos_x+1
+	sta render_pos_x	; tile and subtile offset for rendering are 0,0
+	sta render_pos_x+1
+	lda #$40	; Pixel Offset 4 (neutral position)
+	sta screen_pos_x
+
+; Set up score panel
+	ldx #40
+-	lda scorepanelchars-1,x
+	sta SCREEN0+24*40-1,x
+	sta SCREEN1+24*40-1,x
+	lda #0
+	sta COLORRAM+24*40-1,x
+	dex
+	bne -
+
+; turn display on
+	+set8im VICCTRL1, $1B
+
+; Handle blend in effect
+	jsr blend_in_do
+
+; set normal raster irq for status bar
+	sei
+	+set16im $FFFE, rasterirq_scoreline
+	+set8im VICRASTER, SCORE_LINE_Y-2
+	cli
+
+; prepare rest of sprite registers
+	; All sprites before characters
+	+set8im $D01B, 0
+	; All sprites double size off
+	;lda #0		; double size off - A already 0!
+	sta $D017	; double size y
+	sta $D01D	; double size x
+	; All sprites enable
+	+set8im VICSPRITEENABLE, $FF
+
+; --------------------------------------- main loop of a level
+mainloop
+	; wait until raster line is at bottom of foreground screen
+-	lda VICRASTER
+	cmp #251	; end of visible screen
+	bcc -
+	; first handle animation of characters, not so critical, but fast, must be done before color ram copy!
+	jsr compute_char_animations
+	; write actor positions to sprite data, rather critical, do this before color ram copy! it is very fast.
+	jsr update_actors
+	; check if scrolling must be handled and do the scrolling! very critical with color ram copy!
+	jsr handle_scrolling
+	;
+	; not so time critical tasks to be done every frame
+	;
+	jsr check_actor_collisions
+	; Read joystick positions and handle input
+	jsr check_joy2_state
+	; Actor 0 is player and has special movement
+	jsr player_control_joy2
+	; Handle all actor movements, walk/jump/fall/kill
+	jsr handle_actor_movement
+	; handle killed enemies or player
+	jsr handle_dead_actors
+	; change actor shapes
+	jsr compute_actor_animations
+	; handle the AI for actor movement
+	jsr handle_actor_behaviour
+	; increment frame counter
+	inc framecounter
+	; cycle raster bar colors
+	jsr cycle_score_panel_colors
+	; render current score to score panel
+	jsr update_score_panel
+	; check if player is at end of level
+	lda actor_xh
+	cmp #$FF
+	beq end_level
+	; check if lives are 0 (player dead)
++	lda lives
+	bne mainloop
+	; as long as actor_dead_anim_phase is not null, continue as well
+	lda actor_dead_anim_phase
+	bne mainloop
+	; handle game over
+	jmp game_over
+end_level
+	; show blend out effect
+	;fixme
+	; disable all sprites
+	+set8im VICSPRITEENABLE, 0
+	; return to main game loop
+	rts
+; -------------- end of main loop
+
+game_over
+	+set8im VICBGCOL, 0
+	jsr update_score_panel
+	; show "Game over" message with sprites!
+	; Set sprite pointers
+	ldx #8
+-	lda game_over_sprite_ptr-1,x
+	sta SCREEN0+$03F8-1,x
+	sta SCREEN1+$03F8-1,x
+	dex
+	bne -
+	; Set hires, double sized, multicolor disabled
+	lda #$FF
+	sta $D017
+	sta $D01D
+	lda #$00
+	sta $D01C
+	; Set positions
+	lda #79	; Y
+!for COUNT, 0, 3 {
+	sta $D001 + COUNT * 2
+}
+	lda #179
+!for COUNT, 0, 3 {
+	sta $D001 + (COUNT + 4) * 2
+}
+	; X
+!for COUNT, 0, 3 {
+	lda game_over_sprite_x + COUNT
+	sta $D000 + COUNT * 2
+	sta $D000 + (COUNT + 4) * 2
+}
+	lda game_over_sprite_x+4
+	sta $D010
+	; Cycle colors between greys and still cycle score panel
+	+set8im framecounter, 0
+game_over_next_frame
+-	lda VICRASTER
+	cmp #251	; end of visible screen and close to wrap so only triggered once per frame
+	bcc -
+	jsr cycle_score_panel_colors
+	inc framecounter
+	lda framecounter
+	lsr
+	lsr
+	and #15
+	tax
+	lda intro_text_colors,x
+!for COUNT, 0, 7 {
+	sta $D027 + COUNT
+}
+	; wait until raster line is > 255
+-	lda VICRASTER
+	bmi -
+	; Wait for joystick button here - but not during the first 2-3 seconds,
+	; to avoid clicks still done by player to quickly move away game over
+	; message. not yet implemented, fixme
+	lda CIA1_DATAPORT_A
+	and #$10
+	bne game_over_next_frame	; only wait for press yet
+	; disable all sprites
+	+set8im VICSPRITEENABLE, 0
+	rts
+
+scorepanelchars
+!byte  0,16,18,17,15,11,19, 0
+!byte  1, 4, 0, 0, 0, 0,16,15
+!byte 17,15,16,19, 0, 1, 2, 0
+!byte  0, 0, 0,11,12,13,14,15
+!byte 19, 0, 3, 4, 5, 6, 7, 0
+
+framecounter
+!byte 0
+
+; Actor handling
+!src "actor.a"
+
+; ----------------------- show score in score panel
+; Uses	A, X
+update_score_panel
+	lda score
+	and #$0F
+	tax
+	inx
+	stx SCREEN0+24*40+38
+	stx SCREEN1+24*40+38
+	lda score
+	lsr
+	lsr
+	lsr
+	lsr
+	tax
+	inx
+	stx SCREEN0+24*40+37
+	stx SCREEN1+24*40+37
+	lda score+1
+	and #$0F
+	tax
+	inx
+	stx SCREEN0+24*40+36
+	stx SCREEN1+24*40+36
+	lda score+1
+	lsr
+	lsr
+	lsr
+	lsr
+	tax
+	inx
+	stx SCREEN0+24*40+35
+	stx SCREEN1+24*40+35
+	lda score+2
+	and #$0F
+	tax
+	inx
+	stx SCREEN0+24*40+34
+	stx SCREEN1+24*40+34
+	; lives
+	lda lives
+	and #$0F
+	tax
+	inx
+	stx SCREEN0+24*40+9
+	stx SCREEN1+24*40+9
+	lda lives
+	lsr
+	lsr
+	lsr
+	lsr
+	tax
+	inx
+	stx SCREEN0+24*40+8
+	stx SCREEN1+24*40+8
+	rts
+
+; ----------------------- cycle raster bar colors for score panel -----------------
+; Uses	A, X, Y
+cycle_score_panel_colors
+	lda framecounter
+	and #3
+	bne ++
+	ldy rasterbar_colors
+	ldx #0
+-	lda rasterbar_colors+1,x
+	sta rasterbar_colors+0,x
+	inx
+	cpx #6
+	bne -
+	sty rasterbar_colors+6
+++	rts
+
+; ----------------------- animate characters ----------------
+compute_char_animations
+	; Handle background animation
+	inc background_animation_phase
+	lda background_animation_phase	; 32 phases - something is still a bit wrong
+	lsr	; only every 2nd frame
+	and #31
+	; Phase is now in Accu, 0-31. We have 16 bytes per phase. So multiply phase
+	; by 16 and compute read address, then copy 16 bytes from there.
+	; shift 4 bytes, then leftmost bit is in carry
+	asl
+	asl
+	asl
+	asl
+	sta compute_char_animations_adr0+1
+	lda #>bganimation_data0	; must be 256 byte aligned...
+	adc #0
+	sta compute_char_animations_adr0+2
+	ldx #0
+compute_char_animations_adr0
+	lda bganimation_data0,x
+	sta VICCHARSET+$24*8,x	; fixme char index and count and phases is hardcoded, depends on level
+	inx
+	cpx #16
+	bne compute_char_animations_adr0
+	rts
+
+; ----------------- Check if tile is blocker ---------
+; Input	TEMP0,TEMP1 x,y offset in level data
+; Uses	A
+; Output	Carry-Bit if blocker
+check_if_tile_is_ground
+	lda #>LEVEL_DATA
+	clc
+	adc TEMP1
+	sta check_tile_adr+2
+	lda TEMP0
+	sta check_tile_adr+1
+check_tile_adr
+	lda LEVEL_DATA
+	cmp #8		; all tiles from no.8 on
+	rts
+
+; ----------------------------------- Interrupt routine for score line drawing
+rasterirq_scoreline
+	pha
+	txa
+	pha
+	tya
+	pha
+; We disabled all IRQ sources, so we only have raster IRQs here!
+;	lda $D019		; check if IRQ was from raster line
+;	bmi dorasterirq		; Bit 7 set: raster IRQ was interrupt reason
+;	lda $DC0D		; ACK other irq
+;	cli			; enable IRQs
+;	jmp $EA31		; jump to system IRQ handler
+; Note that if we would disable kernal rom as well, system would directly jump
+; to our interrupt handler which means 2-9 cycles after raster line occours.
+; Register storing needs to be done then anyway. Additional 14 cycles (ca.)
+; Are used in kernal to check for BRK flag, which we don't have.
+; we don't use kernal anymore, so some cycles are saved.
+	; score panel reached, so raster is somewhere on or after SCORE_LINE_Y-2
+	lda #(SCORE_LINE_Y-1)	; loop until raster line is <= SCORE_LINE_Y-1, so < SCORE_LINE_Y
+-	cmp VICRASTER
+	bcs -
+	; We are now stable in SCORE_LINE_Y
+	; set first background color already, so it is stable
+	+copy8 VICFGCOL, rasterbar_colors
+	; Set scroll to neutral for score panel
+	; Note that this command seems to delay current raster line...
+	+set8im VICCTRL2, $10
+	; Now wait for next raster lines and set color then
+!for COUNT, 0, 7 {
+	ldx rasterbar_colors+COUNT
+	lda #(SCORE_LINE_Y+COUNT)
+-	cmp VICRASTER
+	bcs -
+	stx VICFGCOL
+}
+	; We are now in line 251, below visible screen.
+	; restore scroll register
+	+copy8 VICCTRL2, last_value_of_vicctrl2
+	jmp rasterirq_ack_and_end
+
+; ------------ data
+
+last_value_of_vicctrl2
+!byte 0
+
+rasterbar_colors
+!byte 6,14,13,1,13,14,6, 9
+
+game_over_sprite_ptr
+!byte 64+6, 64+0, 64+12, 64+4, 64+14, 64+21, 64+4, 64+17
+
+game_over_sprite_x
+!byte 64, 128, 192, 0, $88
+

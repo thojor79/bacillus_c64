@@ -1,0 +1,237 @@
+; Bacillus_c64
+; Copyright (C) 2016-2017  Thorsten Jordan.
+; 
+; This program is free software; you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation; either version 2 of the License, or
+; (at your option) any later version.
+; 
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+; ***************************************************************************************
+;
+; main screen with hall of fame and its data handling
+;
+; ***************************************************************************************
+
+mainscreen
+; VIC memory area set up
+	+set8im VICMEMCTRL, VICSCREENBLOCKBITMAP*16+VICBITMAPBLOCK*8+1	; in bitmap mode bit 3 sets bitmap block, in charmode bits 1-3 charblock!
+
+; turn off VIC display, is turned on again by rasterirq
+	+set8im VICCTRL1, 0
+	+set8im VICBGCOL, 0
+
+; copy data to destination
+	+set16im TEMPADR0, mainlogo_bitmapdata_rle
+	+set16im TEMPADR1, VICBITMAP
+	jsr rle_decode
+	+set16im TEMPADR0, mainlogo_chardata_rle
+	+set16im TEMPADR1, VICBITMAPCHARDATA
+	jsr rle_decode
+	+set16im TEMPADR0, mainlogo_colordata_rle
+	+set16im TEMPADR1, COLORRAM
+	jsr rle_decode
+
+; copy lowercase CBM charset so we can use it
+	sei
+	+set8im 1, $32	; I/O off, CHAR ROM in, else all RAM
+	+memcopy_pages VICCHARSET, $D800, 8	; copy 2k from ROM
+	+set8im 1, $35	; I/O on, else all RAM
+	cli
+
+; show logo with color bar in interrupt
+; text mode is enabled below logo.
+; logo has 48 lines (6 chars) so 1920 bytes (kills ~ 32 sprites)
+; but game sprites are loaded later anyway
+; logo is longer than 48 lines - kills more... irq too late?
+
+; set up interrupt
+	sei
+	+set16im $FFFE, rasterirq_mainlogo
+	+set8im VICRASTER, 51-2
+	cli
+
+; draw main screen
+	+set16im TEMPADR0, mainscreen_text0
+	+set8im TEMP0, 3
+	ldx #5
+	ldy #1
+	jsr printtext
+	+set16im TEMPADR0, mainscreen_text1
+	+set8im TEMP0, 14
+	ldx #8
+	ldy #3
+	jsr printtext
+	+set16im TEMPADR0, mainscreen_text2
+	+set8im TEMP0, 4
+	ldx #10
+	ldy #4
+	jsr printtext
+	+set16im TEMPADR0, mainscreen_text3
+	+set8im TEMP0, 10
+	ldx #12
+	ldy #6
+	jsr printtext
+	+set16im TEMPADR0, mainscreen_text4
+	+set8im TEMP0, 10
+	ldx #7
+	ldy #7
+	jsr printtext
+
+; this eats much space for code but is easier
+!for COUNT, 0, 9 {
+	+copy8 TEMP0, halloffame_colors+COUNT
+	+set16im TEMPADR0, halloffame_nrs+COUNT*3
+	ldx #7
+	ldy #8+COUNT
+	jsr printtext
+	+set16im TEMPADR0, halloffame_names+COUNT*16
+	ldx #11
+	ldy #8+COUNT
+	jsr printtext
+	+set16im TEMPADR0, halloffame_scores+COUNT*7
+	ldx #27
+	ldy #8+COUNT
+	jsr printtext
+}
+	; wait for joystick key press and release
+	jsr wait_for_joy2_button
+	; set dummy raster irq and return
+	sei
+	+set16im $FFFE, rasterirq_noop
+	cli
+	rts
+
+; ------------------------- text drawing
+; Input	TEMPADR0	address of string
+;	TEMP0		color of text
+; 	Y		row to draw
+;	X		column to draw
+; Uses	TEMP0, TEMPADR1, TEMPADR2
+printtext
+	stx TEMPADR2
+	; prepare target address and colorram address
+	lda scroffmul40tableL, y
+	clc
+	adc TEMPADR2
+	sta TEMPADR1
+	lda scroffmul40tableH, y
+	adc #0
+	sta TEMPADR1+1
+	lda coloffmul40tableL, y
+	clc
+	adc TEMPADR2
+	sta TEMPADR2
+	lda coloffmul40tableH, y
+	adc #0
+	sta TEMPADR2+1
+	; load color
+	ldx TEMP0
+	; use indirect indexed adressing to copy data
+	ldy #0
+-	lda (TEMPADR0),y
+	beq +
+	sta (TEMPADR1),y
+	txa
+	sta (TEMPADR2),y	; write also color
+	iny
+	bne -	; avoid wrap, so max 256 chars to draw
++	rts
+
+; -------------------------------------- foreground color as colorbar
+rasterirq_mainlogo
+	pha
+	txa
+	pha
+	tya
+	pha
+	; Note: interrupt runs for 48 lines but many of them have same colors,
+	; which is a bit of time waste with busy waiting.
+	; But it is much simpler to do it that way, and we have enough time.
+	; set up multicolor graphics mode
+	+set8im VICCTRL1, $3B ; bitmap mode
+	+set8im VICCTRL2, $18 ; mc on
+	+set8im VICMEMCTRL, $09 ; bitmap at second pos
+	; for 48 lines show different color for every line
+	ldy #48
+	lda mainlogo_colors-1, y
+	ldx #50
+-	cpx VICRASTER
+	bcs -
+	sta VICFGCOL
+	lda mainlogo_colors, y
+	inx
+	dey
+	bne -
+	; set up hires text mode
+	+set8im VICFGCOL, 0	; magenta as color
+	+set8im VICCTRL1, $1B	; char mode
+	+set8im VICCTRL2, $08	; mc off
+	+set8im VICMEMCTRL, $03 ; charset at second pos
+	; cycle colors - y is 0 here
+	ldx mainlogo_colors
+-	lda mainlogo_colors+1,y
+	sta mainlogo_colors,y
+	iny
+	cpy #47
+	bne -
+	stx mainlogo_colors+47
+	jmp rasterirq_ack_and_end
+
+; ----------------------------------- data -------------------------------
+
+mainlogo_colors	; 48 colors to be looped
+; less colorful but looks better
+!byte  4, 4, 4, 4, 4, 4, 4, 4
+!byte 10,10, 7, 7, 1, 7, 7,10
+!byte 10, 4, 4, 4, 4, 4, 4, 4
+!byte  4, 4, 4, 4, 4, 4, 4, 4
+!byte 10,10, 7, 7, 1, 7, 7,10
+!byte 10, 4, 4, 4, 4, 4, 4, 4
+; all colors, but looks better with fewer colors
+;!byte  2, 2, 2,10,10, 1,10,10
+;!byte  2, 2, 2, 6, 6, 6,14,14
+;!byte  1,14,14, 6, 6, 6, 5, 5
+;!byte  5,13,13, 1,13,13, 5, 5
+;!byte  5, 8, 8, 8, 7, 7, 1, 7
+;!byte  7, 8, 8, 8,11,11,11,11
+
+scroffmul40tableL	; screen line plus 7 mul 40
+!for COUNT, 0, 17 { !byte <(SCREEN0+(7+COUNT)*40) }
+scroffmul40tableH	; screen line plus 7 mul 40
+!for COUNT, 0, 17 { !byte >(SCREEN0+(7+COUNT)*40) }
+coloffmul40tableL	; screen line plus 7 mul 40
+!for COUNT, 0, 17 { !byte <(COLORRAM+(7+COUNT)*40) }
+coloffmul40tableH	; screen line plus 7 mul 40
+!for COUNT, 0, 17 { !byte >(COLORRAM+(7+COUNT)*40) }
+
+!src "data/mainlogo_rle.a"
+
+mainscreen_text0	; @ is translated to 0x00, terminator char.
+!scr "(C) 2016/17 by Thorsten Jordan@"
+mainscreen_text1
+!scr "Joystick port 2 to play.@"
+mainscreen_text2
+!scr "Press fire to start.@"
+mainscreen_text3
+!scr "* HALL OF FAME *@"
+mainscreen_text4
+!scr "==========================@"
+
+halloffame_nrs
+!scr "01@02@03@04@05@06@07@08@09@10@"
+halloffame_names
+!for COUNT, 0, 9 { !scr "Thorsten Jordan@" }
+halloffame_scores
+!for count, 0, 9 { !scr "000000@" }
+halloffame_colors
+!byte 1,15,15,12,12,12,11,11,11,11
+

@@ -1,0 +1,75 @@
+ToDo - higher priority first
+============================
+
+upload code to github, write better readme.md and include screenshots!
+use git repo for code and c64fy!
+
+fix level init: animated characters, player pos and every data needed to run the level
+first identify all data that is needed, scrolling data at least.
+could be stored at $0200 too
+
+implement data for more levels! maybe same tileset and just other level
+first, later new tilesets for other worlds/levels
+
+when change from main screen to level there are some visual bugs because
+display is not off
+
+paint more animation phases! now temporary data available
+
+fix intro - only sprite display in irq, coordinate computation in normal
+code. not much work then intro is done!
+
+do not use spawn_actor for player? then less checks there needed.
+player start position must not come from level data then, but startpos
+xy coded additionally, maybe not code player in level data so we can have
+16 enemies, not 15. use type 16 then for player. an extra check in that
+routine doesn't matter
+
+store actor data at $0200 ?
+
+try to use different charset for status bar. 20 chars eat just 3 sprites, if
+timing allows to switch memory registers. so we can use full 256 chars for
+tiles and have less problems. 
+even better: use last bytes for characters, so don't use chars 0-19 but
+235-254 and leave 255 out and place them at end of ram! ->
+irq vectors are kept writeable and free and sprites still start at
+$E000 - best solution!
+offset status bar characters by 235 and copy the data there -> done!
+test it in steps, move chardata to 235+ and draw chars 235+, then use
+mem register change in irq , better do it first and check timing!
+
+background animation generalize - char no and count and #phases not
+hardcoded but per level, i.e. selfmod code!
+how to handle multiple animated characters with different number of phases?
+number of animation phases should be the same, character range with
+animations should ideally be the same - but with background and foreground
+animation this is not simple.
+alternativly use same char numbers and animation phases for all levels - 
+simplest solution
+i.e. move char animation data to $B000-$B200. 512 bytes are enough for the
+background animation (2 chars a 32 phases are 64 chars)
+we should use less data for bg animation. 8 byte per char is enough for
+64 phases, at 8 phases we can animate 8 chars.
+
+background animated tiles with fire/knives/diamond like cheese parts?
+
+more tiles: cheese dripping from above, animated tiles like cheese rolls
+rotating etc.
+
+implement blend out effect for level end - reverse reading of blend in,
+rather easy but rarely used
+
+implement different actor types - difficult but best improvement of game
+play. store different actors in level data! maybe only change generator py
+script. only different behaviour left (later) script now randomly, is ok
+store actor_data $0200.
+
+implement dying animation with morph to skull or so
+
+implement high score enter and management
+
+game over: wait for joy button not in first 1-2 seconds
+
+implement level complete screen (outtro)
+
+implement part of image converter with rle encoding

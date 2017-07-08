@@ -1,0 +1,977 @@
+; Bacillus_c64
+; Copyright (C) 2016-2017  Thorsten Jordan.
+; 
+; This program is free software; you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation; either version 2 of the License, or
+; (at your option) any later version.
+; 
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+; ***************************************************************************************
+;
+; All stuff related to actor handling
+;
+; ***************************************************************************************
+
+
+MAX_ACTOR_COUNT = 8
+FALL_DOWN_ACCL = 3	; 1 seems to slow, 2 is nearly too fast...
+ACTOR_DISABLED = 0
+ACTOR_ON_GROUND = 1
+ACTOR_IN_AIR = 2
+ACTOR_DEAD = 255
+PLAYER_SPEED_X = PIXELTOPOS * 2	; must be same as screen scroll speed, otherwise jerky movement occurs!
+JUMP_VELOCITY = 110
+JUMP_FRAMES = 10
+ACTOR_WIDTH_FOR_COLLISION_CHECK = 20	; normally 24 but check only less pixel
+
+; ------------- How movement works! -------------------------
+; We have space for N actors on screen (atm max 7 or 8, 7 when player can shoot).
+; Actors are spawned from level data when tiles come into view.
+; Each actor has state (0-dead,1-alive,2-in air,3-flying)
+; Each actor has x,y pos as 16bit value (tilenr 0-255,subtileoffset in pixels 0-15,subpixel accuracy 4bit)
+; Each actor has a vx,vy velocity (vx 1 byte, vy 16 bit)
+; Movement is computed in main loop after all time critical work is done, results copied to
+; actor data, so keep it as double buffer data later!
+; If actor vx is not null check for collision with wall and stop side movement (maybe flag for AI).
+; Then check for y position if there is a tile underneath (if not start fall) or if falling if we
+; are in a tile, then place on top and stop fall.
+; We have to know for every tile if it is background or not, place background tiles at begin of
+; range so we can use one compare to decide whether collision or not.
+
+; ------------------------ macros --------------------------
+
+; store 16bit value (i.e. address) with actor offset
+!macro set16im_ac .target, .val {
+	lda #<.val
+	sta .target
+	lda #>.val
+	sta .target+MAX_ACTOR_COUNT
+}
+
+!macro add_actor_x_pixel .dest, .pixel {
+	lda actor_x,x
+	clc
+	adc #<(.pixel*PIXELTOTILE)
+	lda actor_xh,x
+	adc #>(.pixel*PIXELTOTILE)
+	sta .dest
+}
+!macro add_actor_y_pixel .dest, .pixel {
+	lda actor_y,x
+	clc
+	adc #<(.pixel*PIXELTOTILE)
+	lda actor_yh,x
+	adc #>(.pixel*PIXELTOTILE)
+	sta .dest
+}
+; add signed 8 bit value (velocity) to 16 bit value (position)
+!macro adds8to16_actor .result, .src {
+	lda .src,x
+	bpl +
+	dec .result+MAX_ACTOR_COUNT,x
++	clc
+	adc .result,x
+	sta .result,x
+	bcc +
+	inc .result+MAX_ACTOR_COUNT,x
++
+}
+; add immediate 16bit value to memory
+!macro add16im_actor .dest, .val {
+	lda #<.val
+	clc
+	adc .dest,x
+	sta .dest,x
+	lda #>.val
+	adc .dest+MAX_ACTOR_COUNT,x
+	sta .dest+MAX_ACTOR_COUNT,x
+}
+
+; ----------------------- animate sprites -------------------
+compute_actor_animations
+	; increase sprite animation phase
+	inc sprite_anim_phase
+	; use bits 3/4 of phase counter as animation counter, as bits 0/1
+	; of sprite pointer. (by shifting 3 bits right)
+	; negate bits (= reverse) if actor walks left
+	; no problem, not time critical.
+	lda sprite_anim_phase
+	lsr
+	lsr
+	lsr
+	and #$03
+	sta TEMP0
+	eor #$03
+	sta TEMP1
+	ldx #8
+-	lda actor_vx-1,x
+	bmi +
+	lda actor_shape-1,x
+	and #$FC
+	ora TEMP0
+	jmp ++
++	lda actor_shape-1,x
+	and #$FC
+	ora TEMP1
+++	sta actor_shape-1,x
+	dex
+	bne -
+	rts
+
+; -------------------- update actor data to sprite data ----------------
+; Uses	A
+; This just dumps all actor data to sprite data!
+update_actors
+	; set sprite X and Y positions, color and shape (takes less than 8 raster lines for 8 actors)
+	; later handle sprite multiplexing here.
+!for COUNT, 0, MAX_ACTOR_COUNT-1 {
+	+copy8 $D000+COUNT*2, actor_screen_x+COUNT
+	+copy8 $D001+COUNT*2, actor_screen_y+COUNT
+	+copy8 $D027+COUNT, actor_color+COUNT
+	lda actor_shape+COUNT
+	sta SCREEN0+$3F8+COUNT
+	sta SCREEN1+$3F8+COUNT
+}
+	+copy8 $D010, actor_screen_xh
+	rts
+
+; ----------------- Player movement -----------------------------
+; Reads joystick positions and sets player values
+; Uses	A
+player_control_joy2
+	; Joystick sets x velocity
+	+set8im actor_vx, 0		; x speed 0, directly set by joystick
+	; check if player actor is currently dead
+	lda actor_state
+	cmp #ACTOR_DEAD
+	bne +
+	+set8im actor_vy, 0
+	rts
++	; Check right direction
+	lda joy2_right
+	beq joy2_right_checked
+	; check that player is not in last tile, there don't allow move to the right
+	ldx #PLAYER_SPEED_X			; x speed, don't go faster or scrolling couldn't compensate!
+	lda actor_xh
+	cmp #255
+	bne +
+	ldx #0
++	stx actor_vx
+joy2_right_checked
+	; Check left direction
+	lda joy2_left
+	beq joy2_left_checked
+	; check that player is not in first tile, there don't allow move to the left
+	ldx #-PLAYER_SPEED_X			; x speed, don't go faster or scrolling couldn't compensate!
+	lda actor_xh
+	bne +
+	ldx #0
++	stx actor_vx
+joy2_left_checked
+	; Check up direction (jumping!)
+	lda joy2_up
+	beq joy2_not_up
+	; check if we are in air
+	lda actor_state
+	cmp #ACTOR_IN_AIR
+	beq joy2_up_and_player_is_in_air
+joy2_up_and_player_is_on_ground
+	; we are on ground, so jump
+	; Note that we need different jump heights, that can be done with different jump
+	; velocities. It depends on the duration of the joystick press. However if we
+	; measure the duration first, jump will have delay, which is not acceptable.
+	; Starting with lower jump speed and increasing every frame the joy is held upwards
+	; leads to strange movement. Starting always with maximum speed is bad too.
+	; So the ideal solution is to start with medium spead and increasing it every frame
+	; the joy is held upwards, and decreasing for frames it has been hold shorter than
+	; maximum.
+	; jump half speed
+	+set8im actor_vy, -JUMP_VELOCITY/2
+	+set8im actor_state, ACTOR_IN_AIR
+	+set8im actor_jump_count, JUMP_FRAMES
+	rts
+joy2_up_and_player_is_in_air
+	; decrease jump counter
+	dec actor_jump_count
+	bpl +
+	; has reached negative value
+	+set8im actor_jump_count, 0
+	rts
++	+add8im actor_vy, -JUMP_VELOCITY/(JUMP_FRAMES*2)
+	rts
+joy2_not_up
+	; Player has stopped pulling joystick upwards.
+	; if jump count is nonzero, stop jump
+	lda actor_jump_count
+	bne +
+	rts
++	; decrease velocity for every frame left
+-	+add8im actor_vy, JUMP_VELOCITY/(JUMP_FRAMES*2)
+	dec actor_jump_count
+	bne -
+	rts
+
+; ----------------- Actor movement --------------------
+; Uses	TEMPADR0, TEMPADR1, TEMPADR2, TEMPADR3, TEMP0, TEMP1, TEMP2, A, X, Y
+handle_actor_movement
+	;inc VICBGCOL	; test how costly ~ 48 raster lines for 8 actors!
+
+	; Check for boni tiles below actor 0 (player)
+	; Check for the 4 tiles that are covered by player. Player is 24x21 in size, tile is 16x16.
+	; Player could touch up to 3x3 tiles, but we wan't to check at most 4.
+	; So compute min/max x/y tile pos, by checking only 16x16 pixel in player, that ist
+	; posx-8...posx+7, posy-18...posy-3.
+	; render_tile needs tile_nr in TEMP0.
+	; We need to keep TileX-Start/Limit and TileY-Start/Limit after computing start address (TEMP1-TEMP4)
+	; For tile computation we need one more (TEMP5).
+	ldx #0	; actor 0!
+	+add_actor_x_pixel TEMP1, -8
+	+add_actor_x_pixel TEMP2,  7
+	+add_actor_y_pixel TEMP3, -18
+	+add_actor_y_pixel TEMP4, -3
+	inc TEMP2	; one more for comparison
+	inc TEMP4
+	lda TEMP1	; avoid -1 as x start address.
+	cmp #$FF
+	bne +
+	inc TEMP1
++	lda TEMP3	; avoid -1 as y start address
+	cmp #$FF
+	bne +
+	inc TEMP3
++	lda TEMP4	; limit y max
+	cmp #(TILESYPERSCREEN+1)
+	bcc +
+	+set8im TEMP4, TILESYPERSCREEN
++	; x max not yet limited.
+
+	; prepare read address
+	+copy8 TEMPADR2, TEMP1
+	lda TEMP3
+	clc
+	adc #>LEVEL_DATA
+	sta TEMPADR2+1
+	; now we can use TEMP0 again
+check_for_bonus_tile	
+	; load tile data and compare with boni tiles, remove and account it if hit
+	ldy #0
+	lda (TEMPADR2),y	; load tile nr from level data
+	cmp #5
+	bcc +
+	cmp #8
+	bcs +
+	; We have a bonus map tile. Remove it. Compute replacement tile!
+	lda TEMPADR2		; extract bit 0 of X coord.
+	and #1
+	sta TEMP0
+	lda TEMP3		; extract bit 0 of Y coord.
+	and #1			; keep bit 0 as bit 1
+	asl
+	ora TEMP0		; combine with bit 0 of x coord
+	sta (TEMPADR2),y	; store position specific background tile!
+	sta TEMP0		; store tile number for render_tile
+	; count collected boni to score! Do not trash the many temporary values...
+	+addscore $00, $00, $03
+	; redraw tile on current screen then!
+	ldx TEMPADR2
+	ldy TEMP3		; load Y address
+	jsr render_tile		; only used TEMPADR0,TEMPADR1
++	; now check next tile!
+	inc TEMPADR2
+	lda TEMPADR2
+	cmp TEMP2
+	bne check_for_bonus_tile
+	; x limit reached
+	+copy8 TEMPADR2, TEMP1
+	inc TEMPADR2+1
+	inc TEMP3
+	lda TEMP3
+	cmp TEMP4
+	bne check_for_bonus_tile
+
+	; Compute movement of all actors!
+	ldx #0	; actor counter
+	stx actor_screen_xh	; 9th bits of x coords, empty it first
+handle_next_actor_movement
+	; Check actor state, if invisible, set screen_y=255 to hide it
+	lda actor_state,x
+	bne +			; Attention! this only works if ACTOR_DISABLED=0 !
+	jmp disable_actor
++	cmp #ACTOR_DEAD
+	bne +
+	; When actor is dead set all velocity to 0 - normally enemies are instantly disabled and not dead,
+	; maybe use some score display as dead animation frame?
+	lda #0
+	sta actor_vx,x
+	sta actor_vy,x
+	jmp handle_actor_movement_end_of_loop
++	; Y movements first! so bounce at ceiling and don't stop forward move then!
+	+adds8to16_actor actor_y, actor_vy
+	; If actor is in air, add gravity
+	lda actor_state,x
+	cmp #ACTOR_IN_AIR
+	bne +
+	+add8imx actor_vy, FALL_DOWN_ACCL
+	bvc +				; limit fall down speed, so if overflow, set to max fall down
+	+set8imx actor_vy, 127
++
+	lda actor_vy,x
+	bmi actor_moves_up
+actor_moves_down_or_stays
+	; check if y-pos is too low
+	lda actor_yh,x
+	cmp #TILESYPERSCREEN
+	bcc +
+	; actor falls below screen! stop it for now
+	+set8imx actor_yh, TILESYPERSCREEN
+	+set8imx actor_y, 0
++
+	; sub half size of actor to x pos and store tile x offset in TEMP0
+	+add_actor_x_pixel TEMP0, -12
+	; add half size of actor to x pos and store tile x offset in TEMP2
+	+add_actor_x_pixel TEMP2, 11+TILEWIDTHINPIXELS		;+TW because we do < TEMP2 later
+	; store actor y directly as tile pos
+	lda actor_yh,x
+	sta TEMP1
+	; now check for tiles with x between TEMP0 and TEMP2 if blocked
+-	jsr check_if_tile_is_ground
+	bcs actor_stop_down
+	inc TEMP0
+	lda TEMP0
+	cmp TEMP2
+	bne -	; check next tile
+	; below actor there is no ground, start fall if not already falling
+	lda actor_state,x
+	cmp #ACTOR_IN_AIR
+	beq +
+	+set8imx actor_state, ACTOR_IN_AIR
+	+set8imx actor_vy, FALL_DOWN_ACCL
++	jmp actor_y_checked
+actor_stop_down
+	; actor hit ground - if we are already on ground, nothing to do
+	lda actor_state,x
+	cmp #ACTOR_ON_GROUND
+	beq actor_y_checked
+	; actor hit ground after falling - actor_y+1 already correct tile y
+	+set8imx actor_y, 0
+	+set8imx actor_state, ACTOR_ON_GROUND
+	+set8imx actor_vy, 0
+	jmp actor_y_checked
+actor_moves_up
+	; don't allow y pos to become negative - maybe check overflow bit on addition of velocity
+	lda actor_yh,x
+	bpl +
+	lda #0
+	sta actor_y,x
+	sta actor_yh,x
++
+	; sub half size of actor to x pos and store tile x offset in TEMP0
+	+add_actor_x_pixel TEMP0, -12
+	; add half size of actor to x pos and store tile x offset in TEMP2
+	+add_actor_x_pixel TEMP2, 11+TILEWIDTHINPIXELS		;+TW because we do < TEMP2 later
+	; subtract height of actor and store tile y offset in TEMP1
+	+add_actor_y_pixel TEMP1, -21
+	;bmi actor_y_checked	; if the tile position is < 0, don't check! fixme just a try, to have open sky
+	; now check for tiles with y between TEMP0 and including TEMP2 if blocked
+-	jsr check_if_tile_is_ground
+	bcs actor_stop_up
+	inc TEMP0
+	lda TEMP0
+	cmp TEMP2
+	bne -	; check next tile
+	jmp actor_y_checked
+actor_stop_up
+	; actor hit ceiling, set y speed to 0
+	; add tile size and actor size to tile pos and store it
+	lda TEMP1
+	sta actor_yh,x
+	+set8imx actor_y, 0
+	sta actor_vy,x
+	+add16im_actor actor_y, (21+TILEHEIGHTINPIXELS)*PIXELTOPOS
+actor_y_checked
+
+	; X Movements now!
+	+adds8to16_actor actor_x, actor_vx
+	lda actor_vx,x
+	bmi actor_moves_left
+	bne actor_moves_right
+	jmp actor_x_checked
+actor_moves_right
+	; add half size of actor to x pos and store tile x offset in TEMP0
+	+add_actor_x_pixel TEMP0, 11
+	; subtract height of actor and store tile y offset in TEMP1
+	+add_actor_y_pixel TEMP1, -21
+	; same for lower position
+	+add_actor_y_pixel TEMP2, -1+TILEHEIGHTINPIXELS	;+TH because we do < TEMP2 later
+	; now check for tiles with y between TEMP1 and including TEMP2 if blocked
+-	jsr check_if_tile_is_ground
+	bcs actor_stop_right
+	inc TEMP1
+	lda TEMP1
+	cmp TEMP2
+	bne -	; check next tile
+	jmp actor_x_checked
+actor_stop_right
+	; subtract half actor size from tile pos and store it
+	lda TEMP0
+	sta actor_xh,x
+	+set8imx actor_x, 0
+	+add16im_actor actor_x, -12*PIXELTOPOS
+	; for actors other than player just reverse x velocity so they turn around
+	cpx #0
+	beq +
+	lda #-PIXELTOPOS
+	sta actor_vx,x
++	jmp actor_x_checked
+actor_moves_left	
+	; subtract half size of actor to x pos and store tile x offset in TEMP0
+	+add_actor_x_pixel TEMP0, -12
+	; subtract height of actor and store tile y offset in TEMP1
+	+add_actor_y_pixel TEMP1, -21
+	; same for lower position
+	+add_actor_y_pixel TEMP2, -1+TILEHEIGHTINPIXELS	;+TH because we do < TEMP2 later
+	; now check for tiles with y between TEMP1 and TEMP2 if blocked
+-	jsr check_if_tile_is_ground
+	bcs actor_stop_left
+	inc TEMP1
+	lda TEMP1
+	cmp TEMP2
+	bne -	; check next tile
+	jmp actor_x_checked
+actor_stop_left
+	; add tile size and half actor size to tile pos and store it
+	lda TEMP0
+	sta actor_xh,x
+	+set8imx actor_x, 0
+	+add16im_actor actor_x, (TILEWIDTHINPIXELS+12)*PIXELTOPOS
+	; for actors other than player just reverse x velocity so they turn around
+	cpx #0
+	beq +
+	lda #PIXELTOPOS
+	sta actor_vx,x
++
+actor_x_checked
+	; Now compute screen coordinates for actor!
+	; subtract screen_pos from actor_x_pos
+	lda actor_x,x
+	sec
+	sbc screen_pos_x
+	sta TEMPADR0
+	lda actor_xh,x
+	sbc screen_pos_x+1
+	sta TEMPADR0+1
+	; now add screen offset (24+7 because of 38column mode, plus neutral scroll offset) but subtract half width (12), so +19
+	+add16im TEMPADR0, 19*PIXELTOPOS
+	; Now Accu has highbyte. If that is negative, actor is outside screen, so skip it!
+	bpl +
+	jmp store_actor_to_level_data
++	; Check also if off screen to the right, that is x-pos >= 320
+	; this compares to 20. new data is rendered in column 40, this is already 20, so compare two more, because it is >= 22.
+	; one more is not enough...
+	cmp #(TILESXPERSCREEN + 3)
+	bcc +
+	jmp store_actor_to_level_data
+	; Shift right 4 bits to get pixel position
++	lsr
+	ror TEMPADR0
+	lsr
+	ror TEMPADR0
+	lsr
+	ror TEMPADR0
+	lsr
+	ror TEMPADR0
+	; Rotate rightmost bit of ACCU to carry as 9th bit of X-Address
+	lsr
+	lda TEMPADR0
+	sta actor_screen_x,x
+	bcc +
+	lda bits_for_x,x
+	ora actor_screen_xh
+	sta actor_screen_xh
++	; compute screen y pos for actor
+	lda actor_y,x
+	sta TEMP0
+	lda actor_yh,x
+	lsr
+	ror TEMP0
+	lsr
+	ror TEMP0
+	lsr
+	ror TEMP0
+	lsr
+	ror TEMP0
+	lda TEMP0
+	clc
+	adc #29		; offset: -actor_height(21) +screen_offset(50) = +29
+	; if accu now is smaller than before, an overflow happened, but we can't test with overflow
+	; bit as this already goes on from 127->128. So compare with 29, it must be larger
+	cmp #29
+	bcs +
+disable_actor
+	; actor below screen, set y address to max
+	; make x address neutral
+	+set8imx actor_screen_x, 0
+	+set8imx actor_state, ACTOR_DISABLED
+	lda #$FF
++	sta actor_screen_y,x
+	; Now go to next actor!
+handle_actor_movement_end_of_loop
+	inx
+	cpx #MAX_ACTOR_COUNT
+	beq +
+	jmp handle_next_actor_movement
++
+	; compute screen offset of player and start scrolling
+	lda actor_x
+	sec
+	sbc screen_pos_x
+	sta TEMPADR0
+	lda actor_xh
+	sbc screen_pos_x+1
+	sta TEMPADR0+1
+	cmp #13
+	bcs +
+	cmp #7
+	bcc ++
+-	; stop scroll
+	lda #0
+	sta scroll_direction	; stop scrolling when neutral position is reached
+	rts
++	; start scrolling right - but only if screen pos is not larger than max position
+	lda screen_pos_x+1
+	cmp #(256-TILESXPERSCREEN)	; fixme use one less?
+	bcs -
+	lda #SCROLL_RIGHT	; right
+	sta scroll_direction
+	sta is_scroll_active
+	rts
+++	; start scrolling left - but only if screen pos is not already 0
+	lda screen_pos_x+1
+	beq -
+	lda #SCROLL_LEFT	; left
+	sta scroll_direction
+	sta is_scroll_active
+	rts
+
+store_actor_to_level_data
+	; Current actor number is in x
+	lda actor_xh,x
+	sta TEMPADR2
+	lda actor_y,x
+	clc
+	adc #-PIXELTOTILE	; subtract 1 pixel so actor is stored in tile above that its foot sits on
+	lda actor_yh,x
+	adc #(>LEVEL_DATA-1)	; handle -1 pixel and target adress at once
+	sta TEMPADR2+1
+	lda actor_type,x
+	asl			; bring to bits 3-6
+	asl
+	asl
+	ora #$80		; set bit 7
+	ldy #0
+	ora (TEMPADR2),y	; read level data and combine with accu
+	sta (TEMPADR2),y	; store in level data
+	jmp disable_actor
+
+; --------------------------- check collisions between actors
+check_actor_collisions
+	;dec VICBGCOL	; test how costly
+	; Now check for collisions with other actors
+	; Compare Y/X addresses
+	ldx #1
+check_other_actor_collision
+	; Check actor state
+	lda actor_state, x
+	beq +	; if state is 0 (=DISABLED) ignore actor
+	cmp #ACTOR_DEAD
+	bne ++
++	jmp no_collision	; if actor is disabled, no collision checks.
+++	; compute absolute value of X position diff and store it to TEMPADR3
+	lda actor_x,x
+	sec
+	sbc actor_x
+	sta TEMPADR3
+	lda actor_xh,x
+	sbc actor_xh
+	sta TEMPADR3+1
+	+abs16 TEMPADR3
+	; if actors are farer away than 128 tiles this gives false results,
+	; but actors are on same screen, so this can't happen, same for X
+	; because the abs value is always < 128 in high byte.
+	; Solution: use special abs version that compares high byte and always subtracts from bigger number!
+	; fixme later
+	; lda TEMPADR3+1 ; still in ACCU!
+	cmp #>(ACTOR_WIDTH_FOR_COLLISION_CHECK*PIXELTOPOS)
+	beq +
+	; if not equal, check if lower or higher
+	bcc ++
+	jmp no_collision
++	; high bytes equal, check low bytes
+	lda TEMPADR3
+	cmp #<(ACTOR_WIDTH_FOR_COLLISION_CHECK*PIXELTOPOS)
+	bcc ++
+	jmp no_collision	; low bytes >=, so totally >=
+++	; compute absolute value of Y position diff and store it to TEMPADR0
+	lda actor_y,x
+	sec
+	sbc actor_y
+	sta TEMPADR0
+	lda actor_yh,x
+	sbc actor_yh
+	sta TEMPADR0+1
+	+copy16 TEMPADR1, TEMPADR0
+	+abs16 TEMPADR0
+	; lda TEMPADR0+1 ; still in ACCU
+	cmp #>(21*PIXELTOPOS)
+	beq +
+	; if not equal, check if lower or higher
+	bcs no_collision
+	bcc ++
++	; high bytes equal, check low bytes
+	lda TEMPADR0
+	cmp #<(21*PIXELTOPOS)
+	bcs no_collision	; low bytes >=, so totally >=
+++	; Definitly collision with actor x
+	; Determine if player or enemy is killed.
+	; If player rather comes from above, kill rather enemy, but what does that mean?
+	; Player should rather move downwards than sidewards.
+	; Just comparing x/y velocity would be wrong, as player could move rather sidewards,
+	; but still fall from above.
+	; We could compare x/y position differences:
+	; Having a larger y position difference than x position difference seems good,
+	; but doesn't work when actor is falling down fast. Maybe scale y pos diff by 2 before
+	; comparison then.
+	; Another try is to add vx/vy to position difference (maybe twice) before comparison.
+	; Last possibility would be to kill when y pos difference is >= limit (and vy > 0).
+	; This would be simplest solution.
+	; y pos diff is still in TEMPADR1.
+	lda actor_vy
+	; If vy is negative or zero, player is killed
+	bmi killplayer
+	beq killplayer
+	lda TEMPADR1+1
+	bne killenemy	; difference is > 16 pixels
+	lda TEMPADR1
+	cmp #$80
+	bcs killenemy	; difference is >= 8 pixels
+killplayer
+	; check if player is invulnerable
+	lda player_invulnerable_counter
+	bne +
+	; check if player is already dead
+	lda actor_state
+	cmp #ACTOR_DEAD
+	beq +
+	; set player actor state to dead and check that state in main loop.
+	+set8im actor_state, ACTOR_DEAD
+	+set8im actor_dead_anim_phase, 0
++	jmp no_collision
+killenemy
+	; disable enemy actor, later show corpse, play sound etc. add score! do that in main loop
+	+set8imx actor_state, ACTOR_DEAD
+	+set8imx actor_dead_anim_phase, 0
+no_collision
+	inx
+	cpx #MAX_ACTOR_COUNT
+	beq +
+	jmp check_other_actor_collision
++
+	;dec VICBGCOL	; test how costly
+	rts
+
+; -------------------- Spawns actor -----------------------------
+; Input	TEMP2 actor x tile pos
+;	TEMP3 actor y tile pos
+;	TEMP4 actor type
+; Uses	Accu
+; Note!	Saves used registers, excecpt Accu!
+spawn_actor
+	txa
+	pha
+	; find empty actor
+	ldx #0
+-	lda actor_state,x
+	beq spawn_actor_do_it
+	inx
+	cpx #MAX_ACTOR_COUNT
+	bne -
+	; no more space for actors, don't spawn
+	beq spawn_actor_end
+spawn_actor_do_it
+	; set actor state
+	+set8imx actor_state, ACTOR_IN_AIR
+	; set actor x/y positions
+	lda #$40	; Actor is at center of tile (8 pixel), but we use 4 (a bit left), so they don't pop up
+	sta actor_x,x	; when scrolling left (they are wider than a tile and would pop up suddenly when their
+	lda #0		; tile appears but they should have already been visible)
+	sta actor_y,x
+	lda TEMP2
+	sta actor_xh,x
+	lda TEMP3
+	sta actor_yh,x
+	; set actor shape/color/behaviour by type
+	; type number * 64 * 4 + 63 + VICSPRITES_GAME to read color,
+	; load value and use for high byte, because 64 bytes per sprite
+	; frame and 4 frames per sprite -> 256 bytes per sprite.
+	; so we can use the type as high byte, ideal.
+	; every frame of the sprite must have same color then, but should be
+	; the case always, doesn't make sense otherwise
+	lda TEMP4
+	sta actor_type,x
+	clc
+	adc #>VICSPRITES_GAME
+	sta spawn_actor_color_read_adr+2
+spawn_actor_color_read_adr
+	lda VICSPRITES_GAME+$3F
+	; and #$0F	; ignore MC flag - doesn't matter for color and we need it later
+	sta actor_color,x
+	; set multicolor enable flag if upper bit is set, otherwise disable it
+	bmi +	; upper bit set
+	; clear multicolor flag for sprite x
+	lda $D01C
+	and bits_for_not_x,x
+	jmp ++
+	; set multicolor flag for sprite x
++	lda $D01C
+	ora bits_for_x,x
+++	sta $D01C
+
+	; set actor shape (type 0-15 should code behaviour 0/1 and type 0-7).
+	; take lower 3 bits as type indicator.
+	; or every type has type specific behaviour, test what works better
+	; every sprite has four animation frames, so multiply type by four for sprite
+	; pointer.
+	lda TEMP4
+	asl
+	asl
+	clc
+	adc #SPRITEPTR_GAME_OFFSET
+	sta actor_shape,x
+	; set behaviour, later by type, fixme
+	+set8imx actor_behaviour, 1
+	cpx #0
+	beq ++	; don't set behaviour for player
+	; only behaviour for now, just walk.
+	; other behaviours: walk/fall down, flying (later) and flying homing,
+	; maybe also walk and follow with jumping.
+	; set horizontal speed when spawing
+	+set8imx actor_vx, -PIXELTOPOS
+++
+
+;	and #1
+;	beq +
+;	+set8imx actor_vx, -$10
+;	jmp ++
+;+	+set8imx actor_vx, $10
+
+spawn_actor_end
+	pla
+	tax
+	rts
+
+; -------------------- handle actor behaviour --------------------
+; Uses A, X, Y, TEMP0, TEMPADR0
+handle_actor_behaviour
+	ldx #1		; skip first actor, as it is always player!
+-	lda actor_state,x
+	bne +		; not disabled, so handle it's behaviour
+handle_actor_behaviour_next
+	inx
+	cpx #MAX_ACTOR_COUNT
+	bne -
+	rts
+	; here handle types of behaviour - later load behaviour flag here
+	; possible behaviour types:
+	; 0 Do nothing. Could be like 1 if no horizontal speed is set.
+	; 1 Just move in one direction (turns over when wall reached) - would be like do nothing with set vx speed.
+	; 2 Same as 1 but avoid falling down - is implemented here.
+	; 3 Follow player: if above or at same level like player move in its direction, otherwise like 2.
+	; 4 Fly ? Target player ?
+	; 5 Fly ? Erratical flight ?
+	; 6 Like 3 but also jump up to track player ? - difficult!
++	lda actor_state,x
+	; maybe branch via table ? jmp ($adr), atm only one behaviour
+	; implement move left/right without fall down
+	; as long as actor is in air, don't do anything
+	cmp #ACTOR_IN_AIR
+	beq handle_actor_behaviour_next
+	; actor must be on ground. Check move direction, start left move if not moving
+	lda actor_vx,x
+	bne +
+	; actor has no horizontal speed, so just sits fix.
+	; keep it that way (behaviour type 0)
+	jmp handle_actor_behaviour_next
++	; check if tile in move direction is empty
+	bmi ++
+	; actor moves right. Add half actor size to position and check if tile is ground below
+	+add_actor_x_pixel TEMP0, 12
+	lda actor_yh,x
+	sta TEMP1
+	jsr check_if_tile_is_ground
+	bcs +
+	; not ground! so flip x dir, that is set left movement
+	+set8imx actor_vx, -PIXELTOPOS
++	jmp handle_actor_behaviour_next
+++	; actor moves left. Subtract half actor size to position and check if tile is ground below
+	+add_actor_x_pixel TEMP0, -12
+	lda actor_yh,x
+	sta TEMP1
+	jsr check_if_tile_is_ground
+	bcs +
+	; not ground! so flip x dir, that is set right movement
+	+set8imx actor_vx, PIXELTOPOS
++	jmp handle_actor_behaviour_next
+
+; -------------------- handle dead actors -------------------------
+handle_dead_actors
+	lda actor_state
+	cmp #ACTOR_DEAD
+	beq player_is_dead
+	; player not dead, count down invulnerable counter if that is greater than zero
+	+set8im VICBGCOL, 0
+	lda player_invulnerable_counter
+	beq +
+	; show player sprite with color cycling!
+	dec player_invulnerable_counter
+	+copy8 $D027, player_invulnerable_counter
++	jmp handle_dead_actors_enemies
+	; player is dead - check for first phase of that and count down lives then
+player_is_dead
+	lda actor_dead_anim_phase
+	bne +
+	; subtract 12 from x/y position for better display - fixme only for double size display!
+;	lda actor_x
+;	sec
+;	sbc #(12*PIXELTOPOS)
+;	sta actor_x
+;	lda actor_xh
+;	sbc #0
+;	sta actor_xh
+;	lda actor_screen_y
+;	sec
+;	sbc #11
+;	sta actor_screen_y
+	; count down one live and handle game over if needed
+	+takelive
+	; no need to check for lives==0 here because that is checked
+	; in main game loop.
+	; Show player dying animation, like morph to skull
+	; maybe show that double sized.
+	; some animation like vaporizing would be ok as well,
+	; copy player sprite to free space and modify it there
+	; like removing pixels every animation frame
+	; fixme here we blink with double size
++	inc actor_dead_anim_phase
+	cmp #150	; show dying animation for 3 seconds
+	bcs end_of_player_dead_anim
+	lda actor_dead_anim_phase
+	and #31
+	cmp #16
+	bpl +
+	+set8im VICBGCOL, 2
+	lda $D017
+	ora #1
+	sta $D017
+	lda $D01D
+	ora #1
+	sta $D01D
+	jmp ++
++
+	+set8im VICBGCOL, 0
+	lda $D017
+	and #$FE
+	sta $D017
+	lda $D01D
+	and #$FE
+	sta $D01D
+++	
+handle_dead_actors_enemies
+	ldx #1
+-	lda actor_state,x
+	cmp #ACTOR_DEAD
+	bne +
+	; dead enemy
+	; account for score
+	; fixme score should depend on actor type, is this coded in actor_behaviour? certainly not actor_shape!
+	; read score table actor type indexed... needs y register for type
+	+addscore $00, $05, $00
+	lda #ACTOR_DISABLED
+	sta actor_state,x
++	inx
+	cpx #MAX_ACTOR_COUNT
+	bne -
+	rts
+end_of_player_dead_anim
+	; set back normal values
+	+set8im VICBGCOL, 0
+	lda $D017
+	and #$FE
+	sta $D017
+	lda $D01D
+	and #$FE
+	sta $D01D
+	; set player to invulnerable for some time
+	+set8im player_invulnerable_counter, 255
+	+set8im actor_state, ACTOR_IN_AIR
+	+set8im actor_dead_anim_phase, 0
+	jmp handle_dead_actors_enemies
+
+; -------------------- Actor data --------------------------------
+; fixme this data can mostly be stored at $0200, zero initialized!
+; saves space in .prg, 14*8+some extra bytes
+actor_state
+!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte ACTOR_DISABLED }
+actor_x	; note! We don't store low/high bytes in consecutive order as usual, but as two blocks, so we can index them easier!!!
+!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
+actor_xh
+!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
+actor_y
+!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
+actor_yh
+!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
+actor_vx
+!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
+actor_vy
+!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
+actor_shape
+!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
+actor_color
+!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
+actor_screen_x
+!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
+actor_screen_y
+!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
+actor_screen_xh
+!byte 0
+actor_behaviour
+!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
+actor_type
+!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
+actor_jump_count
+!byte 0
+actor_dead_anim_phase
+!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
+player_invulnerable_counter
+!byte 0
+sprite_anim_phase
+!byte 0
+
+bits_for_x
+!byte 1,2,4,8,16,32,64,128
+bits_for_not_x
+!byte 255-1,255-2,255-4,255-8,255-16,255-32,255-64,255-128
+
+; fixme We can have at most 16 different actor types.
+; Store shape, color, behaviour and initial vx for each type and set it when spawning.
+; This means behaviour 0/1 and move direction 0/1 takes 2 bits, so we have 4 different enemy types per level.
+; Or always let them walk left and have 8 types. Encoding vx would maybe be better.
+

@@ -1,0 +1,9 @@
+fixcolors
+!byte $09, $08, $07
+
+!align 255,0
+charsetdata
+!byte $2a, $6b, $a8, $b9, $8a, $9e, $a2, $e6
+
+!align 255,0
+tiledata

@@ -1,0 +1,685 @@
+; Bacillus_c64
+; Copyright (C) 2016-2017  Thorsten Jordan.
+; 
+; This program is free software; you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation; either version 2 of the License, or
+; (at your option) any later version.
+; 
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+; ***************************************************************************************
+;
+; all code related to tile rendering / scrolling
+;
+; ***************************************************************************************
+
+; These macros copy screen parts line based. There are several advantages: when scrolling this only copies
+; bytes that are kept, remaining columns can be filled up easily. It is very easy to write and to use, better than
+; approaches that use some power of two as loop counter. Code is rather short (~100 bytes for half screen).
+; And it uses partial loop unrolling, taking ((4+5)*12+7)*39 = 4485 cycles per half screen (71.2 raster lines),
+; Which is pretty fast (9.6 cycles/byte, optimum with maximal unrolling only 9 cycles/byte!).
+; Final advantage: there are no overlaps and no bytes to save/restore.
+; And the same macro can be used for color ram shifting as well!
+; It takes ~80 raster lines (with bad lines ~58 cycles per rasterline medium, so seems ok)
+; Full screen is 312 raster lines, so it takes ~ half raster time to copy, seems fair.
+!macro halfscreencopy .dstadr, .srcadr {
+	ldx #0
+-
+!for OFFSET, 0, HALFLINESYPERSCREEN-1 {
+	lda .srcadr+OFFSET*40,x
+	sta .dstadr+OFFSET*40,x
+}
+	inx
+	cpx #39
+	bne -
+}
+
+!macro halfscreencopy_reversed .dstadr, .srcadr {
+	ldx #39
+-
+!for OFFSET, 0, HALFLINESYPERSCREEN-1 {
+	lda .srcadr+OFFSET*40-1,x
+	sta .dstadr+OFFSET*40-1,x
+}
+	dex
+	bne -
+}
+
+; ----------------------- do the scrolling
+; Uses	A and many others
+handle_scrolling
+	lda is_scroll_active
+	bne +
+	rts
++	cmp #SCROLL_RIGHT
+	bne +
+	jmp scroll_right
++	cmp #SCROLL_LEFT
+	beq +
+	rts
++	jmp scroll_left
+
+; ----------------------- Handle scrolling to the right in 1 pixel steps.
+vicctrl2forpos
+!byte $17,$16,$15,$14,$13,$12,$11,$10	; multicolor bit enabled!
+
+scroll_right
+	; increment screen position by two pixels
+	+add16im screen_pos_x, $20
+	; compute hardware register value from screen position,
+	; this are bits 6,5,4 of screen_pos_x
+	; we use an 8 value table, that is faster
+	lda screen_pos_x
+	lsr
+	lsr
+	lsr
+	lsr
+	and #7
+	tax
+	lda vicctrl2forpos,x
+	sta VICCTRL2
+	sta last_value_of_vicctrl2
+	; Check for background animated chars, that need to be kept fix on scrolling
+	lda screen_pos_x
+	and #$30
+	beq +
+	; chars 20-23, 24-27, 28-31, 32-35, rotate bits!
+	; we rotate bits right, so test last bit of last byte
+!for CHARNR, 0, 3 {
+	ldx #0
+-	lda VICCHARSET+(CHARNR*4+20+3)*8,x	; load last byte
+	ror					; rotate right to get rightmost bit to carry flag
+	ror VICCHARSET+(CHARNR*4+20+0)*8,x	; rotate in carry flag and rotate byte
+	ror VICCHARSET+(CHARNR*4+20+1)*8,x	; move carry flag from byte to next
+	ror VICCHARSET+(CHARNR*4+20+2)*8,x
+	ror VICCHARSET+(CHARNR*4+20+3)*8,x
+	inx
+	cpx #8
+	bne -
+}
++
+	; Check for special actions of sub tile position
+	; Neutral pixel pos is 4, we started right scroll, so next frame has position 5,6,7,0,1,2,3.
+	; With new 2 pixel scroll speed next frame has position 6, 0, 2, 4.
+	; We need to change frame buffer and shift color ram when switching from offset 7 to 0!
+	; We copy front to back buffer when going from offset 5 to 6.
+	; Ideally we copy first half of color ram when next frame is 0 and half of current frame (7) is done.
+	; We copy second half of color ram when next frame is 0. But here we do it when next frame is 0,
+	; because it is fast enough, we have ~100 raster lines time and copy needs 80.
+	; We check for stop scroll when next frame is offset 4, so special actions at 4,6,0.
+	lda screen_pos_x
+	and #$70
+	bne +++
+	; Next frame has pixel position 0, so we need shifted color ram!
+	; also visible frame buffer changes
+	jsr setvisibleframebuffer
+	jmp colorramscrollright
++++	cmp #$40
+	bne +++
+	; Next frame has pixel position 4, check for continue of scrolling
+	lda scroll_direction	; right=1
+	sta is_scroll_active
+	rts
++++	cmp #$60
+	beq +
+	jmp +++
++	; Next frame has pixel position 6, copy front to back buffer
+	lda visibleframebuffer
+	bne +
+	jmp ++
++
+	+halfscreencopy SCREEN0, SCREEN1+1
+	+halfscreencopy SCREEN0+HALFSCREENOFFSET, SCREEN1+1+HALFSCREENOFFSET
+	+set8im renderframebuffer_adrmsb, >SCREEN0
+	; if we reach screen0 by scrolling right we can generate position that way
+	+copy8 render_pos_x+1, screen_pos_x+1
+	inc render_pos_x+1
+	+set8im render_pos_x, $00
+	+set8im colorramshift_to_renderpos, $01
+	jmp generate_new_last_column
+++
+	+halfscreencopy SCREEN1, SCREEN0+1
+	+halfscreencopy SCREEN1+HALFSCREENOFFSET, SCREEN0+1+HALFSCREENOFFSET
+	+set8im renderframebuffer_adrmsb, >SCREEN1
+	; if we reach screen1 by scrolling right we can generate position that way
+	+copy8 render_pos_x+1, screen_pos_x+1
+	+set8im render_pos_x, $80
+	+set8im colorramshift_to_renderpos, $01
+	jmp generate_new_last_column
++++	rts
+
+; ----------------------- Handle scrolling to the left in 1 pixel steps.
+
+scroll_left
+	; decrement screen position by two pixels
+	+sub16im screen_pos_x, $20
+	; compute hardware register value from screen position,
+	; this are bits 6,5,4 of screen_pos_x
+	; we use an 8 value table, that is faster
+	lda screen_pos_x
+	lsr
+	lsr
+	lsr
+	lsr
+	and #7
+	tax
+	lda vicctrl2forpos,x
+	sta VICCTRL2
+	sta last_value_of_vicctrl2
+	; Check for background animated chars, that need to be kept fix on scrolling
+	lda screen_pos_x
+	and #$30
+	beq +
+	; chars 20-23, 24-27, 28-31, 32-35, rotate bits!
+	; we rotate bits left, so test first bit of last byte
+!for CHARNR, 0, 3 {
+	ldx #0
+-	lda VICCHARSET+(CHARNR*4+20+0)*8,x	; load first byte
+	rol					; rotate left to get leftmost bit to carry flag
+	rol VICCHARSET+(CHARNR*4+20+3)*8,x	; rotate in carry flag and rotate byte
+	rol VICCHARSET+(CHARNR*4+20+2)*8,x	; move carry flag from byte to next
+	rol VICCHARSET+(CHARNR*4+20+1)*8,x
+	rol VICCHARSET+(CHARNR*4+20+0)*8,x
+	inx
+	cpx #8
+	bne -
+}
++
+	; Check for special actions of sub tile position
+	; Neutral pixel pos is 4, we started left scroll, so next frame has position 3,2,1,0,7,6,5,4.
+	; With new 2 pixel speed, next frame has position 2,0,6,4.
+	; We need to change frame buffer and shift color ram when switching from offset 0 to 7!
+	; We copy front to back buffer when position change is 2->1.
+	; We check for stop scroll when next frame is offset 4, so special actions at 4,1,7.
+	; With 2 pixel scroll speed it is 0->6 and 2->0 so check for 6 and 0, not 7 and 1.
+	lda screen_pos_x
+	and #$70
+	cmp #$60
+	;cmp #$70
+	bne +++
+	; Next frame has pixel position 7, so we need shifted color ram!
+	; also visible frame buffer changes
+	jsr setvisibleframebuffer
+	jmp colorramscrollleft
++++	cmp #$40
+	bne +++
+	; Next frame has pixel position 4, check for continue of scrolling
+	lda scroll_direction	; left=2
+	sta is_scroll_active
+	rts
++++	;cmp #$10
+	cmp #$00
+	beq +
+	jmp +++
++	; Next frame has pixel position 1, copy front to back buffer
+	lda visibleframebuffer
+	bne +
+	jmp ++
++
+	+halfscreencopy SCREEN0+1, SCREEN1
+	+halfscreencopy SCREEN0+1+HALFSCREENOFFSET, SCREEN1+HALFSCREENOFFSET
+	+set8im renderframebuffer_adrmsb, >SCREEN0
+	; if we reach screen0 by scrolling left we can generate position that way
+	+copy8 render_pos_x+1, screen_pos_x+1
+	+set8im render_pos_x, $00
+	+set8im colorramshift_to_renderpos, $FF
+	jmp generate_new_first_column
+++
+	+halfscreencopy SCREEN1+1, SCREEN0
+	+halfscreencopy SCREEN1+1+HALFSCREENOFFSET, SCREEN0+HALFSCREENOFFSET
+	+set8im renderframebuffer_adrmsb, >SCREEN1
+	; if we reach screen1 by scrolling left we can generate position that way
+	+copy8 render_pos_x+1, screen_pos_x+1
+	dec render_pos_x+1
+	+set8im render_pos_x, $80
+	+set8im colorramshift_to_renderpos, $FF
+	jmp generate_new_first_column
++++	rts
+
+; ----------------------- set visible frame buffer
+setvisibleframebuffer
+	lda screen_pos_x		; read x offset and see if bit value 8 is set
+	bmi +				; if set show second screen, if cleared, first screen
+	lda #$00
+	sta visibleframebuffer
+	lda #>SCREEN0
+	sta visibleframebuffer_adrmsb
+	lda #>SCREEN1
+	sta backframebuffer_adrmsb
+	lda #SCREEN0POSITION*16+VICCHARSETBLOCK*2
+	jmp ++
++	lda #$01
+	sta visibleframebuffer
+	lda #>SCREEN1
+	sta visibleframebuffer_adrmsb
+	lda #>SCREEN0
+	sta backframebuffer_adrmsb
+	lda #SCREEN1POSITION*16+VICCHARSETBLOCK*2
+++	sta VICMEMCTRL
+	; Kernal is not informed but that is not needed
+	rts
+
+; ------------------ generate new data on last column
+generate_new_last_column
+	; we generate column #40 when screen pos is at column #0, to prepare
+	; backbuffer showing columns #1...#40, so take screen pos in char
+	; offset (screenpos and $FF80) and add 20 tiles.
+	; This means we also render column #40 of colors into temporary space.
+	lda screen_pos_x+1
+	clc
+	adc #(40 / TILEWIDTH)
+	sta TEMP0
+	lda screen_pos_x	; is 0-TILEWIDTHINPIXELS-1, so take uppermost bit
+	rol			; rotate uppermost bit to carry
+	lda #0
+	rol			; rotate in carry, so uppermost bit to lowermost bit!
+	sta TEMP1		; store subtile offset
+	lda #39
+	sta TEMPADR0
+	lda backframebuffer_adrmsb
+	sta TEMPADR0+1
+	jmp render_tile_column
+
+; ------------------ generate new data on first column
+generate_new_first_column
+	; we generate column #0 when screen pos is at column #1, to prepare
+	; backbuffer showing columns #0...#39, so take screen pos in char
+	; offset (screenpos and $FF80) and add 20 tiles.
+	; This means we also render column #40 of colors into temporary space.
+	lda screen_pos_x
+	sec
+	sbc #(8*PIXELTOPOS)
+	sta TEMP1		; Store result, later take uppermost bit as lowermost
+	lda screen_pos_x+1
+	sbc #0
+	sta TEMP0		; store Tile offset
+	rol TEMP1		; leftmost bit to carry
+	lda #0
+	rol			; now as rightmost bit in Accu
+	sta TEMP1		; store subtile offset
+	lda #0
+	sta TEMPADR0		; column 0
+	lda backframebuffer_adrmsb
+	sta TEMPADR0+1
+	jmp render_tile_column
+
+; copy visible screen shifted to back buffer
+; copy 39 characters to the left
+; but we can simplify it by just copying four full pages to the left!
+; much simpler code - but trashes sprite pointers, be careful,
+; handle last block separately to avoid this!
+; this way last byte of each block gets overwritten! we need four loops
+; or load last bytes first and save them somewhere - but this doesn't
+; happen if we copy from one framebuffer to other!
+; check duration with raster debug - later compare several possible versions
+; later do copying in 4 various frames!
+; this routine needs nearly 2/3 of visible screen raster time, roughly 60% of full screen raster time
+
+; ----------------------- scroll color ram
+; Shifting color ram is very time critical. So we use the fastest copy code with
+; partial loop unrolling. But we must not copy the full screen first, because the
+; raster beam surpasses the copy and the fixed color values that are written back
+; late are a problem. So copy in two badges.
+; Later copy one badge (top half) when raster beam reaches lower half of previous
+; frame, second badge when raster beam reaches end of previous frame.
+colorramscrollright
+	;lda #$02
+	;sta VICBGCOL
+	; first half of screen
+	+halfscreencopy COLORRAM, COLORRAM+1
+	; fill in new values
+!for OFFSET, 0, HALFLINESYPERSCREEN-1 {
+	lda colorram_tempcolumn+OFFSET
+	sta COLORRAM+39+OFFSET*40
+}
+
+	; second half of screen
+	+halfscreencopy COLORRAM+HALFSCREENOFFSET, COLORRAM+1+HALFSCREENOFFSET
+	; fill in new values
+!for OFFSET, HALFLINESYPERSCREEN, LINESYPERSCREEN-1 {
+	lda colorram_tempcolumn+OFFSET
+	sta COLORRAM+39+OFFSET*40
+}
+	+set8im colorramshift_to_renderpos, 0
+	;lda #$0E
+	;sta VICBGCOL
+	rts
+
+colorramscrollleft
+	;lda #$02
+	;sta VICBGCOL
+	; first half of screen
+	+halfscreencopy_reversed COLORRAM+1, COLORRAM
+	; fill in new values
+!for OFFSET, 0, HALFLINESYPERSCREEN-1 {
+	lda colorram_tempcolumn+OFFSET
+	sta COLORRAM+0+OFFSET*40
+}
+
+	; second half of screen
+	+halfscreencopy_reversed COLORRAM+1+HALFSCREENOFFSET, COLORRAM+HALFSCREENOFFSET
+	; fill in new values
+!for OFFSET, HALFLINESYPERSCREEN, LINESYPERSCREEN-1 {
+	lda colorram_tempcolumn+OFFSET
+	sta COLORRAM+0+OFFSET*40
+}
+	+set8im colorramshift_to_renderpos, 0
+	;lda #$0E
+	;sta VICBGCOL
+	rts
+
+; Given a horizontal position render tiles to given screen.
+; However we only need it for start screen, where offset is 0.
+; Maybe offer a function that renders one column of tiles with
+; given horizontal offset (tile nr and subtile count 0-3) so
+; we can call it for every column of screen!
+
+; fixme would it be faster to render tiles to two columns and later from
+; this free space to screen? We need to fetch tile data only once per two
+; columns and rows then. Storing data to screen is easier then.
+; if we could unpack the tile data for e.g. one page per line it would
+; be much faster to copy them to screen. But it takes 20-24 pages (5-6k of ram),
+; what is very costly. On the other hand we have enough frame time left this way.
+
+; --------------- function that renders one column from level data tile based to screen and color ram -------------
+; Input	TEMP0		tile offset in level (0-255)
+;	TEMP1		offset in tile (0-TILEWIDTH-1)
+;	TEMPADR0	target address (note! LSB is column number and MSB screen address)
+; Uses	A, X, Y
+; Function takes ca 28 raster lines. maybe faster to write directly to screen data, but we have no more index
+; registers
+render_tile_column
+;	+set8im VICBGCOL, 6	; benchmark
+	; level data is already aligned, so use tile offset in level as lower byte
+	ldy #0			; line counter
+	lda TEMP1
+	and #1
+	bne render_tile_column1
+; render column 0 of any tiles
+	lda TEMP0
+	sta render_tile_column_src_adr0+1
+	+set8im render_tile_column_src_adr0+2, >LEVEL_DATA
+render_tile_column_src_adr0
+	ldx LEVEL_DATA
+	; check for special tile values like bit 7
+	bpl render_tile_column_2lines0
+	; set data to spawn actor, TEMP2,3,4 are tile x,y actor type.
+	txa
+	and #$7F
+	lsr
+	lsr
+	lsr
+	sta TEMP4
+	; copy write address
+	lda render_tile_column_src_adr0+1
+	sta render_tile_column_clear0+1
+	lda render_tile_column_src_adr0+2
+	sta render_tile_column_clear0+2
+	txa
+	and #$07	; clear all bits except background tile nr
+render_tile_column_clear0
+	; clear actor info from level data
+	sta LEVEL_DATA
+	tax
+	lda render_tile_column_src_adr0+1
+	sta TEMP2
+	lda render_tile_column_src_adr0+2
+	sec
+	sbc #>LEVEL_DATA
+	sta TEMP3
+	inc TEMP3	; position is on top of tile below, so increase
+	jsr spawn_actor
+render_tile_column_2lines0
+	; load tile char data of two lines and store to buffer
+	lda LEVEL_TILE_DATA+0*NR_TILES,x
+	sta chardata_tempcolumn,y
+	lda LEVEL_TILE_DATA+2*NR_TILES,x
+	sta chardata_tempcolumn+1,y
+	; load tile color data of two lines and store to buffer
+	lda LEVEL_TILE_DATA+4*NR_TILES,x
+	sta colorram_tempcolumn,y
+	lda LEVEL_TILE_DATA+6*NR_TILES,x
+	sta colorram_tempcolumn+1,y
+	; increase source address by 256 to read next tile
+	inc render_tile_column_src_adr0+2
+	; increase target pointer
+	iny
+	iny
+	; compare to limie
+	cpy #(TILESYPERSCREEN*2)
+	bne render_tile_column_src_adr0
+	; done
+;	+set8im VICBGCOL, 0	;fixme benchmark
+;	rts
+	jmp copy_temporary_chardata_to_screen_column
+; render column 1 of any tiles
+render_tile_column1
+	lda TEMP0
+	sta render_tile_column_src_adr1+1
+	+set8im render_tile_column_src_adr1+2, >LEVEL_DATA
+render_tile_column_src_adr1
+	ldx LEVEL_DATA
+	; check for special tile values like bit 7
+	bpl render_tile_column_2lines1
+	; set data to spawn actor, TEMP2,3,4 are tile x,y actor type.
+	txa
+	and #$7F
+	lsr
+	lsr
+	lsr
+	sta TEMP4
+	; copy write address
+	lda render_tile_column_src_adr1+1
+	sta render_tile_column_clear1+1
+	lda render_tile_column_src_adr1+2
+	sta render_tile_column_clear1+2
+	txa
+	and #$07	; clear all bits except background tile nr
+render_tile_column_clear1
+	; clear actor info from level data
+	sta LEVEL_DATA
+	tax
+	lda render_tile_column_src_adr1+1
+	sta TEMP2
+	lda render_tile_column_src_adr1+2
+	sec
+	sbc #>LEVEL_DATA
+	sta TEMP3
+	inc TEMP3	; position is on top of tile below, so increase
+	jsr spawn_actor
+render_tile_column_2lines1
+	; load tile char data of two lines and store to buffer
+	lda LEVEL_TILE_DATA+1*NR_TILES,x
+	sta chardata_tempcolumn,y
+	lda LEVEL_TILE_DATA+3*NR_TILES,x
+	sta chardata_tempcolumn+1,y
+	; load tile color data of two lines and store to buffer
+	lda LEVEL_TILE_DATA+5*NR_TILES,x
+	sta colorram_tempcolumn,y
+	lda LEVEL_TILE_DATA+7*NR_TILES,x
+	sta colorram_tempcolumn+1,y
+	; increase source address by 256 to read next tile
+	inc render_tile_column_src_adr1+2
+	; increase target pointer
+	iny
+	iny
+	; compare to limie
+	cpy #(TILESYPERSCREEN*2)
+	bne render_tile_column_src_adr1
+	; done
+
+copy_temporary_chardata_to_screen_column
+	;shit needs y index but there is no addy command!
+	ldy #0
+	ldx #0
+-	lda chardata_tempcolumn,x
+	sta (TEMPADR0),y
+	+add16im8 TEMPADR0, 40
+	inx
+	cpx #(TILESYPERSCREEN*2)
+	bne -
+;	+set8im VICBGCOL, 0	; benchmark
+	rts
+
+chardata_tempcolumn
+!for COUNT, 0, 23 { !byte 0 }
+
+; ------------------- render a tile to visible screen
+; Input	X,Y Tilecoordinates in level, TEMP0 tile nr.
+; Uses TEMPADR0, TEMPADR1, A
+; Note! The visible framebuffer is not the one we render to. If screen is not scrolling, both are the same.
+; But if screen scrolls at some frame the render buffer advances, visible screen is set a few frames later.
+; Note that color ram always matches visible screen so we have to compute two destination addresses
+; differently... we already have the shift value computed!
+;fixme when left scrolling sometimes wrong buffer is rendered to... yes because upper half of screen!
+;that is already copied but not yet render buffer set, so we rather need full frame copy...
+;same for color ram... how costly is half screen copy in raster lines? ~72?
+render_tile
+	lda render_pos_x	; load subtile position
+	eor #$80		; flip bit
+	rol			; bring it to carry
+	lda #$FF		; load -1
+	adc table_mul80_lo,y	; add low byte of target address - if subtilepos=0 changes nothing, else -1 is computed!
+	sta TEMPADR0
+	sta TEMPADR1
+	lda table_mul80_hi,y
+	clc
+	adc #>COLORRAM		; maybe include colorramshift_to_renderpos here already somehow...
+	sta TEMPADR1+1
+	lda table_mul80_hi,y
+	clc
+	; render to framebuffer that is shown next (different to visibleframebuffer when scrolling!)
+	adc renderframebuffer_adrmsb
+	sta TEMPADR0+1
+	; add colorram shift to address
+	; When we are scrolling the render_buffer has the picture already shifted. So to get matching
+	; colorram pos we need to ADD the scroll direction to target address.
+	; Because column X of render buffer shows column X+1 of visible frame buffer (right scroll),
+	; and thus do the +1 to get correct color ram address. Not intuitive, but correct...
+	+adds8to16 TEMPADR1, colorramshift_to_renderpos
+	; now y register can be used freely, compute x offset on screen
+	txa		; x coord of tile to accu
+	sec		; subtract current screen position in tiles
+	sbc render_pos_x+1
+	asl		; *2 to get column
+	tay		; transfer to y for offset for writing
+	ldx TEMP0	; load tile number
+	lda LEVEL_TILE_DATA+0*NR_TILES,x	; write to char and color ram
+	sta (TEMPADR0),y
+	lda LEVEL_TILE_DATA+4*NR_TILES,x
+	sta (TEMPADR1),y
+	iny
+	lda LEVEL_TILE_DATA+1*NR_TILES,x
+	sta (TEMPADR0),y
+	lda LEVEL_TILE_DATA+5*NR_TILES,x
+	sta (TEMPADR1),y
+	; next line needs y += 39
+	tya
+	clc
+	adc #39
+	tay
+	lda LEVEL_TILE_DATA+2*NR_TILES,x	; write to char and color ram
+	sta (TEMPADR0),y
+	lda LEVEL_TILE_DATA+6*NR_TILES,x
+	sta (TEMPADR1),y
+	iny
+	lda LEVEL_TILE_DATA+3*NR_TILES,x
+	sta (TEMPADR0),y
+	lda LEVEL_TILE_DATA+7*NR_TILES,x
+	sta (TEMPADR1),y
+	rts
+
+table_mul80_lo
+!for COUNT, 0, TILESYPERSCREEN-1 {
+!byte <(COUNT*80)
+}
+
+table_mul80_hi
+!for COUNT, 0, TILESYPERSCREEN-1 {
+!byte >(COUNT*80)
+}
+
+; --------------- copy temporary color data to color ram column ----------------------------------
+; Input	A - destination column
+; Uses X
+copy_tempval_to_color_ram
+	sta copy_tempval_to_color_ram_target+1
+	lda #$D8
+	sta copy_tempval_to_color_ram_target+2
+	ldx #0
+-	lda colorram_tempcolumn, x	; transfer one value
+copy_tempval_to_color_ram_target
+	sta $D800
+	+add16im8 copy_tempval_to_color_ram_target+1, 40
+	inx
+	cpx #24
+	bne -
+	rts
+
+; --------------- function that renders start screen to visible screen and color ram -------------
+; Uses	TEMPADR0, TEMPADR1, TEMPADR2, TEMPADR3, TEMP0, TEMP1, TEMP2, A, X, Y
+render_tiles_on_screen
+	; prepare arguments for render_tile_column
+	ldy #$00	; column counter
+-	tya		; prepare tile offset (y / 2)
+	lsr
+	sta TEMP0
+	tya
+	and #(TILEWIDTH-1)
+	sta TEMP1
+	lda #>SCREEN0
+	sta TEMPADR0+1
+	sty TEMPADR0
+	tya
+	pha
+	jsr render_tile_column
+	pla
+	;sta VICBGCOL	; debugging how long it takes to render one column, ~ 60 raster lines!
+	tay
+	;fixme only used here, if we would render initial tiles differently, this function would be obsolete.
+	jsr copy_tempval_to_color_ram	; copy temporary color values to color ram, column already in accu, does not kill Y!
+	;tya
+	;clc
+	;adc #4
+	;sta VICBGCOL	; debugging how long it takes to render one column, ~ 60 raster lines!
+	iny
+	cpy #40		; render full 40 columns
+	bne -
+	rts
+
+; screen position data
+screen_pos_x	; offset of left border, MSB: tile, LSB: subtile in pixels/subpixel accuracy (4bit/4bit)
+!word $0000
+render_pos_x	; offset of left border of framebuffer that we render to (in tile,subtile coords, so lower byte is 00 or 80).
+!word $0000
+visibleframebuffer
+!byte $00
+visibleframebuffer_adrmsb
+!byte $00
+renderframebuffer_adrmsb
+!byte $00
+backframebuffer_adrmsb
+!byte $00
+background_animation_phase
+!byte $00
+colorramshift_to_renderpos
+!byte 0
+
+is_scroll_active	; are we in scrolling mode (stores current scroll direction if != 0)
+!byte 0
+scroll_direction	; in what direction are we scrolling (0-none,1-right,2-left,4-up,8-down)
+!byte 0
+
+; Temporary data for screen scrolling
+!align 31, 0	; Align so that adding 24 doesn't lead to page change!
+colorram_tempcolumn	; 24 bytes for colors of one column
+!byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+

@@ -1,0 +1,689 @@
+; Bacillus_c64
+; Copyright (C) 2016-2017  Thorsten Jordan.
+; 
+; This program is free software; you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation; either version 2 of the License, or
+; (at your option) any later version.
+; 
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+!to "bacillus.prg", cbm	; Program name
+!cpu 6510
+
+; ==============================================================================================
+; Jump'n'run on c64 with two-way parallax scrolling, different levels and highscore.
+; ==============================================================================================
+;
+; Main ToDo:
+; Show screen shots and readme on github.
+; Plan structure:
+; Loading/Title screen with bacteria in background and logo in foreground:
+;    "Thorsten Jordan presents" / "Bacillus" - skipable by joystick.
+; Main screen with logo at top and highscores below and maybe some credits.
+;    Ideally use the power of c64fy and have some animation in graphics mode,
+;    like mcgfx logo on top and text below.
+; Have some simple level change or highscore handling mode with text input later.
+;    Need to store current level number and what happens.
+; Have 3 or 4 levels (cheese, candy, salad, meat/vegetable?)
+;
+
+
+; Memory Layout:
+; ==============
+; 0000 - 01FF  0.5k  Zeropage (free from 0002-00FF) and Stack.
+; 0200 - 03FF  0.5k  Mostly free except some kernal stuff (now free with disabled kernal)
+; 0400 - 0800    1k  Screen at start, later free
+; 0800 - BFFF   46k  Program/Data (can basic be overwritten at load?)
+; C000 - C3FF    1k  Screen 0 (RAM) - changes frequently, so needs RAM
+; C400 - C7FF    1k  Screen 1 (RAM) - dito
+; C800 - CFFF    2k  Charset (RAM) - changes because of animated characters, so needs RAM
+; D000 - D7FF    2k  I/O Area, Sprites below
+; D800 - DFFF    2k  Color RAM, Sprites below
+; E000 - FFFF    8k  Kernal, but graphics/sprites below. Last 4 Bytes interrupt vectors!
+;
+; So we have 12k for sprites (the last one is not fully usable), so we have space for 192 sprites!
+; The first 4k of sprites (64 sprites) must be static, because I/O is blended above them.
+; Use this area for text sprites (Intro, Game info).
+;
+; Level data is also stored in fix memory areas:
+; B400 - BFFF    3k  Level data itself (index in tile table)
+; B200 - B3FF  0.5k  Tile data (64 tiles in 8 tables because each tile has 8 bytes -> 512 bytes)
+;                    And 64 tiles because every tile has 4 chars and max 256 chars, reuse of chars
+;                    not accounted.
+; Further level data would be: charset, sprites - both go to fixed VIC memory areas.
+; More advanced stuff like scripts or so is not yet used.
+; Note! $0200 - $0800 is now free! 1.5k of free ram, i.e. for tiledata,
+; leveldata, char animations etc.
+
+
+; Memory for intro screen can be reused.
+; Graphics should be packed (RLE)
+; Use some more generic naming, so levels are exchangeable, intro screen as well etc.
+
+; More complex stuff _may_ be added later like 8-way scrolling or music.
+; Complex intro doesn't work well. Rather simple solutions first and more complex stuff later.
+; Best solution would be to have small loader first that does fast load of the rest.
+; It can set up VIC bank 3 and load all stuff from 0200 on without kernal, to have
+; 55k of free memory. No need to have packed and unpacked gfx in memory together.
+; With loading we can store the data where it has to be later already during load.
+;
+; A generic sprite multiplexer for 24 or 32 sprites would be handy, easier also for the intro.
+; Fastest code is immediate load and store, so instead of tables maybe fill in rather values
+; into existing code. The problem is the number of interrupt lines where to trigger the
+; muxer isn't fix. It can be up to 24-32 different position. Easier to write
+; dedicated IRQ code for intro.
+
+
+
+
+
+; General ideas / infos.
+
+; highest bit in color ram enables MC mode for character, but uses individual color from 0-7.
+; So background and two common colors are free, but individual only 0-7.
+
+; Level 1: Cheese world. brown, orange, yellow
+; user: e.g. blue for labels, red for some detail etc.
+; collect tiles in one large image then, converting all at once... give tile res to c64fy!
+; charset is 16x16 chars with 8 pixel per char, hence 128x128 pixel image!
+
+; Level 2: Candy world with purple red etc.
+
+; Level 3: salad...
+
+; We can do parallax scrolling by having two background masks moving with different speed
+; and just doing AND or OR with them, i.e. an X grid in front of some other forms.
+; This can easily be done with big effect.
+
+; Sprite scroller for intro... with empty lines between text lines we have enough time to
+; set sprite pointers so multiplexing isn't that critical so we can do 9 or 10
+; versions of a sprite easily.
+; maybe instead of text use sprite as scroller, also to show highscores, so we can keep
+; the bacteria image in background.
+
+; Rethink what we really want to do! Just another jump and run? or a more complex dungeon
+; maze game with random paths, collecting goods etc that is more interesting?
+; Or a turrican like shooter which I always wanted to code on the PC?
+; Yet another giana sisters clone isn't that interesting.
+; Drawing artwork for more levels could be funny, but not really what I wanted.
+; C64 programming is about timing, managing the few ressources and doing things in a
+; very uncommon way, like 8 tables with single bytes per entry instead of one table
+; with 8byte entries. Like extreme loop unrolling and self modifying code.
+; Like raster irq hacks up to insane levels.
+; Like putting many data packed in ram and drawing full screen graphics or scrolling.
+; Most things I already touched, what next?
+; 8way scrolling would be good for dungeon game, but is very complex.
+; Randomly generating content would be much more interesting when playing it myself,
+; and less artwork, more coding. Generating rooms with graph like algos not tree like.
+; What would be most interesting next here?
+; Enemy ai?
+; Problem is randomly generating jump and run levels is very hard, rather do that in
+; python on pc and try playing them on c64.
+; Not much is missing for a playable game, enemy spawn and acting, score bar, some animation stuff,
+; collecting boni, a bit game handling, done.
+; But what for, is it that interesting?
+; Two player games would need 2nd joystick. Are they easier done on c64 or on pc?
+; Competing with all the insane demo effects is pointless.
+; Short easy games is better, but what for games?
+; Rather some random stuff I can play or people could try out easily
+; BUT FIRST FINISH THIS SIMPLE GAME
+
+; -------------------------- ToDo - Higher Priority First-------------------------------
+
+; describe enemy type and set vx and color and shape from it! and also behaviour!
+; Implement actor behaviours (atm only fall down y/n) and store it to level data...
+; just store enemy type. types 0-7=8-15 only with different behaviour.
+; So some enemies have same shape but different behaviour.
+
+; Check if player is at level end (function from main loop)
+
+; Fix sprite generator to change bit combinations for colors (maybe just exchange in export)
+; check that export works - something seems still wrong, hires is not right, player has wrong color (black not blue)
+
+; ----------------
+
+; RLE decode simple level data to level data and convert type to tile type with randomness!
+
+; --------------------------- absolute needed topics above for a playable game ---------------------------------------
+
+; improve kill/dead animation, like morphing to skull, morph with pixel blending like grand prix circuit screen change
+; set sprite/actor position a bit to up/left, later restore....
+
+; sometimes after start init is not ready, like IRQ doesnt run right, seems problem with level init code
+
+; fixme show rather bonus than level in score panel
+
+; Bacteria picture as background, foreground text sprites THORSTEN JORDAN PRESENTS
+
+; Create a Makefile for all data!
+; converter scripts there as well, to generate graphic .a data for including from png!!!
+
+; Add tiles with traps (knifes, fire)
+
+; add tiles with cheese dropping down etc
+
+; Animate bonus tile(s).
+; jumping fat drop or some yellow cheese pill, maybe rotating around z
+
+; MC mode for some actors disable... one bit more for sprite multiplexer...
+
+; enemy collision is too strict, enemys are smaller, only check for collision with overlap of 16, not 24.
+
+; bonus accounting! list number of diamonds in score bar?!
+; atm only collects score
+
+; maybe tile with EXIT sign for level end
+
+; New enemy sprites like pills or T-cells ghost like etc. with animation! The Tcell ghosts could be single color white hires!
+; c64fy has no hires option yet (for sprites and maybe also for images)
+
+; start screen, also with highscore display would be good (combination of graphic/text mode). Use blend-in effect
+
+; sometimes enemy is spawned within wall and when killed replaced with boni tile. strange. LATER.
+
+; boni in uppermost line are not removed... LATER
+
+; level has one boni where island should be, strange, LATER
+
+; move video init and everything to game.a, except video mode set.
+; bank setting etc to main code..
+
+; When scrolling actors lag behind a bit! yes scroll is triggered and frame immediatly shifts,
+; but actor data handling is called only next frame, so always lags behind.
+; Maybe don't start scrolling immediatly but delay 1 frame? But it would only delay the
+; lag. FIX LATER
+
+; maybe also add boni as sprites and code a sprite multiplexer!
+
+; move scroll code to own file?
+
+; when making second level, see what it is hardcoded...
+
+; render more tiles and use them!
+;
+
+; use more background animation
+
+; use defines for IRQ registers etc.
+; Have IRQ there to start color ram shift etc. no, not needed
+;
+; Allow character Y to be a bit outside screen - fixme this is implicitly tested because we check tile above actor
+; which wraps around to low!
+;
+; store level data with 0 for background and fill in tilenrs 0-3 depending on position after rle decoding
+
+; RLE encoding of level data, when we have more levels LATER.
+
+; Tiledata etc maybe also packable by RLE.
+
+; show scroller in intro will all features, like turrican intro, use color mixing! use color gradient if possible!
+;yellow/red e.g.
+
+; implement makelevel.py in c64 code to store level data as simple RLE code with only small number of
+; data per tile and some semirandom stuff, packs well with rle!
+
+; Now jumping much better with higher gravity and higher jump speed, seems ok! test with joystick.
+; jumping is ok, but too slow when starting to fall down, needs some rework.
+; Higher jumps when pressing joystick longer works, but not as good as in turrican
+
+; ---------------------- How screen enter/exit effect works ---------------------
+; Screen enter/exit animation like Turrican 2, the spirals:
+; use 7x6 double sized sprites with multiplexing (just one sprite data).
+; Set/clear bits (64 total, 8x8 bytes) in 64 or 128 frames. Easy to store,
+; store byte number and bit number in one byte, using just 64 bytes for full
+; animation (could even use some repeat compression). Sprite color is black hires.
+; Data used is 24x16, so write 3x2 blocks of bytes every frame.
+; Same technique can also be used for any other transitions, maybe even Grand Prix Circuit
+; used it that way with the pixel in/out animation.
+
+; ------------- How scrolling works! ------------------------
+; Two characters buffers, front and back. One color ram, matching visible (front) buffer.
+; Visible columns are 38 or 39 of 40.
+; Offset 0 means pixeloffset 0 and visible columns #0-#37 (#0-#37 of world).
+; When scrolling to the right, we need to shift color ram when going from offset 7 to 8.
+; So we need to prepare the back buffer while increasing pixel offset, e.g. copy half of
+; front buffer shifted to back at pixel offset 4 and other half at 6.
+; Filling in new column is slow, so we do it in own frame (shift copy in 4, new column in 6).
+; This also means color ram is shifted one column left of back buffer.
+; While we show the front buffer with columns #0-#38 (contains #0-#39) and matching color ram,
+; the back buffer is prepared to hold columns #1-#40. This means we need to store the color
+; we generate for new column at some temporary buffer to bring it in later.
+; When pixel offset goes to 8, hardware pixel shift goes back to 0, back buffer is shown with
+; columns #1 to #40 (visible 38 columns, #1 to #38!) and color ram needs to get shifted one
+; column to the left (should start already when half of frame with pixel offset 7 is drawn!)
+; copy second half when raster bar is at top of screen with pixel offset 8.
+; After shifting of color ram we just copy the last column from temporary buffer to last column
+; of color ram and are done.
+; We have to do something when raster is at half of screen or at bottom.
+; We also need a raster IRQ for the score line. When that is triggered it can also handle the
+; actions at screen bottom (shift color ram, render new screen etc).
+; Scrolling always stops at character, not at pixel level.
+; So we need flags whether screen is moving (and what direction for later),
+; screen position in world, pixel phase while moving.
+; We do not need general double buffer handling with offset/overlap and computing how many columns
+; to update, because scrolling is fixed speed always.
+; Scroll register with 38 columns show 1-8 pixel of first char column.
+; so the 39th column can't be seen, which makes color ram update less critical.
+; This means user can see at most 39 columns, so we can shift whole color ram
+; in one run and update the last column later.
+; This also explains why we haven't seen flicker/distortions yet.
+; it still jitters/stutters but why? copy visible to back buffer takes less than one frame,
+; color ram shift as well. sometimes it seems to use more than one frame (debug with frame color)
+; maybe because last column update is slow, check if it still that slow after reworking code
+; This means color ram column #39 can never be seen, it is not time critical to update it
+; any time, e.g. when back buffer screen is prepared. But only for right scroll!
+; New idea: scroll N lines at once with N pairs of lda/sta, use x as column counter.
+; This is fast and best way to handle overlaps or new data!
+; We can shift color ram every screen, but need to shift frame buffers as well,
+; so we can do 2x and 4x scroll speed at most, not more.
+
+
+VICBANK = 3		; bank 3 is used multiply, kernal rom, I/O area etc.
+COLORRAM = $D800
+VICCHARSETBLOCK = 1	; block 1 has offset 2k
+VICSCREENBLOCK = 0	; screens at blocks 0/1 so offset 0k/1k
+VICCHARSET = VICBANK*$4000+VICCHARSETBLOCK*$0800
+SCREEN0POSITION = VICSCREENBLOCK
+SCREEN1POSITION = VICSCREENBLOCK+1
+SCREEN0 = VICBANK*$4000+SCREEN0POSITION*$0400
+SCREEN1 = VICBANK*$4000+SCREEN1POSITION*$0400
+VICSPRITES = VICBANK*$4000+$1000	; first 4K are two screens and charset ($C000-$CFFF), sprites $D000-$FFFF
+VICSPRITES_GAME = VICSPRITES+$1000	; first 64 sprites are text sprites and fix
+SPRITEPTR_GAME_OFFSET = 128
+TEMP0 = $02
+TEMP1 = $03
+TEMP2 = $04
+TEMP3 = $05
+TEMP4 = $06
+TEMP5 = $07
+TEMPADR0 = $08
+TEMPADR1 = $0A
+TEMPADR2 = $FB
+TEMPADR3 = $FD
+VICBGCOL = $D020
+VICFGCOL = $D021
+VICCTRL2 = $D016
+VICMEMCTRL = $D018
+VICCTRL1 = $D011
+VICRASTER = $D012
+TILEWIDTH = 2
+TILEHEIGHT = 2
+TILEWIDTHINPIXELS = TILEWIDTH*8
+TILEHEIGHTINPIXELS = TILEWIDTH*8
+TILESXPERSCREEN = 19	; 38 column mode
+TILESYPERSCREEN = 12
+LINESYPERSCREEN = TILESYPERSCREEN * TILEHEIGHT
+HALFLINESYPERSCREEN = LINESYPERSCREEN / 2
+HALFSCREENOFFSET = HALFLINESYPERSCREEN*40
+PIXELTOPOS = 16
+PIXELTOTILE = 16
+CIA1_DATAPORT_A = $DC00
+CIA2_DATAPORT_A = $DD00
+SCROLL_RIGHT = 1
+SCROLL_LEFT = 2
+LEVEL_DATA = $B400	; absolute address of level data (indices in tile table)
+LEVEL_TILE_DATA = $B200	; data for tiles of a level
+NR_TILES = 64	; number of tiles used in a level
+VICSPRITEENABLE = $D015
+VICSPRITECOMMONCOLOR0 = $D025
+VICSPRITECOMMONCOLOR1 = $D026
+
+; ------------------------ macros --------------------------
+
+!src "macros.a"
+
+!macro addscore .SC2, .SC1, .SC0 {
+	sed
+	clc
+	lda score
+	adc #.SC0
+	sta score
+	lda score+1
+	adc #.SC1
+	sta score+1
+	lda score+2
+	adc #.SC2
+	sta score+2
+	cld
+}
+
+!macro addlive {
+	sed
+	lda lives
+	clc
+	adc #1
+	sta lives
+	cld
+}
+
+!macro takelive {
+	sed
+	lda lives
+	sec
+	sbc #1
+	sta lives
+	cld
+}
+
+; -------------------------------------- program ------------------------------------------
+
+*= $0801	; Program start at 2049
+
+; Basic start code 1979 SYS2066:REM TJ
+!byte $10,$08,$BB,$07,$9E,$32,$30,$36,$36,$3A,$8F,$20,$54,$4A,$00,$00,$00
+
+main
+; ---------------------------- Initialization
+; disable interrupts
+	sei
+
+; VIC bank set
+	lda CIA2_DATAPORT_A+2
+	ora #$03
+	sta CIA2_DATAPORT_A+2
+	lda CIA2_DATAPORT_A
+	and #$FC
+	ora #(3 - VICBANK)
+	sta CIA2_DATAPORT_A
+
+; VIC memory area set up
+	lda #VICSCREENBLOCK*16+VICCHARSETBLOCK*2	; in bitmap mode bit 3 sets bitmap block, in charmode bits 1-3 charblock!
+	sta VICMEMCTRL
+;	lda #>SCREEN0	; inform Kernal where screen is - but we don't need the Kernal
+;	sta $288
+
+; Set up generic IRQ handling (only raster irqs)
+	+set16im $FFFE, rasterirq_noop	; set to address that does nothing
+	+set8im VICRASTER, 0
+	+set8im VICCTRL1, $1B	; clear 9th bit of raster line selector, set mc mode
+	+set8im $D01A, $01	; Set only raster as source for IRQ of VIC
+	lda #$7F		; disable timer IRQs
+	sta $DC0D
+	lda $DC0D
+	asl $D019	; Acknowledge possible pending raster irq
+
+; Initialize data below I/O area (text sprites)
+	; address 1 = $30: all RAM
+	;           = $31: read CHAR ROM, else all RAM
+	;           = $32: read kernal + CHAR ROM, else all RAM
+	;           = $35: enable I/O, else all RAM
+	;           = $36: enable kernal and I/O, else all RAM
+	+set8im 1, $30		; blend out I/O area - enable all RAM
+	+memcopy_pages VICSPRITES, textcharset_data, 16 ; 42 sprites -> 10.5k, we copy all 64.
+
+; set interrupt vectors because kernal is disabled
+	+set16im $FFFA, only_the_rti	; NMI handler
+	+set16im $FFFC, only_the_rts	; reset vector
+	+set16im $FFFE, rasterirq_noop	; dummy raster irq with only ack
+; Set ROM layout and enable interrupts (blend in I/O, else all RAM).
+	+set8im 1, $35
+	cli
+
+; -------------------------------------- begin of loading/intro/game --------------------------------------
+
+; fixme disabled, background broken and not ready yet.
+; fixme also offer smaller images to encode as rle (like first 48 lines)
+; fixme irq should place sprites, coordinate change by main program!
+;	jsr show_intro
+
+; Main screen of the game with highscore display
+; fixme logo should overwrite only first 8 lines, so shorten rle data!
+startmainscreen
+	jsr mainscreen
+
+; *********************************** main game logic. *********************************************
+; set level number to 1 and lives to 3
+	+set8im level_nr, 1
+	+set8im lives, 3
+; handle next level
+nextlevel
+	lda level_nr
+	; check for level 1
+	cmp #1
+	beq +
+	jmp check_level2
++	; load data for level 1
+	; now load level specific data to fix memory places and handle level
+	; level tile data and tile indices, stored
+	+memcopy_pages LEVEL_TILE_DATA, level1_tiledata, 2+12	; 0.5k+3k = 2+12 pages
+	; level tile data - already copied above, enable later when level data decoding is implemented
+	;+memcopy_pages LEVEL_DATA, level1_data, 12
+	; level charset	
+	+memcopy_pages VICCHARSET, level1_chardata, 8	; 2k = 8 pages
+	; level sprites
+	+memcopy_pages VICSPRITES_GAME, level1_sprites, 31 ; 8k = 32 pages, don't overwrite last page
+	; level specific colors
+	+copy8 VICFGCOL, level1_fixcolors
+	+copy8 VICFGCOL+1, level1_fixcolors+1
+	+copy8 VICFGCOL+2, level1_fixcolors+2
+	+set8im VICSPRITECOMMONCOLOR0, 0
+	+set8im VICSPRITECOMMONCOLOR1, 1
+	jmp ++
+check_level2
+	; cmp #2; bne + ; ...
+	; no level number matches, so last level completed
+	; jsr outtro fixme
+	jmp checkhighscore
+++	; run this level
+	jsr run_level
+	; when level returns, check if game over or lives left
+	lda lives
+	beq checkhighscore
+	inc level_nr
+	jmp nextlevel
+
+checkhighscore
+	; fixme later
+	jmp startmainscreen
+
+; --------------------- function library ----------------------
+
+
+; ----------------------- wait for keypress
+; Uses	A
+wait_for_joy2_button
+	; wait until not pressed, then pressed, then released
+-	lda CIA1_DATAPORT_A
+	and #$10
+	beq -
+-	lda CIA1_DATAPORT_A
+	and #$10
+	bne -
+-	lda CIA1_DATAPORT_A
+	and #$10
+	beq -
+	rts
+
+; ----------------------- joystick port 2 check
+; Uses	A, X, Y
+check_joy2_state
+	ldx #0
+	ldy #1
+	lda CIA1_DATAPORT_A
+	lsr		; instead of lsr/bcs may use bit here, but would need loading of A.
+	bcs +
+	sty joy2_up
+	stx joy2_down
+	jmp ++
++	stx joy2_up
+++	lsr
+	bcs +
+	sty joy2_down
+	stx joy2_up
+	jmp ++
++	stx joy2_down
+++	lsr
+	bcs +
+	sty joy2_left
+	stx joy2_right
+	jmp ++
++	stx joy2_left
+++	lsr
+	bcs +
+	sty joy2_right
+	stx joy2_left
+	jmp ++
++	stx joy2_right
+++	lsr
+	bcs +
+	sty joy2_fire
+	rts
++	stx joy2_fire
+	rts
+
+; -------------------- decode RLE data ---------------------
+; Input	TEMPADR0	Source address of data
+; Input TEMPADR1	Destination address of data
+; Uses	A,X,Y
+rle_decode
+	ldy #0
+	lda (TEMPADR0),y
+	bmi rle_decode_repeat
+	; No repeat or stop, just copy data that follows
+	tax	; copy repeat count (copy one more than this count!)
+	; Increase read address by one
+	inc TEMPADR0
+	bne +
+	inc TEMPADR0+1
++
+-	lda (TEMPADR0),y
+	sta (TEMPADR1),y
+	iny
+	dex
+	bpl -
+	; now add Y to both addresses
+	tya
+	clc
+	adc TEMPADR0
+	sta TEMPADR0
+	bcc +
+	inc TEMPADR0+1
++
+--	tya
+	clc	; maybe already 0?
+	adc TEMPADR1
+	sta TEMPADR1
+	bcc +
+	inc TEMPADR1+1
++	jmp rle_decode
+rle_decode_repeat
+	cmp #255
+	bne +
+	rts	; done
++	and #$7F
+	clc
+	adc #3
+	tax
+	; Increase read address by one
+	inc TEMPADR0
+	bne +
+	inc TEMPADR0+1
++	ldy #0
+	lda (TEMPADR0),y
+-	sta (TEMPADR1),y
+	iny
+	dex
+	bne -
+	; Increase read address by one and write address by Y
+	inc TEMPADR0
+	bne +
+	inc TEMPADR0+1
++	jmp --
+
+; ----------------------------------- data -------------------------------
+
+; fixme to level data
+; 32 versions of two chars for animation
+!align 255, 0	; aligning is important!
+bganimation_data0
+!src "cheese_bganimation0.png_phases.png_chardata.a"
+
+; Raster IRQ
+!src "rasterirq.a"
+
+; Intro
+!src "intro.a"
+
+; handling of main screen
+!src "mainscreen.a"
+
+; handling of level
+!src "level.a"
+
+; handling of blend in effect at level start
+!src "blendin.a"
+
+; handling of scrolling
+!src "scrolling.a"
+
+; ===========================================================================
+; All the *** DATA ***
+; ===========================================================================
+
+level_nr
+!byte 0
+
+lives
+!byte 0
+
+score	; stored in BCD values.
+!byte 0, 0, 0
+
+; Data for joystick port #2 - maybe put to zero page, but not performance critical.
+joy2_up
+!byte 0
+joy2_down
+!byte 0
+joy2_left
+!byte 0
+joy2_right
+!byte 0
+joy2_fire
+!byte 0
+
+; Text sprites (at max 64 sprites)
+!src "data/textcharset_sprdata.a"
+
+; -------------------------- data for levels ------------------------------
+
+level1_fixcolors
+!src "data/cheese_alltiles_fixcolors.a"
+
+!align 255, 0
+level1_sprites
+!src "data/level1_sprites.a"
+!src "data/level1_sprites.a" ; fixme for testing more sprites, to have 16. atm data 7pages
+!src "data/level1_sprites.a"
+!src "data/level1_sprites.a"
+!src "data/level1_sprites.a"
+
+; later:
+; pack level data from png as rle and store it.
+; unpack directly to $B400 and replace every category number by real tile
+; level gfx is rgb png, rather use palette to have 0-15 numbers.
+
+; data for tiles first
+!align 255, 0
+level1_tiledata
+!src "data/cheese_alltiles_tiledata.a"
+
+; The data for a level (256 tiles horizontally, 12 tiles vertically, hence 3072 bytes).
+!align 255,0
+level1_data
+!src "data/cheese_level1.png_lvldata.a"
+
+; be careful - blocks with one color are coded as multicolor, gives problems with background tiles!
+; so the data is adjusted after conversion, also alignment added!
+; fixme this may be wrong now
+!align 255,0
+level1_chardata
+!src "data/cheese_alltiles_chardata.a"
+

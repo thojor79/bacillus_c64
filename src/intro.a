@@ -1,0 +1,361 @@
+; Bacillus_c64
+; Copyright (C) 2016-2017  Thorsten Jordan.
+; 
+; This program is free software; you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation; either version 2 of the License, or
+; (at your option) any later version.
+; 
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+; ***************************************************************************************
+;
+;    intro screen
+;
+; ***************************************************************************************
+
+VICBITMAPBLOCK = 1
+VICBITMAP = VICBANK*$4000+VICBITMAPBLOCK*$2000
+VICSCREENBLOCKBITMAP = 0
+VICBITMAPCHARDATA = VICBANK*$4000+VICSCREENBLOCKBITMAP*$0400
+
+show_intro
+; VIC memory area set up
+	lda #VICSCREENBLOCKBITMAP*16+VICBITMAPBLOCK*8+1	; in bitmap mode bit 3 sets bitmap block, in charmode bits 1-3 charblock!
+	sta VICMEMCTRL
+;	lda #>VICBITMAPCHARDATA	; inform Kernal where screen is - no, kernal disabled
+;	sta $288
+
+; setup VIC bitmap multicolor mode, fixme rather set registers directly
+	lda VICCTRL1
+	ora #$20
+	sta VICCTRL1	; Bitmap mode on
+	lda VICCTRL2
+	ora #$10
+	sta VICCTRL2	; Multicolor mode on
+
+; set background color
+	lda #$00
+	sta VICBGCOL
+	lda introscreen_backgroundcolor
+	sta VICFGCOL
+
+; turn off VIC display
+	lda $D011
+	and #$EF
+	sta $D011
+
+; copy data to destination
+	+set16im TEMPADR0, introscreen_bitmapdata_rle
+	+set16im TEMPADR1, VICBITMAP
+	jsr rle_decode
+	+set16im TEMPADR0, introscreen_chardata_rle
+	+set16im TEMPADR1, VICBITMAPCHARDATA
+	jsr rle_decode
+	+set16im TEMPADR0, introscreen_colordata_rle
+	+set16im TEMPADR1, COLORRAM
+	jsr rle_decode
+
+	sei
+	+set16im $FFFE, rasterirq_intro_text
+	+set8im VICRASTER, INTRO_RL0
+	cli
+
+; turn on VIC display
+	lda $D011
+	ora #$10
+	sta $D011
+
+; We have 3 lines of text with 21 lines each, out of 200.
+; Makes a difference of ~34 lines between each text line,
+; first raster line is 51, then always +34,+21, so raster lines
+; are 85, 140, 195. We need to fire it two lines earlier.
+; So use 83, 138, 193.
+INTRO_SL0 = 85
+INTRO_SL1 = 140
+INTRO_SL2 = 195
+INTRO_SPRITE_TO_RASTER_OFFSET = -22
+INTRO_RL0 = INTRO_SL0 + INTRO_SPRITE_TO_RASTER_OFFSET
+INTRO_RL1 = INTRO_SL1 + INTRO_SPRITE_TO_RASTER_OFFSET
+INTRO_RL2 = INTRO_SL2 + INTRO_SPRITE_TO_RASTER_OFFSET
+	
+; show logo
+!macro showsprite .nr, .ptr, .posx, .posy, .col {
+	lda #<.posx
+	sta $D000+.nr*2		; x pos low
+	lda $D010
+	ora #((>.posx) << .nr)
+	sta $D010		; x pos high
+	lda .posy
+	sta $D001+.nr*2		; y pos
+	lda #.ptr
+	sta SCREEN0+$03F8+.nr	; pointer
+	lda #.col
+	sta $D027+.nr		; color
+}
+	
+	+set8im VICSPRITEENABLE, $FF	; all sprites on
+	lda #$00
+	sta $D01B	; sprites in foreground
+	sta $D017	; normal size
+	sta $D01C	; hires
+	sta $D01D	; normal size
+
+; wait
+	; show text color cycling
+	ldx #8
+--
+!for COUNT, 0, 7 {
+	lda intro_text_colors+COUNT, x
+	sta $D027+COUNT
+}
+!for COUNT, 0, 1 {
+	; wait for raster
+-	lda VICCTRL1
+	bmi -
+-	lda VICCTRL1
+	bpl -
+}
+	dex
+	bne --
+	ldx #8
+
+	jmp --
+; fixme break on fire button
+
+; fixme have states for intro
+; state 0 scrolls in "presents" text.
+; state 1 scrolls out presents text.
+; state 2 scrolls in logo from above and large sprite from bottom
+;    (maybe copy new multicolor data to top of screen line by line and clear rest of screen)
+; state 3 vaporize bacillus at lower part of screen?
+; draw some colorful logo?
+; or use background color with colorful raster bar as logo!
+; so stage 3 would be to blend in the logo. can be done line by line switch of vic bank or
+; copying in the data. having 8 lines of gap allows copying the charset/colordata as well.
+; would be easier.
+; argh now the background image data is broken, has worked before!!!
+
+; the raster irq that shows the texts
+rasterirq_intro_text
+	pha
+	txa
+	pha
+	tya
+	pha
+	; Raster IRQ is triggered many lines above so we can set x/y coordinates first.
+	; Set sprite x,y,pointer values
+	ldx intro_raster_line_config
+	; set time critical Y coordinates first
+	lda intro_sprite_y,x
+!for COUNT, 0, 7 {
+	sta $D001+COUNT*2
+}
+	; then X coordinates and sprite pointers
+	txa	; x*8 for sprite pointer access
+	asl
+	asl
+	asl
+	tax
+!for COUNT, 0, 7 {
+	lda intro_sprite_ptr+COUNT,x
+	sta VICBITMAPCHARDATA+$03F8+COUNT
+}
+	ldx intro_raster_line_config
+	lda intro_state_byte
+	and #1
+	beq +
+	; update stored x coordinates then.
+	; take real x (16bit) and add velocity,
+	; store as first x coordinate, add 7*32 for the following sprites,
+	; store as next coordinates then
+	lda intro_sprite_real_vx,x
+	clc
+	adc intro_sprite_real_ax,x
+	sta intro_sprite_real_vx,x
+	lda intro_sprite_real_vxh,x
+	adc intro_sprite_real_axh,x
+	sta intro_sprite_real_vxh,x
+	lda intro_sprite_real_xl,x
+	clc
+	adc intro_sprite_real_vx,x
+	sta intro_sprite_real_xl,x
+	sta TEMP0
+	lda intro_sprite_real_xh,x
+	adc intro_sprite_real_vxh,x
+	sta intro_sprite_real_xh,x
+	sta TEMP1
+	jmp ++
++	lda intro_sprite_real_xl,x
+	sta TEMP0
+	lda intro_sprite_real_xh,x
+	sta TEMP1
+++	; now convert to sprite coordinate space by shifting 6 bits to the right.
+	cmp #$80	; set carry from highest bit, keeps accu!
+	ror TEMP1
+	ror TEMP0
+	cmp #$80	; set carry from highest bit
+	ror TEMP1
+	ror TEMP0
+	cmp #$80	; set carry from highest bit
+	ror TEMP1
+	ror TEMP0
+	cmp #$80	; set carry from highest bit
+	ror TEMP1
+	ror TEMP0
+	cmp #$80	; set carry from highest bit
+	ror TEMP1
+	ror TEMP0
+	asl		; set carry from highest bit, trashes accu
+	ror TEMP1
+	ror TEMP0
+	+set8im TEMP2, 1	; prepare or-mask for hibit-register
+	+set8im TEMP3, 0	; store byte with 9th bits
+	ldy #0
+-	; load sprite x coordinate 16bit register and generate sprite coordinates
+	lda TEMP0
+	sta $D000,y
+	lda TEMP1
+	beq ++
+	cmp #2
+	bcc +
+	; highbyte is >= 2 so make sprite invisible
+	lda #$FF	; set low byte to 255, so total coordinate is 511 and sprite is invisible
+	sta $D000,y
++	lda TEMP3	; set 9th bit to 1 for this sprite
+	ora TEMP2
+	sta TEMP3
+++	clc
+	rol TEMP2	; hibit adjustment
+	lda TEMP0	; add 32 to coordinate
+	clc
+	adc #32
+	sta TEMP0
+	lda TEMP1
+	adc #0
+	sta TEMP1
+	iny
+	iny
+	cpy #16
+	bne -
+	lda TEMP3	; set sprite highbits
+	sta $D010
+
+	; setup next raster irq line
+	inx
+	cpx #3
+	bne +++
+	; end of all text lines
+	; decrease frame counter, stop everything after a fix frame count
+	dec intro_frame_counter
+	bne ++
+	inc intro_state_byte
+	lda #2
+	cmp intro_state_byte
+	bne +
+	; negate acceleration values
+	ldy #6
+-	lda intro_sprite_real_ax-1,y
+	eor #$FF
+	clc
+	adc #1
+	sta intro_sprite_real_ax-1,y
+	dey
+	bne -
++	+set8im intro_frame_counter, 202
+++	ldx #0
++++	stx intro_raster_line_config
+	lda intro_raster_lines,x
+	sta VICRASTER
+	jmp rasterirq_ack_and_end
+
+; Store position, velocity, acceleration for every line of text.
+; Should take ca. 3 seconds to show text, so acceleration must be
+; so small that it holds for ~150 frames (maybe 128, would be 7 bits).
+; Leftmost position is 36-320, rightmost 320+24+36=380 so we need 9 bits,
+; plus 1 sign bit. So we have 6 bits of subpixel accuracy.
+; In 203 frames movement does 320 pixels with acceleration 1/64,
+; velocity is then 202/64 (3.16 pixels/frame).
+; How long does it take for the text to show?
+; so text moves in from right/left/right (store subpixel accuracy and signed values)
+; and stops at middle of screen.
+; From this 16bit value shift bits to have real pixel coordinates.
+; Positions start at 36+32*sprite, so start at 380 or -260 (*64).
+; Velocity is 202 initially, acceleration is 1.
+; fixme after the hold phase acceleration is negated but then speed is insanely high.
+
+intro_raster_lines
+!byte INTRO_RL0, INTRO_RL1, INTRO_RL2
+
+intro_raster_line_config
+!byte 0
+
+intro_sprite_y
+!byte INTRO_SL0, INTRO_SL1, INTRO_SL2
+
+INTRO_PX = (24+36+320)*64
+INTRO_PX2 = (24+36-320)*64
+INTRO_VX = 202
+INTRO_AX = 1
+
+intro_sprite_real_xl
+!byte <INTRO_PX, <INTRO_PX2, <INTRO_PX
+
+intro_sprite_real_xh
+!byte >INTRO_PX, >INTRO_PX2, >INTRO_PX
+
+intro_sprite_real_vx
+!byte <(-INTRO_VX), <INTRO_VX, <(-INTRO_VX)
+
+intro_sprite_real_vxh
+!byte >(-INTRO_VX), >INTRO_VX, >(-INTRO_VX)
+
+intro_sprite_real_ax
+!byte <INTRO_AX, <(-INTRO_AX), <INTRO_AX
+
+intro_sprite_real_axh
+!byte >INTRO_AX, >(-INTRO_AX), >INTRO_AX
+
+intro_sprite_ptr
+; "THORSTEN JORDAN PRESENTS"
+;fixme we have different text sprites now!
+!byte 83,71,78,81,82,83,68,77,42,73,78,81,67,64,77,42,79,81,68,82,68,77,83,82
+
+intro_state_byte
+!byte 1
+
+intro_frame_counter
+!byte 202
+
+; a generic sprite multiplexer would be useful, for text scroller or maybe zone split technique
+; but we need rather a special raster irq here, that puts the showsprite commands out
+; put values rather in tables.
+; Which values do we have for every sprite?
+; X-Coord (1 byte, 1 Bit)
+; Y-Coord (1 Byte)
+; Pointer (1 Byte)
+; Color (1 Byte)
+; X/Y Double size (doesn't change)
+; Multicolor enable (shouldn't change, but we need it in game, but not in multiplexer)
+; Enable (all sprites on)
+; Priority to background (always foreground)
+; For intro color doesn't need to change.
+; X/Y/Pointer/Color would be 4 bytes per sprite plus one for x highbit.
+; For 8 sprites this is too much for one scanline (6 cycles per byte).
+; maybe generate the code for the raster irq or fill in the values in existing code,
+; that exists in two versions (double buffering).
+; Here we need x/y/pointer per sprite.
+
+intro_text_colors
+!byte 0, 11, 12, 15, 1, 15, 12, 11, 0, 11, 12, 15, 1, 15, 12, 11
+
+; the intro screen
+!src "data/introscreen_rle.a"
+
