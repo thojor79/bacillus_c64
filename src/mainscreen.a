@@ -171,6 +171,10 @@ rasterirq_mainlogo
 	inx
 	dey
 	bne -
+	; wait one more raster line, otherwise visual glitch appears
+-	lda VICRASTER
+	cmp VICRASTER
+	bcs -
 	; set up hires text mode
 	+set8im VICFGCOL, 0	; magenta as color
 	+set8im VICCTRL1, $1B	; char mode

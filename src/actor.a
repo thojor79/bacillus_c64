@@ -925,46 +925,7 @@ end_of_player_dead_anim
 	+set8im actor_dead_anim_phase, 0
 	jmp handle_dead_actors_enemies
 
-; -------------------- Actor data --------------------------------
-; fixme this data can mostly be stored at $0200, zero initialized!
-; saves space in .prg, 14*8+some extra bytes
-actor_state
-!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte ACTOR_DISABLED }
-actor_x	; note! We don't store low/high bytes in consecutive order as usual, but as two blocks, so we can index them easier!!!
-!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
-actor_xh
-!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
-actor_y
-!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
-actor_yh
-!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
-actor_vx
-!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
-actor_vy
-!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
-actor_shape
-!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
-actor_color
-!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
-actor_screen_x
-!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
-actor_screen_y
-!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
-actor_screen_xh
-!byte 0
-actor_behaviour
-!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
-actor_type
-!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
-actor_jump_count
-!byte 0
-actor_dead_anim_phase
-!for COUNT, 0, MAX_ACTOR_COUNT-1 { !byte 0 }
-player_invulnerable_counter
-!byte 0
-sprite_anim_phase
-!byte 0
-
+; -------------------- data --------------------------------
 bits_for_x
 !byte 1,2,4,8,16,32,64,128
 bits_for_not_x
@@ -974,4 +935,3 @@ bits_for_not_x
 ; Store shape, color, behaviour and initial vx for each type and set it when spawning.
 ; This means behaviour 0/1 and move direction 0/1 takes 2 bits, so we have 4 different enemy types per level.
 ; Or always let them walk left and have 8 types. Encoding vx would maybe be better.
-

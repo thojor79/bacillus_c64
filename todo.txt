@@ -1,15 +1,19 @@
 ToDo - higher priority first
 ============================
 
-fix level init: animated characters, player pos and every data needed to run the level
-first identify all data that is needed, scrolling data at least.
-could be stored at $0200 too
+try to use different charset for status bar. 20 chars eat just 3 sprites, if
+timing allows to switch memory registers. so we can use full 256 chars for
+tiles and have less problems. 
+even better: use last bytes for characters, so don't use chars 0-19 but
+235-254 and leave 255 out and place them at end of ram! ->
+irq vectors are kept writeable and free and sprites still start at
+$E000 - best solution!
+offset status bar characters by 235 and copy the data there -> done!
+test it in steps, move chardata to 235+ and draw chars 235+, then use
+mem register change in irq , better do it first and check timing!
 
 implement data for more levels! maybe same tileset and just other level
 first, later new tilesets for other worlds/levels
-
-when change from main screen to level there are some visual bugs because
-display is not off, also some glitch in raster display below logo
 
 paint more animation phases! now temporary data available
 
@@ -22,18 +26,8 @@ xy coded additionally, maybe not code player in level data so we can have
 16 enemies, not 15. use type 16 then for player. an extra check in that
 routine doesn't matter
 
-store actor data at $0200 ? or even zero page?
-
-try to use different charset for status bar. 20 chars eat just 3 sprites, if
-timing allows to switch memory registers. so we can use full 256 chars for
-tiles and have less problems. 
-even better: use last bytes for characters, so don't use chars 0-19 but
-235-254 and leave 255 out and place them at end of ram! ->
-irq vectors are kept writeable and free and sprites still start at
-$E000 - best solution!
-offset status bar characters by 235 and copy the data there -> done!
-test it in steps, move chardata to 235+ and draw chars 235+, then use
-mem register change in irq , better do it first and check timing!
+boni in uppermost line can not be collected because actor can't go high
+enough to collect them
 
 background animation generalize - char no and count and #phases not
 hardcoded but per level, i.e. selfmod code!
@@ -49,17 +43,24 @@ we should use less data for bg animation. 8 byte per char is enough for
 64 phases, at 8 phases we can animate 8 chars.
 
 background animated tiles with fire/knives/diamond like cheese parts?
+maybe some spare sprites with actor numbers >= 16 as boni or traps.
 
 more tiles: cheese dripping from above, animated tiles like cheese rolls
 rotating etc.
 
+store more temporary data in zeropage or at $0200, define space centrally in game.a
+mostly checked!
+checks pending:
+blendin
+game
+intro (can use same space as scrolling!)
+
 implement blend out effect for level end - reverse reading of blend in,
 rather easy but rarely used
 
-implement different actor types - difficult but best improvement of game
-play. store different actors in level data! maybe only change generator py
-script. only different behaviour left (later) script now randomly, is ok
-store actor_data $0200.
+implement different actor behavior, either by type or by flag (less types
+available then). Generate them pseudo randomly by position (done)
+Behaviour: walk with fall down, follow player, flying pattern, flying homing
 
 implement dying animation with morph to skull or so
 
@@ -70,3 +71,10 @@ game over: wait for joy button not in first 1-2 seconds
 implement game complete screen (outtro)
 
 implement part of image converter with rle encoding
+
+Ideas for later
+===============
+
+if we have only 64 tiles and 8 background tiles as now we can use 24 actor
+types, not 16, by using bit6|bit7 as flag of actor! But 16 is enough for
+now.

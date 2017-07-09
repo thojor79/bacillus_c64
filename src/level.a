@@ -30,6 +30,13 @@ run_level
 	sta VICCTRL2
 	sta last_value_of_vicctrl2
 
+; clear temporary data in zeropage etc.
+	lda #0
+	ldx #(temp_data_end - temp_data_begin)
+-	sta temp_data_begin-1,x
+	dex
+	bne -
+
 ; sprite multicolor off for all sprites
 	+set8im $D01C, 0	; disable multicolor for all sprites
 

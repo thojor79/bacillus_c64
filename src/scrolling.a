@@ -68,9 +68,6 @@ handle_scrolling
 +	jmp scroll_left
 
 ; ----------------------- Handle scrolling to the right in 1 pixel steps.
-vicctrl2forpos
-!byte $17,$16,$15,$14,$13,$12,$11,$10	; multicolor bit enabled!
-
 scroll_right
 	; increment screen position by two pixels
 	+add16im screen_pos_x, $20
@@ -529,9 +526,6 @@ copy_temporary_chardata_to_screen_column
 ;	+set8im VICBGCOL, 0	; benchmark
 	rts
 
-chardata_tempcolumn
-!for COUNT, 0, 23 { !byte 0 }
-
 ; ------------------- render a tile to visible screen
 ; Input	X,Y Tilecoordinates in level, TEMP0 tile nr.
 ; Uses TEMPADR0, TEMPADR1, A
@@ -597,16 +591,6 @@ render_tile
 	sta (TEMPADR1),y
 	rts
 
-table_mul80_lo
-!for COUNT, 0, TILESYPERSCREEN-1 {
-!byte <(COUNT*80)
-}
-
-table_mul80_hi
-!for COUNT, 0, TILESYPERSCREEN-1 {
-!byte >(COUNT*80)
-}
-
 ; --------------- copy temporary color data to color ram column ----------------------------------
 ; Input	A - destination column
 ; Uses X
@@ -655,31 +639,17 @@ render_tiles_on_screen
 	bne -
 	rts
 
-; screen position data
-screen_pos_x	; offset of left border, MSB: tile, LSB: subtile in pixels/subpixel accuracy (4bit/4bit)
-!word $0000
-render_pos_x	; offset of left border of framebuffer that we render to (in tile,subtile coords, so lower byte is 00 or 80).
-!word $0000
-visibleframebuffer
-!byte $00
-visibleframebuffer_adrmsb
-!byte $00
-renderframebuffer_adrmsb
-!byte $00
-backframebuffer_adrmsb
-!byte $00
-background_animation_phase
-!byte $00
-colorramshift_to_renderpos
-!byte 0
+; -------------------------------- data (tables)
 
-is_scroll_active	; are we in scrolling mode (stores current scroll direction if != 0)
-!byte 0
-scroll_direction	; in what direction are we scrolling (0-none,1-right,2-left,4-up,8-down)
-!byte 0
+vicctrl2forpos
+!byte $17,$16,$15,$14,$13,$12,$11,$10	; multicolor bit enabled!
 
-; Temporary data for screen scrolling
-!align 31, 0	; Align so that adding 24 doesn't lead to page change!
-colorram_tempcolumn	; 24 bytes for colors of one column
-!byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+table_mul80_lo
+!for COUNT, 0, TILESYPERSCREEN-1 {
+!byte <(COUNT*80)
+}
 
+table_mul80_hi
+!for COUNT, 0, TILESYPERSCREEN-1 {
+!byte >(COUNT*80)
+}

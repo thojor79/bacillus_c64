@@ -298,16 +298,6 @@ SCREEN1 = VICBANK*$4000+SCREEN1POSITION*$0400
 VICSPRITES = VICBANK*$4000+$1000	; first 4K are two screens and charset ($C000-$CFFF), sprites $D000-$FFFF
 VICSPRITES_GAME = VICSPRITES+$1000	; first 64 sprites are text sprites and fix
 SPRITEPTR_GAME_OFFSET = 128
-TEMP0 = $02
-TEMP1 = $03
-TEMP2 = $04
-TEMP3 = $05
-TEMP4 = $06
-TEMP5 = $07
-TEMPADR0 = $08
-TEMPADR1 = $0A
-TEMPADR2 = $FB
-TEMPADR3 = $FD
 VICBGCOL = $D020
 VICFGCOL = $D021
 VICCTRL2 = $D016
@@ -335,6 +325,56 @@ NR_TILES = 64	; number of tiles used in a level
 VICSPRITEENABLE = $D015
 VICSPRITECOMMONCOLOR0 = $D025
 VICSPRITECOMMONCOLOR1 = $D026
+; --------------- temporary variables in zeropage
+TEMP0 = $02
+TEMP1 = $03
+TEMP2 = $04
+TEMP3 = $05
+TEMP4 = $06
+TEMP5 = $07
+TEMPADR0 = $08
+TEMPADR1 = $0A
+TEMPADR2 = $0C
+TEMPADR3 = $0E
+; ---------------- temporary data in zeropage and at $0200 and on
+; --- note with more than 8 actors zero page space is not sufficient.
+temp_data_begin = $10
+colorram_tempcolumn = $10	; needs 24 bytes without page boundary - Temporary data for screen scrolling
+chardata_tempcolumn = $28	; also 24 bytes
+screen_pos_x = $40		; offset of left border, MSB: tile, LSB: subtile in pixels/subpixel accuracy (4bit/4bit)
+render_pos_x = $42		; offset of left border of framebuffer that we render to (in tile,subtile coords, so lower byte is 00 or 80).
+; --- data for scrolling
+visibleframebuffer = $44
+visibleframebuffer_adrmsb = $45
+renderframebuffer_adrmsb = $46
+backframebuffer_adrmsb = $47
+background_animation_phase = $48
+colorramshift_to_renderpos = $49
+is_scroll_active = $4A		; are we in scrolling mode (stores current scroll direction if != 0)
+scroll_direction = $4B		; in what direction are we scrolling (0-none,1-right,2-left,4-up,8-down)
+; --- data for actors - note addresses rather per computation, not hardcoded?
+actor_state = $4C		; 8*ACTOR_DISABLED, which is 0, so just zero initialize!
+actor_x = $54			; LO/HiByte in separate tables
+actor_xh = $5C			; LO/HiByte in separate tables
+actor_y = $64
+actor_yh = $6C
+actor_vx = $74
+actor_vy = $7C
+actor_shape = $84
+actor_color = $8C
+actor_screen_x = $94
+actor_screen_y = $9C
+actor_behaviour = $A4
+actor_type = $AC
+actor_dead_anim_phase = $B4
+; -- single byte data
+actor_screen_xh = $BC
+actor_jump_count = $BD
+player_invulnerable_counter = $BE
+sprite_anim_phase = $BF
+
+temp_data_end = $C0		; final address
+
 
 ; ------------------------ macros --------------------------
 
@@ -440,6 +480,8 @@ startmainscreen
 	jsr mainscreen
 
 ; *********************************** main game logic. *********************************************
+; turn display off
+	+set8im VICCTRL1, $0B
 ; set level number to 1 and lives to 3
 	+set8im level_nr, 1
 	+set8im lives, 3
