@@ -15,8 +15,6 @@ mem register change in irq , better do it first and check timing!
 implement data for more levels! maybe same tileset and just other level
 first, later new tilesets for other worlds/levels
 
-paint more animation phases! now temporary data available
-
 fix intro - only sprite display in irq, coordinate computation in normal
 code. not much work then intro is done!
 
