@@ -6,6 +6,9 @@
 
 bacillus.prg : src/game.a src/macros.a src/actor.a src/intro.a src/rasterirq.a src/mainscreen.a src/blendin.a src/level.a src/scrolling.a data/textcharset_sprdata.a data/introscreen_rle.a data/mainlogo_rle.a data/cheese_alltiles_chardata.a data/level*sprites.a data/cheese_level1.png_lvldata.a
 	acme src/game.a
+	
+bacillus.d64 : bacillus.prg
+	c1541 -format diskname,id d64 bacillus.d64 -attach bacillus.d64 -write bacillus.prg bacillus
 
 run : bacillus.prg
 	x64 --autostart bacillus.prg
@@ -20,7 +23,7 @@ data : gfx/textcharset.png gfx/introscreen.jpg gfx/mainlogo.png gfx/cheese_allti
 	rm -rf gfx/output
 
 leveldata : gfx/cheese_level1.png
-	cd gfx && ../makelevel.py cheese_level1.png && mv cheese_level1.png_lvldata.a ../data && cd ..
+	cd gfx && ../src/makelevel.py cheese_level1.png && mv cheese_level1.png_lvldata.a ../data && cd ..
 
 spritedata : gfx/*sprite*
 	mkdir -p gfx/output
@@ -34,4 +37,6 @@ spritedata : gfx/*sprite*
 	rm -rf gfx/output
 
 clean :
+	mv data/scorepanel_chardata.a .
 	rm -f bacillus.prg data/*
+	mv scorepanel_chardata.a data
