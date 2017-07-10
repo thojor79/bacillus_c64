@@ -40,6 +40,13 @@ run_level
 ; set initial screen_pos - it is NOT 0,0 and influences scrolling and VICMEMCTRL!
 	+set8im screen_pos_x, $40	; Pixel Offset 4 (neutral position)
 
+; set initial buffer addresses
+	lda #>SCREEN1
+        sta backframebuffer_adrmsb
+        lda #>SCREEN0
+        sta visibleframebuffer_adrmsb
+        sta renderframebuffer_adrmsb
+
 ; sprite multicolor off for all sprites
 	+set8im $D01C, 0	; disable multicolor for all sprites
 
@@ -57,6 +64,7 @@ run_level
 	ldx #40
 -	lda scorepanelchars-1,x
 	sta SCREEN0+24*40-1,x
+	sta SCREEN1+24*40-1,x
 	lda #0
 	sta COLORRAM+24*40-1,x
 	dex
@@ -217,6 +225,7 @@ update_score_panel
 	sec
 	adc #SCPO
 	sta SCREEN0+24*40+38
+	sta SCREEN1+24*40+38
 	lda score
 	lsr
 	lsr
@@ -225,11 +234,13 @@ update_score_panel
 	sec
 	adc #SCPO
 	sta SCREEN0+24*40+37
+	sta SCREEN1+24*40+37
 	lda score+1
 	and #$0F
 	sec
 	adc #SCPO
 	sta SCREEN0+24*40+36
+	sta SCREEN1+24*40+36
 	lda score+1
 	lsr
 	lsr
@@ -238,17 +249,20 @@ update_score_panel
 	sec
 	adc #SCPO
 	sta SCREEN0+24*40+35
+	sta SCREEN1+24*40+35
 	lda score+2
 	and #$0F
 	sec
 	adc #SCPO
 	sta SCREEN0+24*40+34
+	sta SCREEN1+24*40+34
 	; lives
 	lda lives
 	and #$0F
 	sec
 	adc #SCPO
 	sta SCREEN0+24*40+9
+	sta SCREEN1+24*40+9
 	lda lives
 	lsr
 	lsr
@@ -257,6 +271,7 @@ update_score_panel
 	sec
 	adc #SCPO
 	sta SCREEN0+24*40+8
+	sta SCREEN1+24*40+8
 	rts
 
 ; ----------------------- cycle raster bar colors for score panel -----------------
@@ -339,9 +354,6 @@ rasterirq_scoreline
 ; Are used in kernal to check for BRK flag, which we don't have.
 ; we don't use kernal anymore, so some cycles are saved.
 	; score panel reached, so raster is somewhere on or after SCORE_LINE_Y-2
-	; as first set VIC memory control, so new charset is used before
-	; badline at raster line 243 triggers read of that address register!
-	+set8im VICMEMCTRL, SCREEN0POSITION*16+VICCHARSETBLOCK_SCORELINE*2+1 	; set SCREEN0 and charset at last position
 	; wait for stable raster line by busy waiting
 	lda #(SCORE_LINE_Y-1)	; loop until raster line is <= SCORE_LINE_Y-1, so < SCORE_LINE_Y
 -	cmp VICRASTER
@@ -363,7 +375,6 @@ rasterirq_scoreline
 	; We are now in line 251, below visible screen.
 	; restore scroll register
 	+copy8 VICCTRL2, vicctrl2_scrolling
-	+copy8 VICMEMCTRL, vicmemctrl_scrolling
 	; done for this interrupt - for blendin special code would follow,
 	; so blend_in overwrites the jump address and restores it later
 rasterirq_scoreline_end
@@ -372,7 +383,8 @@ rasterirq_scoreline_end
 ; ------------ data
 
 rasterbar_colors
-!byte 6,14,13,1,13,14,6, 9
+!byte 6,14,13,1,13,14,6, 9	; fixme: the last number is only valid for cheese levels! needs to be level specific
+; read and copy it from register? or store in extra lookup var when it is set?
 
 game_over_sprite_ptr
 !byte 64+6, 64+0, 64+12, 64+4, 64+14, 64+21, 64+4, 64+17

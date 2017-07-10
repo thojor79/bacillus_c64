@@ -231,7 +231,7 @@ rasterirq_blend_in_sprite_y
 	cpy #50
 	bcc +
 	; set IRQ for next sprite row
-	dey;fixme
+	dey
 	sty VICRASTER
 	jmp rasterirq_ack_and_end
 +	; Last sprite row was set up, reset sprite Y coordinates and set up raster irq for score line

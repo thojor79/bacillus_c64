@@ -251,7 +251,7 @@ setvisibleframebuffer
 	sta visibleframebuffer_adrmsb
 	lda #>SCREEN1
 	sta backframebuffer_adrmsb
-	lda #SCREEN0POSITION*16+VICCHARSETBLOCK*2+1
+	lda #SCREEN0POSITION*16+VICCHARSETBLOCK*2
 	jmp ++	; A is never zero here, so could use bne ++
 +	lda #$01
 	sta visibleframebuffer
@@ -259,9 +259,8 @@ setvisibleframebuffer
 	sta visibleframebuffer_adrmsb
 	lda #>SCREEN0
 	sta backframebuffer_adrmsb
-	lda #SCREEN1POSITION*16+VICCHARSETBLOCK*2+1
-++	sta vicmemctrl_scrolling	; write that first, so interrupt has always correct value
-	sta VICMEMCTRL
+	lda #SCREEN1POSITION*16+VICCHARSETBLOCK*2
+++	sta VICMEMCTRL
 	; Kernal is not informed but that is not needed
 	rts
 

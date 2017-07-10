@@ -1,6 +1,9 @@
 ToDo - higher priority first
 ============================
 
+Explain how to get data to real c64 or at least to start in emulator.
+Write it in Readme.md.
+
 implement data for more levels! maybe same tileset and just other level
 first, later new tilesets for other worlds/levels
 with level2 and same tileset we can check level init code then
@@ -20,21 +23,21 @@ code. not much work then intro is done!
 boni in uppermost line can not be collected because actor can't go high
 enough to collect them
 
-background animation generalize - char no and count and #phases not
-hardcoded but per level, i.e. selfmod code!
-how to handle multiple animated characters with different number of phases?
-number of animation phases should be the same, character range with
-animations should ideally be the same - but with background and foreground
-animation this is not simple.
-alternativly use same char numbers and animation phases for all levels - 
-simplest solution
-i.e. move char animation data to $B000-$B200. 512 bytes are enough for the
+generalize background and tile animation - char no and count and #phases not
+hardcoded but per level, i.e. selfmod code or callback routine
+or alternativly we modify always the same char and tile numbers in all
+tilesets. Number of animation phases per char should be the same or at least
+the same for all tilesets.
+Store animation data at $0200 or $B000-$B200. 512 bytes are enough for the
 background animation (2 chars a 32 phases are 64 chars)
 we should use less data for bg animation. 8 byte per char is enough for
 64 phases, at 8 phases we can animate 8 chars.
 
 blend_in: sprites delay raster irq most probably so switch of charset comes
 too late -> visual glitches
+try triggering 2 lines earlier! doesn't help!
+may don't use scoreline irq here but turn it off!
+just set fg color to black in exact timing to disable score bar!
 
 level1: one boni tile is in wall, one enemy as well
 
@@ -58,6 +61,7 @@ Behaviour: walk with fall down, follow player, flying pattern, flying homing
 
 implement dying animation with morph to skull or so
 
+gameplay:
 implement high score enter and management
 
 game over: wait for joy button not in first 1-2 seconds
@@ -68,6 +72,17 @@ scoreline irq, and not really critical there
 implement game complete screen (outtro)
 
 implement part of image converter with rle encoding
+
+
+
+NOTE that changing charset after display of level tile data would be good,
+so tiles could use all 256 chars, optimally use last charset and last 20
+characters of it (charset at $F800), except last char (where IRQ vectors
+are), so only 168 bytes are lost for sprite data. However changing the
+VICMEMCTRL register in time (needs a bad line) doesn't work stable and
+blend_in sprites further complicates it, so sacrifice 20 characters of tile
+charset for now.
+
 
 Ideas for later
 ===============

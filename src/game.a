@@ -136,35 +136,14 @@
 ; Rather some random stuff I can play or people could try out easily
 ; BUT FIRST FINISH THIS SIMPLE GAME
 
-; -------------------------- ToDo - Higher Priority First-------------------------------
-
-; describe enemy type and set vx and color and shape from it! and also behaviour!
-; Implement actor behaviours (atm only fall down y/n) and store it to level data...
-; just store enemy type. types 0-7=8-15 only with different behaviour.
-; So some enemies have same shape but different behaviour.
-
-; Check if player is at level end (function from main loop)
-
-; Fix sprite generator to change bit combinations for colors (maybe just exchange in export)
-; check that export works - something seems still wrong, hires is not right, player has wrong color (black not blue)
-
-; ----------------
-
-; RLE decode simple level data to level data and convert type to tile type with randomness!
-
 ; --------------------------- absolute needed topics above for a playable game ---------------------------------------
 
 ; improve kill/dead animation, like morphing to skull, morph with pixel blending like grand prix circuit screen change
 ; set sprite/actor position a bit to up/left, later restore....
 
-; sometimes after start init is not ready, like IRQ doesnt run right, seems problem with level init code
-
 ; fixme show rather bonus than level in score panel
 
 ; Bacteria picture as background, foreground text sprites THORSTEN JORDAN PRESENTS
-
-; Create a Makefile for all data!
-; converter scripts there as well, to generate graphic .a data for including from png!!!
 
 ; Add tiles with traps (knifes, fire)
 
@@ -173,55 +152,24 @@
 ; Animate bonus tile(s).
 ; jumping fat drop or some yellow cheese pill, maybe rotating around z
 
-; MC mode for some actors disable... one bit more for sprite multiplexer...
-
-; enemy collision is too strict, enemys are smaller, only check for collision with overlap of 16, not 24.
-
 ; bonus accounting! list number of diamonds in score bar?!
 ; atm only collects score
 
 ; maybe tile with EXIT sign for level end
 
-; New enemy sprites like pills or T-cells ghost like etc. with animation! The Tcell ghosts could be single color white hires!
-; c64fy has no hires option yet (for sprites and maybe also for images)
-
-; start screen, also with highscore display would be good (combination of graphic/text mode). Use blend-in effect
-
-; sometimes enemy is spawned within wall and when killed replaced with boni tile. strange. LATER.
-
-; boni in uppermost line are not removed... LATER
-
-; level has one boni where island should be, strange, LATER
-
-; move video init and everything to game.a, except video mode set.
-; bank setting etc to main code..
-
 ; When scrolling actors lag behind a bit! yes scroll is triggered and frame immediatly shifts,
 ; but actor data handling is called only next frame, so always lags behind.
 ; Maybe don't start scrolling immediatly but delay 1 frame? But it would only delay the
-; lag. FIX LATER
+; lag. FIX LATER. looks like giana sisters has the same problem. No one
+; would ever notice that...
 
 ; maybe also add boni as sprites and code a sprite multiplexer!
 
-; move scroll code to own file?
-
-; when making second level, see what it is hardcoded...
-
-; render more tiles and use them!
-;
-
-; use more background animation
-
-; use defines for IRQ registers etc.
 ; Have IRQ there to start color ram shift etc. no, not needed
 ;
 ; Allow character Y to be a bit outside screen - fixme this is implicitly tested because we check tile above actor
 ; which wraps around to low!
 ;
-; store level data with 0 for background and fill in tilenrs 0-3 depending on position after rle decoding
-
-; RLE encoding of level data, when we have more levels LATER.
-
 ; Tiledata etc maybe also packable by RLE.
 
 ; show scroller in intro will all features, like turrican intro, use color mixing! use color gradient if possible!
@@ -285,6 +233,9 @@
 ; We can shift color ram every screen, but need to shift frame buffers as well,
 ; so we can do 2x and 4x scroll speed at most, not more.
 
+; enabling extended color mode together with multicolor or bitmap mode
+; disables output of VIC, gives only black pixels.
+
 
 VICBANK = 3		; bank 3 is used multiply, kernal rom, I/O area etc.
 COLORRAM = $D800
@@ -326,7 +277,7 @@ NR_TILES = 64	; number of tiles used in a level
 VICSPRITEENABLE = $D015
 VICSPRITECOMMONCOLOR0 = $D025
 VICSPRITECOMMONCOLOR1 = $D026
-SCPO = 235	; Score Panel Char Offset
+SCPO = 236	; Score Panel Char Offset
 ; --------------- temporary variables in zeropage
 TEMP0 = $02
 TEMP1 = $03
@@ -389,7 +340,6 @@ temp_data_end = $C6		; final address
 temp_data_limit = $F8		; last usable address
 
 ; must not be overwritten by zeroing of memory, so place at end of zero page!
-vicmemctrl_scrolling = $F9
 vicctrl2_scrolling = $FA
 
 ; must not be cleared at level start, so place at end of zero page!
@@ -457,9 +407,8 @@ main
 	sta CIA2_DATAPORT_A
 
 ; VIC memory area set up
-	lda #VICSCREENBLOCK*16+VICCHARSETBLOCK*2+1	; in bitmap mode bit 3 sets bitmap block, in charmode bits 1-3 charblock!
+	lda #VICSCREENBLOCK*16+VICCHARSETBLOCK*2	; in bitmap mode bit 3 sets bitmap block, in charmode bits 1-3 charblock!
 	sta VICMEMCTRL
-	sta vicmemctrl_scrolling
 ;	lda #>SCREEN0	; inform Kernal where screen is - but we don't need the Kernal
 ;	sta $288
 
@@ -513,12 +462,6 @@ startmainscreen
 	sta score
 	sta score+1
 	sta score+2
-; set scorepanel char data (copy 20 characters = 160 bytes at char #235)
-	ldx #160
--	lda scorepanel_chardata - 1,x
-	sta $F800 + SCPO*8 - 1,x
-	dex
-	bne -
 
 ; handle next level
 nextlevel
@@ -543,6 +486,8 @@ nextlevel
 	+copy8 VICFGCOL+2, level1_fixcolors+2
 	+set8im VICSPRITECOMMONCOLOR0, 0
 	+set8im VICSPRITECOMMONCOLOR1, 1
+	; set score panel characters again (have been overwritten)
+	jsr prepare_score_panel_chardata
 	jmp ++
 check_level2
 	; cmp #2; bne + ; ...
@@ -560,6 +505,15 @@ check_level2
 checkhighscore
 	; fixme later
 	jmp startmainscreen
+
+prepare_score_panel_chardata
+; set scorepanel char data (copy 20 characters = 160 bytes at char #SCPO)
+	ldx #160
+-	lda scorepanel_chardata - 1,x
+	sta VICCHARSET + SCPO*8 - 1,x
+	dex
+	bne -
+	rts
 
 ; --------------------- function library ----------------------
 
