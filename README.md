@@ -14,7 +14,7 @@ For a real C64 there are various possibilities. First is to use the existing
 .D64 disk image file (generated with  make bacillus.d64  or already
 available) and transfer it with X1541 to a real floppy disk and load
 the game with read hardware. Or use the floppy emulator hardware with SD
-cards etc. A .D64 image is planned to be provided as well (later).
+cards etc.
 
 Technical facts:
 * 2-way side scrolling game
