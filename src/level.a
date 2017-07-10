@@ -28,7 +28,7 @@ run_level
 	+set8im VICCTRL1, $0B	; Bitmap mode off, display off
 	lda #$13		; Bit 4: Multicolor on, Bit 3:0 38 Column mode, Bits 0-2: offset left border (4 neutral, so 7-4=3)
 	sta VICCTRL2
-	sta last_value_of_vicctrl2
+	sta vicctrl2_scrolling
 
 ; clear temporary data in zeropage etc.
 	lda #0
@@ -37,8 +37,14 @@ run_level
 	dex
 	bne -
 
+; set initial screen_pos - it is NOT 0,0 and influences scrolling and VICMEMCTRL!
+	+set8im screen_pos_x, $40	; Pixel Offset 4 (neutral position)
+
 ; sprite multicolor off for all sprites
 	+set8im $D01C, 0	; disable multicolor for all sprites
+
+; set the visible frame buffer to default (screen 0)
+	jsr setvisibleframebuffer
 
 ; fill visible screen with tiles of level
 ; Note! This sets sprite registers like color and multicolor flag.
@@ -47,36 +53,20 @@ run_level
 ; to read and backup mc register and colors (9 byte)
 	jsr render_tiles_on_screen
 
-; Set up sprite based blend in effect (also sets up a raster irq!)
-	jsr blend_in_init
-
-; Initialize back buffer data
-	lda #>SCREEN1
-	sta backframebuffer_adrmsb
-	lda #>SCREEN0
-	sta visibleframebuffer_adrmsb
-	sta renderframebuffer_adrmsb
-	lda #0
-	sta visibleframebuffer
-	sta colorramshift_to_renderpos
-	lda #0
-	sta background_animation_phase
-	lda #0	; Tile #0
-	sta screen_pos_x+1
-	sta render_pos_x	; tile and subtile offset for rendering are 0,0
-	sta render_pos_x+1
-	lda #$40	; Pixel Offset 4 (neutral position)
-	sta screen_pos_x
-
-; Set up score panel
+; Set up score panel - only to screen0 !
 	ldx #40
 -	lda scorepanelchars-1,x
 	sta SCREEN0+24*40-1,x
-	sta SCREEN1+24*40-1,x
 	lda #0
 	sta COLORRAM+24*40-1,x
 	dex
 	bne -
+
+; render score panel once
+	jsr update_score_panel
+
+; Set up sprite based blend in effect (also sets up a raster irq!)
+	jsr blend_in_init
 
 ; turn display on
 	+set8im VICCTRL1, $1B
@@ -219,74 +209,54 @@ game_over_next_frame
 	+set8im VICSPRITEENABLE, 0
 	rts
 
-scorepanelchars
-!byte  0,16,18,17,15,11,19, 0
-!byte  1, 4, 0, 0, 0, 0,16,15
-!byte 17,15,16,19, 0, 1, 2, 0
-!byte  0, 0, 0,11,12,13,14,15
-!byte 19, 0, 3, 4, 5, 6, 7, 0
-
-framecounter
-!byte 0
-
-; Actor handling
-!src "src/actor.a"
-
 ; ----------------------- show score in score panel
 ; Uses	A, X
 update_score_panel
 	lda score
 	and #$0F
-	tax
-	inx
-	stx SCREEN0+24*40+38
-	stx SCREEN1+24*40+38
+	sec
+	adc #SCPO
+	sta SCREEN0+24*40+38
 	lda score
 	lsr
 	lsr
 	lsr
 	lsr
-	tax
-	inx
-	stx SCREEN0+24*40+37
-	stx SCREEN1+24*40+37
+	sec
+	adc #SCPO
+	sta SCREEN0+24*40+37
 	lda score+1
 	and #$0F
-	tax
-	inx
-	stx SCREEN0+24*40+36
-	stx SCREEN1+24*40+36
+	sec
+	adc #SCPO
+	sta SCREEN0+24*40+36
 	lda score+1
 	lsr
 	lsr
 	lsr
 	lsr
-	tax
-	inx
-	stx SCREEN0+24*40+35
-	stx SCREEN1+24*40+35
+	sec
+	adc #SCPO
+	sta SCREEN0+24*40+35
 	lda score+2
 	and #$0F
-	tax
-	inx
-	stx SCREEN0+24*40+34
-	stx SCREEN1+24*40+34
+	sec
+	adc #SCPO
+	sta SCREEN0+24*40+34
 	; lives
 	lda lives
 	and #$0F
-	tax
-	inx
-	stx SCREEN0+24*40+9
-	stx SCREEN1+24*40+9
+	sec
+	adc #SCPO
+	sta SCREEN0+24*40+9
 	lda lives
 	lsr
 	lsr
 	lsr
 	lsr
-	tax
-	inx
-	stx SCREEN0+24*40+8
-	stx SCREEN1+24*40+8
+	sec
+	adc #SCPO
+	sta SCREEN0+24*40+8
 	rts
 
 ; ----------------------- cycle raster bar colors for score panel -----------------
@@ -326,7 +296,7 @@ compute_char_animations
 	ldx #0
 compute_char_animations_adr0
 	lda bganimation_data0,x
-	sta VICCHARSET+$24*8,x	; fixme char index and count and phases is hardcoded, depends on level
+	sta VICCHARSET+$10*8,x	; fixme char index and count and phases is hardcoded, depends on level
 	inx
 	cpx #16
 	bne compute_char_animations_adr0
@@ -353,7 +323,9 @@ rasterirq_scoreline
 	pha
 	txa
 	pha
-	tya
+	tya	; this IRQ doesn't change Y register, so we don't need to save it
+		; - beware jmp-address would be different as well, is also set by
+		; blend_in_do before rts there!
 	pha
 ; We disabled all IRQ sources, so we only have raster IRQs here!
 ;	lda $D019		; check if IRQ was from raster line
@@ -367,6 +339,10 @@ rasterirq_scoreline
 ; Are used in kernal to check for BRK flag, which we don't have.
 ; we don't use kernal anymore, so some cycles are saved.
 	; score panel reached, so raster is somewhere on or after SCORE_LINE_Y-2
+	; as first set VIC memory control, so new charset is used before
+	; badline at raster line 243 triggers read of that address register!
+	+set8im VICMEMCTRL, SCREEN0POSITION*16+VICCHARSETBLOCK_SCORELINE*2+1 	; set SCREEN0 and charset at last position
+	; wait for stable raster line by busy waiting
 	lda #(SCORE_LINE_Y-1)	; loop until raster line is <= SCORE_LINE_Y-1, so < SCORE_LINE_Y
 -	cmp VICRASTER
 	bcs -
@@ -386,13 +362,14 @@ rasterirq_scoreline
 }
 	; We are now in line 251, below visible screen.
 	; restore scroll register
-	+copy8 VICCTRL2, last_value_of_vicctrl2
+	+copy8 VICCTRL2, vicctrl2_scrolling
+	+copy8 VICMEMCTRL, vicmemctrl_scrolling
+	; done for this interrupt - for blendin special code would follow,
+	; so blend_in overwrites the jump address and restores it later
+rasterirq_scoreline_end
 	jmp rasterirq_ack_and_end
 
 ; ------------ data
-
-last_value_of_vicctrl2
-!byte 0
 
 rasterbar_colors
 !byte 6,14,13,1,13,14,6, 9
@@ -403,3 +380,9 @@ game_over_sprite_ptr
 game_over_sprite_x
 !byte 64, 128, 192, 0, $88
 
+scorepanelchars
+!byte  0+SCPO,16+SCPO,18+SCPO,17+SCPO,15+SCPO,11+SCPO,19+SCPO, 0+SCPO
+!byte  1+SCPO, 4+SCPO, 0+SCPO, 0+SCPO, 0+SCPO, 0+SCPO,16+SCPO,15+SCPO
+!byte 17+SCPO,15+SCPO,16+SCPO,19+SCPO, 0+SCPO, 1+SCPO, 2+SCPO, 0+SCPO
+!byte  0+SCPO, 0+SCPO, 0+SCPO,11+SCPO,12+SCPO,13+SCPO,14+SCPO,15+SCPO
+!byte 19+SCPO, 0+SCPO, 3+SCPO, 4+SCPO, 5+SCPO, 6+SCPO, 7+SCPO, 0+SCPO

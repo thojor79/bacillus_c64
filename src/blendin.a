@@ -85,6 +85,9 @@ blend_in_init
 	sei
 	+set16im $FFFE, rasterirq_blend_in
 	+set8im VICRASTER, BLEND_IN_FIRST_LINE
+	; at end of scoreline raster irq handle final code of blend_in
+	; raster irq, so overwrite address!
+	+set16im rasterirq_scoreline_end+1, rasterirq_blend_in_end
 	cli
 	rts
 
@@ -116,6 +119,8 @@ blend_in_next_frame
 !for COUNT, 0, 7 {
 	+copy8 $D027+COUNT, blend_in_temp+COUNT+1
 }
+	; restore original jump address to scoreline raster irq!
+	+set16im rasterirq_scoreline_end+1, rasterirq_ack_and_end
 	rts
 
 +	; read next frame data
@@ -183,7 +188,7 @@ blend_in_read
 ; -------------------------------- IRQ routine for blend in/out sprite multiplexer
 rasterirq_blend_in
 	pha
-	txa
+	txa	; X and Y are changed, so save both
 	pha
 	tya
 	pha
@@ -231,37 +236,9 @@ rasterirq_blend_in_sprite_y
 	jmp rasterirq_ack_and_end
 +	; Last sprite row was set up, reset sprite Y coordinates and set up raster irq for score line
 	+set8im VICRASTER, SCORE_LINE_Y-2
-	+set16im $FFFE, rasterirq_blend_in_scoreline
+	+set16im $FFFE, rasterirq_scoreline
 	jmp rasterirq_ack_and_end
-rasterirq_blend_in_scoreline
-	pha
-	txa
-	pha
-	tya
-	pha
-	; same code as in rasterirq_scoreline! Only part afterwards is new. Maybe use one code with flag.
-	lda #(SCORE_LINE_Y-1)	; loop until raster line is <= SCORE_LINE_Y-1, so < SCORE_LINE_Y
--	cmp VICRASTER
-	bcs -
-	; We are now stable in SCORE_LINE_Y
-	; set first background color already, so it is stable
-	;+copy8 VICFGCOL, rasterbar_colors
-	; Set scroll to neutral for score panel
-	; Note that this command seems to delay current raster line...
-	+set8im VICCTRL2, $10	;fixme seem to be too late! works if that is first command or try -2 above and busy waiting...
-	;fixme the command above seems to delay the whole line! that way only slight visual artefacts
-	+copy8 VICFGCOL, rasterbar_colors
-	; Now wait for next raster lines and set color then
-!for COUNT, 0, 7 {
-	ldx rasterbar_colors+COUNT
-	lda #(SCORE_LINE_Y+COUNT)
--	cmp VICRASTER
-	bcs -
-	stx VICFGCOL
-}
-	; We are now in line 251, below visible screen.
-	; restore scroll register
-	+copy8 VICCTRL2, last_value_of_vicctrl2
+rasterirq_blend_in_end
 	; Now set IRQ vector and raster line and all data we need at end of first row.
 	+set16im $FFFE, rasterirq_blend_in
 	+set8im rasterirq_blend_in_sprite_y+1, 50+42
@@ -296,6 +273,3 @@ blend_in_offsets	; 8 rows of 16 byte each
 !byte 24, 25, 24, 24, 25, 24, 24, 25, 24, 25, 24, 0, 0, 0, 0, 0
 !byte 24, 25, 24, 24, 25, 24, 24, 25, 24, 25, 24, 0, 0, 0, 0, 0
 !byte 24, 25, 24, 24, 25, 24, 25, 24, 24, 25, 24, 0, 0, 0, 0, 0
-
-blend_in_temp
-!for COUNT, 0, 8 { !byte 0 }

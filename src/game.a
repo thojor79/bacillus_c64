@@ -289,6 +289,7 @@
 VICBANK = 3		; bank 3 is used multiply, kernal rom, I/O area etc.
 COLORRAM = $D800
 VICCHARSETBLOCK = 1	; block 1 has offset 2k
+VICCHARSETBLOCK_SCORELINE = 7
 VICSCREENBLOCK = 0	; screens at blocks 0/1 so offset 0k/1k
 VICCHARSET = VICBANK*$4000+VICCHARSETBLOCK*$0800
 SCREEN0POSITION = VICSCREENBLOCK
@@ -325,6 +326,7 @@ NR_TILES = 64	; number of tiles used in a level
 VICSPRITEENABLE = $D015
 VICSPRITECOMMONCOLOR0 = $D025
 VICSPRITECOMMONCOLOR1 = $D026
+SCPO = 235	; Score Panel Char Offset
 ; --------------- temporary variables in zeropage
 TEMP0 = $02
 TEMP1 = $03
@@ -340,6 +342,7 @@ TEMPADR3 = $0E
 ; --- note with more than 8 actors zero page space is not sufficient.
 temp_data_begin = $10
 colorram_tempcolumn = $10	; needs 24 bytes without page boundary - Temporary data for screen scrolling
+blend_in_temp = $10		; same space used for blend in temporary values (9 bytes)
 chardata_tempcolumn = $28	; also 24 bytes
 screen_pos_x = $40		; offset of left border, MSB: tile, LSB: subtile in pixels/subpixel accuracy (4bit/4bit)
 render_pos_x = $42		; offset of left border of framebuffer that we render to (in tile,subtile coords, so lower byte is 00 or 80).
@@ -372,8 +375,27 @@ actor_screen_xh = $BC
 actor_jump_count = $BD
 player_invulnerable_counter = $BE
 sprite_anim_phase = $BF
+; ----------- generic data
+framecounter = $C0
+; Data for joystick port #2
+joy2_up = $C1
+joy2_down = $C2
+joy2_left = $C3
+joy2_right = $C4
+joy2_fire = $C5
 
-temp_data_end = $C0		; final address
+temp_data_end = $C6		; final address
+
+temp_data_limit = $F8		; last usable address
+
+; must not be overwritten by zeroing of memory, so place at end of zero page!
+vicmemctrl_scrolling = $F9
+vicctrl2_scrolling = $FA
+
+; must not be cleared at level start, so place at end of zero page!
+score = $FB	; stored in BCD values, 3 bytes
+level_nr = $FE
+lives = $FF
 
 
 ; ------------------------ macros --------------------------
@@ -435,8 +457,9 @@ main
 	sta CIA2_DATAPORT_A
 
 ; VIC memory area set up
-	lda #VICSCREENBLOCK*16+VICCHARSETBLOCK*2	; in bitmap mode bit 3 sets bitmap block, in charmode bits 1-3 charblock!
+	lda #VICSCREENBLOCK*16+VICCHARSETBLOCK*2+1	; in bitmap mode bit 3 sets bitmap block, in charmode bits 1-3 charblock!
 	sta VICMEMCTRL
+	sta vicmemctrl_scrolling
 ;	lda #>SCREEN0	; inform Kernal where screen is - but we don't need the Kernal
 ;	sta $288
 
@@ -485,6 +508,18 @@ startmainscreen
 ; set level number to 1 and lives to 3
 	+set8im level_nr, 1
 	+set8im lives, 3
+; clear score
+	lda #0
+	sta score
+	sta score+1
+	sta score+2
+; set scorepanel char data (copy 20 characters = 160 bytes at char #235)
+	ldx #160
+-	lda scorepanel_chardata - 1,x
+	sta $F800 + SCPO*8 - 1,x
+	dex
+	bne -
+
 ; handle next level
 nextlevel
 	lda level_nr
@@ -501,7 +536,7 @@ nextlevel
 	; level charset	
 	+memcopy_pages VICCHARSET, level1_chardata, 8	; 2k = 8 pages
 	; level sprites
-	+memcopy_pages VICSPRITES_GAME, level1_sprites, 31 ; 8k = 32 pages, don't overwrite last page
+	+memcopy_pages VICSPRITES_GAME, level1_sprites, 31 ; 8k-1p = 31 pages, don't overwrite last page
 	; level specific colors
 	+copy8 VICFGCOL, level1_fixcolors
 	+copy8 VICFGCOL+1, level1_fixcolors+1
@@ -640,7 +675,7 @@ rle_decode_repeat
 	inc TEMPADR0+1
 +	jmp --
 
-; ----------------------------------- data -------------------------------
+; ----------------------------------- includes -------------------------------
 
 ; fixme to level data
 ; 32 versions of two chars for animation
@@ -660,6 +695,9 @@ bganimation_data0
 ; handling of level
 !src "src/level.a"
 
+; Actor handling
+!src "src/actor.a"
+
 ; handling of blend in effect at level start
 !src "src/blendin.a"
 
@@ -670,29 +708,11 @@ bganimation_data0
 ; All the *** DATA ***
 ; ===========================================================================
 
-level_nr
-!byte 0
-
-lives
-!byte 0
-
-score	; stored in BCD values.
-!byte 0, 0, 0
-
-; Data for joystick port #2 - maybe put to zero page, but not performance critical.
-joy2_up
-!byte 0
-joy2_down
-!byte 0
-joy2_left
-!byte 0
-joy2_right
-!byte 0
-joy2_fire
-!byte 0
-
 ; Text sprites (at max 64 sprites)
 !src "data/textcharset_sprdata.a"
+
+scorepanel_chardata		; 160 bytes
+!src "data/scorepanel_chardata.a"
 
 ; -------------------------- data for levels ------------------------------
 
@@ -728,4 +748,3 @@ level1_data
 !align 255,0
 level1_chardata
 !src "data/cheese_alltiles_chardata.a"
-

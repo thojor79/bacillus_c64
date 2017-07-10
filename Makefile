@@ -16,7 +16,7 @@ data : gfx/textcharset.png gfx/introscreen.jpg gfx/mainlogo.png gfx/cheese_allti
 	cd gfx && ../convert/c64fy.py -hires 1 -sprite 0 -quiet 1 -color 1 textcharset.png && mv output/textcharset_sprdata.a ../data && cd ..
 	cd gfx && ../convert/c64fy.py -quiet 1 introscreen.jpg && mv output/introscreen_bmpdata_rle.a ../data/introscreen_rle.a && cd ..
 	cd gfx && ../convert/c64fy.py -quiet 1 -color 1 mainlogo.png && mv output/mainlogo_bmpdata_rle.a ../data/mainlogo_rle.a && cd ..
-	cd gfx && ../convert/c64fy.py -quiet 1 -charset 236 -firstchar 20 -tilewidth 2 -tileheight 2 -color 9 -color 8 -color 7 -datalabels 0 cheese_alltiles.png && mv output/cheese_alltiles_chardata.a ../data/ && mv output/cheese_alltiles_fixcolors.a ../data/ && mv output/cheese_alltiles_tiledata.a ../data/ && cd ..
+	cd gfx && ../convert/c64fy.py -quiet 1 -charset 256 -tilewidth 2 -tileheight 2 -color 9 -color 8 -color 7 -datalabels 0 cheese_alltiles.png && mv output/cheese_alltiles_chardata.a ../data/ && mv output/cheese_alltiles_fixcolors.a ../data/ && mv output/cheese_alltiles_tiledata.a ../data/ && cd ..
 	rm -rf gfx/output
 
 leveldata : gfx/cheese_level1.png

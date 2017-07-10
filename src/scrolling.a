@@ -83,21 +83,21 @@ scroll_right
 	tax
 	lda vicctrl2forpos,x
 	sta VICCTRL2
-	sta last_value_of_vicctrl2
+	sta vicctrl2_scrolling
 	; Check for background animated chars, that need to be kept fix on scrolling
 	lda screen_pos_x
 	and #$30
 	beq +
-	; chars 20-23, 24-27, 28-31, 32-35, rotate bits!
+	; chars 0-3, 4-7, 8-11, 12-15, rotate bits!
 	; we rotate bits right, so test last bit of last byte
 !for CHARNR, 0, 3 {
 	ldx #0
--	lda VICCHARSET+(CHARNR*4+20+3)*8,x	; load last byte
-	ror					; rotate right to get rightmost bit to carry flag
-	ror VICCHARSET+(CHARNR*4+20+0)*8,x	; rotate in carry flag and rotate byte
-	ror VICCHARSET+(CHARNR*4+20+1)*8,x	; move carry flag from byte to next
-	ror VICCHARSET+(CHARNR*4+20+2)*8,x
-	ror VICCHARSET+(CHARNR*4+20+3)*8,x
+-	lda VICCHARSET+(CHARNR*4+3)*8,x	; load last byte
+	ror				; rotate right to get rightmost bit to carry flag
+	ror VICCHARSET+(CHARNR*4+0)*8,x	; rotate in carry flag and rotate byte
+	ror VICCHARSET+(CHARNR*4+1)*8,x	; move carry flag from byte to next
+	ror VICCHARSET+(CHARNR*4+2)*8,x
+	ror VICCHARSET+(CHARNR*4+3)*8,x
 	inx
 	cpx #8
 	bne -
@@ -170,21 +170,21 @@ scroll_left
 	tax
 	lda vicctrl2forpos,x
 	sta VICCTRL2
-	sta last_value_of_vicctrl2
+	sta vicctrl2_scrolling
 	; Check for background animated chars, that need to be kept fix on scrolling
 	lda screen_pos_x
 	and #$30
 	beq +
-	; chars 20-23, 24-27, 28-31, 32-35, rotate bits!
+	; chars 0-3, 4-7, 8-11, 12-15, rotate bits!
 	; we rotate bits left, so test first bit of last byte
 !for CHARNR, 0, 3 {
 	ldx #0
--	lda VICCHARSET+(CHARNR*4+20+0)*8,x	; load first byte
+-	lda VICCHARSET+(CHARNR*4+0)*8,x	; load first byte
 	rol					; rotate left to get leftmost bit to carry flag
-	rol VICCHARSET+(CHARNR*4+20+3)*8,x	; rotate in carry flag and rotate byte
-	rol VICCHARSET+(CHARNR*4+20+2)*8,x	; move carry flag from byte to next
-	rol VICCHARSET+(CHARNR*4+20+1)*8,x
-	rol VICCHARSET+(CHARNR*4+20+0)*8,x
+	rol VICCHARSET+(CHARNR*4+3)*8,x	; rotate in carry flag and rotate byte
+	rol VICCHARSET+(CHARNR*4+2)*8,x	; move carry flag from byte to next
+	rol VICCHARSET+(CHARNR*4+1)*8,x
+	rol VICCHARSET+(CHARNR*4+0)*8,x
 	inx
 	cpx #8
 	bne -
@@ -251,16 +251,17 @@ setvisibleframebuffer
 	sta visibleframebuffer_adrmsb
 	lda #>SCREEN1
 	sta backframebuffer_adrmsb
-	lda #SCREEN0POSITION*16+VICCHARSETBLOCK*2
-	jmp ++
+	lda #SCREEN0POSITION*16+VICCHARSETBLOCK*2+1
+	jmp ++	; A is never zero here, so could use bne ++
 +	lda #$01
 	sta visibleframebuffer
 	lda #>SCREEN1
 	sta visibleframebuffer_adrmsb
 	lda #>SCREEN0
 	sta backframebuffer_adrmsb
-	lda #SCREEN1POSITION*16+VICCHARSETBLOCK*2
-++	sta VICMEMCTRL
+	lda #SCREEN1POSITION*16+VICCHARSETBLOCK*2+1
+++	sta vicmemctrl_scrolling	; write that first, so interrupt has always correct value
+	sta VICMEMCTRL
 	; Kernal is not informed but that is not needed
 	rts
 

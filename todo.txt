@@ -1,28 +1,21 @@
 ToDo - higher priority first
 ============================
 
-try to use different charset for status bar. 20 chars eat just 3 sprites, if
-timing allows to switch memory registers. so we can use full 256 chars for
-tiles and have less problems. 
-even better: use last bytes for characters, so don't use chars 0-19 but
-235-254 and leave 255 out and place them at end of ram! ->
-irq vectors are kept writeable and free and sprites still start at
-$E000 - best solution!
-offset status bar characters by 235 and copy the data there -> done!
-test it in steps, move chardata to 235+ and draw chars 235+, then use
-mem register change in irq , better do it first and check timing!
-
 implement data for more levels! maybe same tileset and just other level
 first, later new tilesets for other worlds/levels
-
-fix intro - only sprite display in irq, coordinate computation in normal
-code. not much work then intro is done!
+with level2 and same tileset we can check level init code then
 
 do not use spawn_actor for player? then less checks there needed.
 player start position must not come from level data then, but startpos
 xy coded additionally, maybe not code player in level data so we can have
 16 enemies, not 15. use type 16 then for player. an extra check in that
 routine doesn't matter
+
+player also exists as enemy, this is wrong. spawn enemies with type offset!
+works only if player spawning is separated from enemy spawning!
+
+fix intro - only sprite display in irq, coordinate computation in normal
+code. not much work then intro is done!
 
 boni in uppermost line can not be collected because actor can't go high
 enough to collect them
@@ -40,6 +33,11 @@ background animation (2 chars a 32 phases are 64 chars)
 we should use less data for bg animation. 8 byte per char is enough for
 64 phases, at 8 phases we can animate 8 chars.
 
+blend_in: sprites delay raster irq most probably so switch of charset comes
+too late -> visual glitches
+
+level1: one boni tile is in wall, one enemy as well
+
 background animated tiles with fire/knives/diamond like cheese parts?
 maybe some spare sprites with actor numbers >= 16 as boni or traps.
 
@@ -49,8 +47,6 @@ rotating etc.
 store more temporary data in zeropage or at $0200, define space centrally in game.a
 mostly checked!
 checks pending:
-blendin
-game
 intro (can use same space as scrolling!)
 
 implement blend out effect for level end - reverse reading of blend in,
@@ -65,6 +61,9 @@ implement dying animation with morph to skull or so
 implement high score enter and management
 
 game over: wait for joy button not in first 1-2 seconds
+
+in interrupts don't save Y register if we don't change it - only in
+scoreline irq, and not really critical there
 
 implement game complete screen (outtro)
 
