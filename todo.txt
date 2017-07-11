@@ -14,16 +14,6 @@ dripping cheese.
 category: floor, ceiling, obstacle a/B and island and traps
 
 >>
-do not use spawn_actor for player? then less checks there needed.
-player start position must not come from level data then, but startpos
-xy coded additionally, maybe not code player in level data so we can have
-16 enemies, not 15. use type 16 then for player. an extra check in that
-routine doesn't matter
-
-player also exists as enemy, this is wrong. spawn enemies with type offset!
-works only if player spawning is separated from enemy spawning!
-
->>
 fix intro - only sprite display in irq, coordinate computation in normal
 code. not much work then intro is done!
 
@@ -52,6 +42,9 @@ black then
 
 background animated tiles with fire/knives/diamond like cheese parts?
 maybe some spare sprites with actor numbers >= 16 as boni or traps.
+
+player also exists as enemy, this is wrong, but it is because of reusing
+sprite data for enemy types >= 6 as we have no data yet.
 
 store more temporary data in zeropage or at $0200, define space centrally in game.a
 mostly checked!
