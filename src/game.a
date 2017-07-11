@@ -473,9 +473,12 @@ nextlevel
 +	; load data for level 1
 	; now load level specific data to fix memory places and handle level
 	; level tile data and tile indices, stored
-	+memcopy_pages LEVEL_TILE_DATA, level1_tiledata, 2+12	; 0.5k+3k = 2+12 pages
-	; level tile data - already copied above, enable later when level data decoding is implemented
-	;+memcopy_pages LEVEL_DATA, level1_data, 12
+	+memcopy_pages LEVEL_TILE_DATA, level1_tiledata, 2	; 0.5k = 2 pages
+	; RLE decode level tile data and generate tile numbers from tile category indices
+	+set16im TEMPADR0, level1_data_rle
+	+set16im TEMPADR1, LEVEL_DATA
+	jsr rle_decode
+	jsr prepare_level_data
 	; level charset	
 	+memcopy_pages VICCHARSET, level1_chardata, 8	; 2k = 8 pages
 	; level sprites
@@ -486,6 +489,8 @@ nextlevel
 	+copy8 VICFGCOL+2, level1_fixcolors+2
 	+set8im VICSPRITECOMMONCOLOR0, 0
 	+set8im VICSPRITECOMMONCOLOR1, 1
+	; set level1_fixcolors+0 as last color in scorepanel color table
+	;fixme
 	; set score panel characters again (have been overwritten)
 	jsr prepare_score_panel_chardata
 	jmp ++
@@ -679,12 +684,10 @@ level1_sprites
 !src "data/level1_sprites.a" ; fixme for testing more sprites, to have 16. atm data 7pages
 !src "data/level1_sprites.a"
 !src "data/level1_sprites.a"
-!src "data/level1_sprites.a"
 
-; later:
 ; pack level data from png as rle and store it.
 ; unpack directly to $B400 and replace every category number by real tile
-; level gfx is rgb png, rather use palette to have 0-15 numbers.
+; level gfx is paletted png to have indices directly.
 
 ; data for tiles first
 !align 255, 0
@@ -692,13 +695,10 @@ level1_tiledata
 !src "data/cheese_alltiles_tiledata.a"
 
 ; The data for a level (256 tiles horizontally, 12 tiles vertically, hence 3072 bytes).
-!align 255,0
-level1_data
-!src "data/cheese_level1.png_lvldata.a"
+level1_data_rle
+!src "data/cheese_level1_rle.a"
 
 ; be careful - blocks with one color are coded as multicolor, gives problems with background tiles!
-; so the data is adjusted after conversion, also alignment added!
-; fixme this may be wrong now
 !align 255,0
 level1_chardata
 !src "data/cheese_alltiles_chardata.a"

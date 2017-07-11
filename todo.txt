@@ -1,13 +1,19 @@
 ToDo - higher priority first
 ============================
 
-Explain how to get data to real c64 or at least to start in emulator.
-Write it in Readme.md.
-
 implement data for more levels! maybe same tileset and just other level
 first, later new tilesets for other worlds/levels
-with level2 and same tileset we can check level init code then
+with level2 and same tileset we can check level init code then.
+More tilesets: candy world / salad world etc.
 
+make more tile graphics for cheese:
+diagonal and vertically stacked parts of cheese
+orange perimeter like limburger
+with red,blue,green speckles
+dripping cheese.
+category: floor, ceiling, obstacle a/B and island and traps
+
+>>
 do not use spawn_actor for player? then less checks there needed.
 player start position must not come from level data then, but startpos
 xy coded additionally, maybe not code player in level data so we can have
@@ -17,11 +23,18 @@ routine doesn't matter
 player also exists as enemy, this is wrong. spawn enemies with type offset!
 works only if player spawning is separated from enemy spawning!
 
+>>
 fix intro - only sprite display in irq, coordinate computation in normal
 code. not much work then intro is done!
 
 boni in uppermost line can not be collected because actor can't go high
 enough to collect them
+
+have some tiles that vaporize if player is on top of them, e.g. 8 phases
+like the small bridges in Giana Sisters. Same check like with boni tiles.
+
+Maybe animated boni tiles in hires with white border and white logo like
+rotating molecule or jumping water drop, better than what we have now.
 
 generalize background and tile animation - char no and count and #phases not
 hardcoded but per level, i.e. selfmod code or callback routine
@@ -33,19 +46,12 @@ background animation (2 chars a 32 phases are 64 chars)
 we should use less data for bg animation. 8 byte per char is enough for
 64 phases, at 8 phases we can animate 8 chars.
 
-blend_in: sprites delay raster irq most probably so switch of charset comes
-too late -> visual glitches
-try triggering 2 lines earlier! doesn't help!
-may don't use scoreline irq here but turn it off!
-just set fg color to black in exact timing to disable score bar!
-
-level1: one boni tile is in wall, one enemy as well
+blend_in: sprites delay raster irq most probably and give visual glitch, but
+not critical. maybe just disable scorepanel by setting fgcol to all
+black then
 
 background animated tiles with fire/knives/diamond like cheese parts?
 maybe some spare sprites with actor numbers >= 16 as boni or traps.
-
-more tiles: cheese dripping from above, animated tiles like cheese rolls
-rotating etc.
 
 store more temporary data in zeropage or at $0200, define space centrally in game.a
 mostly checked!
@@ -62,6 +68,9 @@ Behaviour: walk with fall down, follow player, flying pattern, flying homing
 implement dying animation with morph to skull or so
 
 gameplay:
+handle step into hole/trap
+
+gameplay:
 implement high score enter and management
 
 game over: wait for joy button not in first 1-2 seconds
@@ -71,7 +80,8 @@ scoreline irq, and not really critical there
 
 implement game complete screen (outtro)
 
-implement part of image converter with rle encoding
+implement part of image converter with rle encoding (for logo in upper part
+of screen only!)
 
 
 
@@ -90,3 +100,19 @@ Ideas for later
 if we have only 64 tiles and 8 background tiles as now we can use 24 actor
 types, not 16, by using bit6|bit7 as flag of actor! But 16 is enough for
 now.
+
+Create or rip some sound effects or music, maybe even try GoatTracker would
+be cool. But composing would give most probably poor results due to lack of
+experience with high effort. Ripping would be easier.
+
+Ideas for other games / projects
+================================
+
+8-way scrolling and sprite multiplexer would be cool, that way one can
+create a Turrican like game.
+
+However randomly or procedurally generated content would be cool. Like a RPG
+game with huge world map (256x256 maybe) so that the C64 can generate the
+data on the fly. Would also be more interesting to play in unknown data.
+Could be done for jump and runs or shoot em ups as well but much harder to
+have playable and funny levels that way.

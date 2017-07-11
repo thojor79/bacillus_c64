@@ -4,7 +4,7 @@
 
 # specify data files explicitly
 
-bacillus.prg : src/game.a src/macros.a src/actor.a src/intro.a src/rasterirq.a src/mainscreen.a src/blendin.a src/level.a src/scrolling.a data/textcharset_sprdata.a data/introscreen_rle.a data/mainlogo_rle.a data/cheese_alltiles_chardata.a data/level*sprites.a data/cheese_level1.png_lvldata.a
+bacillus.prg : src/game.a src/macros.a src/actor.a src/intro.a src/rasterirq.a src/mainscreen.a src/blendin.a src/level.a src/scrolling.a data/textcharset_sprdata.a data/introscreen_rle.a data/mainlogo_rle.a data/cheese_alltiles_chardata.a data/level*sprites.a data/cheese_level*_rle.a
 	acme src/game.a
 	
 bacillus.d64 : bacillus.prg
@@ -23,7 +23,8 @@ data : gfx/textcharset.png gfx/introscreen.jpg gfx/mainlogo.png gfx/cheese_allti
 	rm -rf gfx/output
 
 leveldata : gfx/cheese_level1.png
-	cd gfx && ../src/makelevel.py cheese_level1.png && mv cheese_level1.png_lvldata.a ../data && cd ..
+	cd gfx && ../convert/indexpng_to_data.py cheese_level1.png && mv cheese_level1_rle.a ../data && rm cheese_level1_raw.a && cd ..
+	cd gfx && ../convert/indexpng_to_data.py cheese_level2.png && mv cheese_level2_rle.a ../data && rm cheese_level2_raw.a && cd ..
 
 spritedata : gfx/*sprite*
 	mkdir -p gfx/output

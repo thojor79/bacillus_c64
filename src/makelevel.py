@@ -7,13 +7,13 @@ import math
 
 ###########################################################################################
 #
-#                  Hauptprogramm
+#                  main program
 #
 ###########################################################################################
 
 random.seed()
 
-# Bild laden
+# load level image
 if len(sys.argv) < 2:
 	print 'Usage: ', sys.argv[0], ' [Options] INPUTFILENAME'
 	sys.exit(1)

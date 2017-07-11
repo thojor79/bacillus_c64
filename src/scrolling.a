@@ -415,6 +415,7 @@ render_tile_column_src_adr0
 	lsr
 	lsr
 	sta TEMP4
+	inc TEMP4	; (type 0 = player!)
 	; copy write address
 	lda render_tile_column_src_adr0+1
 	sta render_tile_column_clear0+1
@@ -473,6 +474,7 @@ render_tile_column_src_adr1
 	lsr
 	lsr
 	sta TEMP4
+	inc TEMP4	; (type 0 = player!)
 	; copy write address
 	lda render_tile_column_src_adr1+1
 	sta render_tile_column_clear1+1

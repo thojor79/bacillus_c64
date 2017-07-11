@@ -573,6 +573,8 @@ store_actor_to_level_data
 	adc #(>LEVEL_DATA-1)	; handle -1 pixel and target adress at once
 	sta TEMPADR2+1
 	lda actor_type,x
+	sec
+	sbc #1			; bring back to 0...15
 	asl			; bring to bits 3-6
 	asl
 	asl
@@ -750,7 +752,7 @@ spawn_actor_color_read_adr
 	; or every type has type specific behaviour, test what works better
 	; every sprite has four animation frames, so multiply type by four for sprite
 	; pointer.
-	lda TEMP4
+	lda TEMP4	; note: TEMP4 is 1...16 here!
 	asl
 	asl
 	clc
@@ -776,6 +778,40 @@ spawn_actor_color_read_adr
 spawn_actor_end
 	pla
 	tax
+	rts
+
+; -------------------- Spawns player actor -----------------------------
+; Input	TEMP2 actor x tile pos
+;	TEMP3 actor y tile pos
+; Uses	Accu
+; Note! Special version of spawn_actor for actor 0 and player.
+spawn_player
+	+set8im actor_state, ACTOR_IN_AIR
+	; set actor x/y positions
+	lda #$40	; Actor is at center of tile (8 pixel), but we use 4 (a bit left), so they don't pop up
+	sta actor_x	; when scrolling left (they are wider than a tile and would pop up suddenly when their
+	lda #0		; tile appears but they should have already been visible)
+	sta actor_y
+	lda TEMP2
+	sta actor_xh
+	lda TEMP3
+	sta actor_yh
+	lda #0
+	sta actor_type
+	lda VICSPRITES_GAME+$3F
+	sta actor_color
+	; set multicolor enable flag if upper bit is set, otherwise disable it
+	bmi +	; upper bit set
+	; clear multicolor flag for sprite x
+	lda $D01C
+	and #$FE
+	jmp ++
+	; set multicolor flag for sprite 0
++	lda $D01C
+	ora #$01
+++	sta $D01C
+	lda #SPRITEPTR_GAME_OFFSET
+	sta actor_shape
 	rts
 
 ; -------------------- handle actor behaviour --------------------
