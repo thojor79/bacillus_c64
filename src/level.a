@@ -55,7 +55,7 @@ run_level
 
 ; spawn the player actor
 	+set8im TEMP2, 0	; start address - fixme later level specific!
-	+set8im TEMP3, 10
+	+set8im TEMP3, 11
 	jsr spawn_player
 
 ; fill visible screen with tiles of level

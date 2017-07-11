@@ -495,7 +495,18 @@ nextlevel
 	jsr prepare_score_panel_chardata
 	jmp ++
 check_level2
-	; cmp #2; bne + ; ...
+	cmp #2
+	beq +
+	jmp check_level3
++	; load data for level 2
+	; tiles and sprites are the same!
+	; RLE decode level tile data and generate tile numbers from tile category indices
+	+set16im TEMPADR0, level2_data_rle
+	+set16im TEMPADR1, LEVEL_DATA
+	jsr rle_decode
+	jsr prepare_level_data
+	jmp ++
+check_level3
 	; no level number matches, so last level completed
 	; jsr outtro fixme
 	jmp checkhighscore
@@ -689,14 +700,18 @@ level1_sprites
 ; unpack directly to $B400 and replace every category number by real tile
 ; level gfx is paletted png to have indices directly.
 
+; The data for a level (256 tiles horizontally, 12 tiles vertically, hence 3072 bytes).
+level1_data_rle
+!src "data/cheese_level1_rle.a"
+
+; data for level2
+level2_data_rle
+!src "data/cheese_level2_rle.a"
+
 ; data for tiles first
 !align 255, 0
 level1_tiledata
 !src "data/cheese_alltiles_tiledata.a"
-
-; The data for a level (256 tiles horizontally, 12 tiles vertically, hence 3072 bytes).
-level1_data_rle
-!src "data/cheese_level1_rle.a"
 
 ; be careful - blocks with one color are coded as multicolor, gives problems with background tiles!
 !align 255,0
