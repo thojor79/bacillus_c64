@@ -127,27 +127,9 @@
 ; Enemy ai?
 ; Problem is randomly generating jump and run levels is very hard, rather do that in
 ; python on pc and try playing them on c64.
-; Not much is missing for a playable game, enemy spawn and acting, score bar, some animation stuff,
-; collecting boni, a bit game handling, done.
-; But what for, is it that interesting?
 ; Two player games would need 2nd joystick. Are they easier done on c64 or on pc?
-; Competing with all the insane demo effects is pointless.
-; Short easy games is better, but what for games?
-; Rather some random stuff I can play or people could try out easily
-; BUT FIRST FINISH THIS SIMPLE GAME
 
-; --------------------------- absolute needed topics above for a playable game ---------------------------------------
-
-; improve kill/dead animation, like morphing to skull, morph with pixel blending like grand prix circuit screen change
-; set sprite/actor position a bit to up/left, later restore....
-
-; fixme show rather bonus than level in score panel
-
-; Bacteria picture as background, foreground text sprites THORSTEN JORDAN PRESENTS
-
-; Add tiles with traps (knifes, fire)
-
-; add tiles with cheese dropping down etc
+; --------------------------- further ideas ---------------------------------------
 
 ; Animate bonus tile(s).
 ; jumping fat drop or some yellow cheese pill, maybe rotating around z
@@ -155,7 +137,7 @@
 ; bonus accounting! list number of diamonds in score bar?!
 ; atm only collects score
 
-; maybe tile with EXIT sign for level end
+; maybe tile with EXIT sign for level end - with extra color in level image
 
 ; When scrolling actors lag behind a bit! yes scroll is triggered and frame immediatly shifts,
 ; but actor data handling is called only next frame, so always lags behind.
@@ -167,16 +149,8 @@
 
 ; Have IRQ there to start color ram shift etc. no, not needed
 ;
-; Allow character Y to be a bit outside screen - fixme this is implicitly tested because we check tile above actor
-; which wraps around to low!
-;
-; Tiledata etc maybe also packable by RLE.
-
 ; show scroller in intro will all features, like turrican intro, use color mixing! use color gradient if possible!
 ;yellow/red e.g.
-
-; implement makelevel.py in c64 code to store level data as simple RLE code with only small number of
-; data per tile and some semirandom stuff, packs well with rle!
 
 ; Now jumping much better with higher gravity and higher jump speed, seems ok! test with joystick.
 ; jumping is ok, but too slow when starting to fall down, needs some rework.

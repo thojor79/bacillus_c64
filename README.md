@@ -23,14 +23,17 @@ Technical facts:
 * animated characters
 * bonus collecting
 * score accounting
+* intro
+* main screen
+* two levels
 
 Planned:
-* Intro, Outtro
-* Highscore handling
-* More levels
+* Outtro
+* Highscore handling in mainscreen
+* More levels (planned 3-6)
 * More level graphics
 * More enemies
-* Boni
+* Boni like 1up, shield, explode
 * Music/Sfx
 
 ![ScreenShot](screenshots/level1.jpg)
