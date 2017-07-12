@@ -2,6 +2,14 @@ ToDo - higher priority first
 ============================
 
 MORE DATA
+make more tile graphics for cheese:
+diagonal and vertically stacked parts of cheese
+orange perimeter like limburger
+with red,blue,green speckles
+dripping cheese.
+category: floor, ceiling, obstacle a/B and island and traps
+
+MORE DATA
 implement data for more levels! maybe same tileset and just other level
 first, later new tilesets for other worlds/levels
 with level2 and same tileset we can check level init code then.
@@ -15,18 +23,6 @@ implement more enemies:
 long legs
 one consisting only of eyes
 etc.
-
-make more tile graphics for cheese:
-diagonal and vertically stacked parts of cheese
-orange perimeter like limburger
-with red,blue,green speckles
-dripping cheese.
-category: floor, ceiling, obstacle a/B and island and traps
-
-INTRO
-fix - only sprite display in irq, coordinate computation in normal
-code. not much work then intro is done!
-data usage for temps in zeropage. e.g. temps for scroll
 
 BUG
 boni in uppermost line can not be collected because actor can't go high
@@ -80,7 +76,7 @@ GAMEPLAY
 handle step into hole/trap
 
 GAMEPLAY
-implement high score enter and management
+implement high score enter and management, that is improve main screen
 
 FEATURE
 game over: wait for joy button not in first 1-2 seconds

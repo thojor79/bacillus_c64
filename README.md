@@ -34,4 +34,5 @@ Planned:
 * Music/Sfx
 
 ![ScreenShot](screenshots/level1.jpg)
+![ScreenShot](screenshots/intro.jpg)
 ![ScreenShot](screenshots/mainmenu.jpg)

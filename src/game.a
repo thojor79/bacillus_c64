@@ -441,10 +441,7 @@ main
 
 ; -------------------------------------- begin of loading/intro/game --------------------------------------
 
-; fixme disabled, background broken and not ready yet.
-; fixme also offer smaller images to encode as rle (like first 48 lines)
-; fixme irq should place sprites, coordinate change by main program!
-;	jsr show_intro
+	jsr show_intro
 
 ; Main screen of the game with highscore display
 ; fixme logo should overwrite only first 8 lines, so shorten rle data!

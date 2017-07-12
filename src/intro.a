@@ -68,21 +68,14 @@ INTRO_SPRITE_TO_RASTER_OFFSET = -22
 INTRO_RL0 = INTRO_SL0 + INTRO_SPRITE_TO_RASTER_OFFSET
 INTRO_RL1 = INTRO_SL1 + INTRO_SPRITE_TO_RASTER_OFFSET
 INTRO_RL2 = INTRO_SL2 + INTRO_SPRITE_TO_RASTER_OFFSET
-	
-; show logo
-!macro showsprite .nr, .ptr, .posx, .posy, .col {
-	lda #<.posx
-	sta $D000+.nr*2		; x pos low
-	lda $D010
-	ora #((>.posx) << .nr)
-	sta $D010		; x pos high
-	lda .posy
-	sta $D001+.nr*2		; y pos
-	lda #.ptr
-	sta SCREEN0+$03F8+.nr	; pointer
-	lda #.col
-	sta $D027+.nr		; color
-}
+INTRO_PX = (24+36+320)*64
+INTRO_PX2 = (24+36-320)*64
+INTRO_VX = 202
+INTRO_AX = 1
+INTRO_FRAMES_PER_STATE = INTRO_VX / INTRO_AX	; should be 8bit value!
+intro_raster_line_config = TEMP4
+intro_state = TEMP5
+intro_color_counter = TEMPADR0
 	
 	+set8im VICSPRITEENABLE, $FF	; all sprites on
 	lda #$00
@@ -91,40 +84,101 @@ INTRO_RL2 = INTRO_SL2 + INTRO_SPRITE_TO_RASTER_OFFSET
 	sta $D01C	; hires
 	sta $D01D	; normal size
 
-; wait
-	; show text color cycling
-	ldx #8
---
+	sta intro_state
+	sta framecounter
+	sta intro_raster_line_config
+	sta intro_color_counter
+
+intro_main_loop
+        ; wait until raster line is at bottom of foreground screen
+-       lda VICRASTER
+        cmp #251        ; end of visible screen
+        bcc -
+
+	; handle color cycling - take 4 bits of framecounter as index
+	lda intro_color_counter
+	lsr
+	lsr
+	and #$07
+	tax
 !for COUNT, 0, 7 {
 	lda intro_text_colors+COUNT, x
 	sta $D027+COUNT
 }
-!for COUNT, 0, 1 {
-	; wait for raster
--	lda VICCTRL1
-	bmi -
--	lda VICCTRL1
-	bpl -
-}
-	dex
-	bne --
-	ldx #8
 
-	jmp --
-; fixme break on fire button
+	; increase frame counter
+	inc framecounter
+	inc intro_color_counter
 
-; fixme have states for intro
-; state 0 scrolls in "presents" text.
-; state 1 scrolls out presents text.
+	; compute new velocity/position values
+	ldx #0
+-	lda intro_sprite_real_vx,x
+	clc
+	adc intro_sprite_real_ax,x
+	sta intro_sprite_real_vx,x
+	lda intro_sprite_real_vxh,x
+	adc intro_sprite_real_axh,x
+	sta intro_sprite_real_vxh,x
+	lda intro_sprite_real_xl,x
+	clc
+	adc intro_sprite_real_vx,x
+	sta intro_sprite_real_xl,x
+	lda intro_sprite_real_xh,x
+	adc intro_sprite_real_vxh,x
+	sta intro_sprite_real_xh,x
+	inx
+	cpx #3
+	bne -
+
+	; when certain number is reached, switch state
+	lda framecounter
+	cmp #INTRO_FRAMES_PER_STATE
+	bcc ++
+	+set8im framecounter, 0
+	inc intro_state
+	lda intro_state
+	; now change behaviour depending on state
+	cmp #1
+	bne +
+	; state 1 reached, acceleration is 0 now
+	ldx #0
+	txa
+-	sta intro_sprite_real_ax,x
+	sta intro_sprite_real_axh,x
+	sta intro_sprite_real_vx,x
+	sta intro_sprite_real_vxh,x
+	inx
+	cpx #3
+	bne -
+	jmp ++
++	cmp #2
+	bne intro_done
+	; state 2 reached, acceleration is reversed
+	lda #<(-INTRO_AX)
+	sta intro_sprite_real_ax
+	sta intro_sprite_real_ax+2
+	lda #<INTRO_AX
+	sta intro_sprite_real_ax+1
+	lda #>(-INTRO_AX)
+	sta intro_sprite_real_axh
+	sta intro_sprite_real_axh+2
+	lda #>INTRO_AX
+	sta intro_sprite_real_axh+1
+++	; check of joystick key is pressed, and if so, return
+	lda CIA1_DATAPORT_A
+        and #$10
+	beq intro_done
+	jmp intro_main_loop
+intro_done
+	; turn display off and all sprites off and return
+	+set8im VICCTRL1, 0
+	sta VICSPRITEENABLE
+        rts
 
 ; maybe later:
 ; state 2 scrolls in logo from above and large sprite from bottom
 ;    (maybe copy new multicolor data to top of screen line by line and clear rest of screen)
 ; state 3 vaporize bacillus at lower part of screen?
-
-; fixme argh now the background image data is broken, has worked before!!!
-
-; store x coords to use in main code, irq uses them
 
 ; the raster irq that shows the texts
 rasterirq_intro_text
@@ -135,7 +189,7 @@ rasterirq_intro_text
 	pha
 	; Raster IRQ is triggered many lines above so we can set x/y coordinates first.
 	; Set sprite x,y,pointer values
-	ldx intro_raster_line_config
+	ldx intro_raster_line_config	; load at which part of text we are in X (0..2)
 	; set time critical Y coordinates first
 	lda intro_sprite_y,x
 !for COUNT, 0, 7 {
@@ -151,55 +205,25 @@ rasterirq_intro_text
 	lda intro_sprite_ptr+COUNT,x
 	sta VICBITMAPCHARDATA+$03F8+COUNT
 }
+	; load real x coords and shift this 16bit value 6 bits to the right
+	; to have a 9bit value for sprite x coordinate.
+	; alternativly shift left 2 bits with zeroed byte for bits 16...23
 	ldx intro_raster_line_config
-	lda intro_state_byte
-	and #1
-	beq +
-	; update stored x coordinates then.
-	; take real x (16bit) and add velocity,
-	; store as first x coordinate, add 7*32 for the following sprites,
-	; store as next coordinates then
-	lda intro_sprite_real_vx,x
-	clc
-	adc intro_sprite_real_ax,x
-	sta intro_sprite_real_vx,x
-	lda intro_sprite_real_vxh,x
-	adc intro_sprite_real_axh,x
-	sta intro_sprite_real_vxh,x
+	ldy #0
+	lda intro_sprite_real_xh,x
+	sta TEMP0
+	bpl +
+	dey
++	sty TEMP1	; bits 16...23 all 1 or all 0 depending on sign of xh!
 	lda intro_sprite_real_xl,x
-	clc
-	adc intro_sprite_real_vx,x
-	sta intro_sprite_real_xl,x
-	sta TEMP0
-	lda intro_sprite_real_xh,x
-	adc intro_sprite_real_vxh,x
-	sta intro_sprite_real_xh,x
-	sta TEMP1
-	jmp ++
-+	lda intro_sprite_real_xl,x
-	sta TEMP0
-	lda intro_sprite_real_xh,x
-	sta TEMP1
-++	; now convert to sprite coordinate space by shifting 6 bits to the right.
-	cmp #$80	; set carry from highest bit, keeps accu! - fixme this shifts in always the same bit!!!
-	; why not shift left 2 ?!
-	ror TEMP1
-	ror TEMP0
-	cmp #$80	; set carry from highest bit
-	ror TEMP1
-	ror TEMP0
-	cmp #$80	; set carry from highest bit
-	ror TEMP1
-	ror TEMP0
-	cmp #$80	; set carry from highest bit
-	ror TEMP1
-	ror TEMP0
-	cmp #$80	; set carry from highest bit
-	ror TEMP1
-	ror TEMP0
-	asl		; set carry from highest bit, trashes accu
-	ror TEMP1
-	ror TEMP0
+	asl
+	rol TEMP0
+	rol TEMP1
+	asl
+	rol TEMP0
+	rol TEMP1
+
+	; set sprite X coordinates for all sprites from computed general X coordinates
 	+set8im TEMP2, 1	; prepare or-mask for hibit-register
 	+set8im TEMP3, 0	; store byte with 9th bits
 	ldy #0
@@ -235,27 +259,9 @@ rasterirq_intro_text
 	; setup next raster irq line
 	inx
 	cpx #3
-	bne +++
-	; end of all text lines
-	; decrease frame counter, stop everything after a fix frame count
-	dec intro_frame_counter
-	bne ++
-	inc intro_state_byte
-	lda #2
-	cmp intro_state_byte
 	bne +
-	; negate acceleration values
-	ldy #6
--	lda intro_sprite_real_ax-1,y
-	eor #$FF
-	clc
-	adc #1
-	sta intro_sprite_real_ax-1,y
-	dey
-	bne -
-+	+set8im intro_frame_counter, 202
-++	ldx #0
-+++	stx intro_raster_line_config
+	ldx #0
++	stx intro_raster_line_config
 	lda intro_raster_lines,x
 	sta VICRASTER
 	jmp rasterirq_ack_and_end
@@ -273,21 +279,12 @@ rasterirq_intro_text
 ; From this 16bit value shift bits to have real pixel coordinates.
 ; Positions start at 36+32*sprite, so start at 380 or -260 (*64).
 ; Velocity is 202 initially, acceleration is 1.
-; fixme after the hold phase acceleration is negated but then speed is insanely high.
 
 intro_raster_lines
 !byte INTRO_RL0, INTRO_RL1, INTRO_RL2
 
-intro_raster_line_config
-!byte 0
-
 intro_sprite_y
 !byte INTRO_SL0, INTRO_SL1, INTRO_SL2
-
-INTRO_PX = (24+36+320)*64
-INTRO_PX2 = (24+36-320)*64
-INTRO_VX = 202
-INTRO_AX = 1
 
 intro_sprite_real_xl
 !byte <INTRO_PX, <INTRO_PX2, <INTRO_PX
@@ -310,12 +307,6 @@ intro_sprite_real_axh
 intro_sprite_ptr
 ; "THORSTEN JORDAN PRESENTS"
 !byte 83,71,78,81,82,83,68,77,42,73,78,81,67,64,77,42,79,81,68,82,68,77,83,82
-
-intro_state_byte
-!byte 1
-
-intro_frame_counter
-!byte 202
 
 ; a generic sprite multiplexer would be useful, for text scroller or maybe zone split technique
 ; but we need rather a special raster irq here, that puts the showsprite commands out
