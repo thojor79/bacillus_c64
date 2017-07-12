@@ -22,6 +22,7 @@ import PIL.Image
 import random
 import sys
 import math
+from rlencode import RLEncode
 
 # Some global parameters
 enable_mixing = True	# Enable color mixing
@@ -472,54 +473,6 @@ def Show(im):
 	im2 = im.resize((im.size[0] * 2, im.size[1] * 2), PIL.Image.NEAREST)
 	im2.show()
 
-# We use clever encoding. Bit 7 indicates repeating.
-# Bits 0-6 encode count, but for non-repeating the count N is stored as N-1.
-# For repeating we have at least 3 repeats so N repeats are stored as (N-3)+128.
-# And we use 255 as end marker.
-def RLEncode(bytes):
-	encoded = []
-	count = 0
-	elem = -1
-	for i in range(0, len(bytes)):
-		if bytes[i] == elem:
-			count += 1
-			if count == 129:	# 126+3, because 255 is special marker.
-				# max reached
-				encoded += [(count, elem)]
-				count = 0
-				elem = -1
-		else:
-			if count > 0:
-				encoded += [(count, elem)]
-			elem = bytes[i]
-			count = 1
-	if count > 0:
-		encoded += [(count, elem)]
-	#print encoded
-	result = []
-	temp = []
-	for e in encoded:
-		if e[0] >= 3:
-			if len(temp) > 0:
-				result += [len(temp)-1]
-				result += temp
-				temp = []
-			result += [e[0] + 128 - 3, e[1]]
-		else:
-			temp += [e[1]] * e[0]
-			if len(temp) > 128:
-				result += [127]
-				result += temp[:127]
-				temp = temp[127:]
-	if len(temp) > 0:
-		result += [len(temp)-1]
-		result += temp
-	result += [255]
-
-	#print result
-	print('RLE encoded',len(bytes),'bytes to',len(result),'bytes (',len(result)*100/len(bytes),'%).')
-	return result
-
 # Sprites have different encoding, swap bit-values (11 and 10)
 # not for hires!
 swaptable = [0, 1, 3, 2]
@@ -573,7 +526,7 @@ if len(sys.argv) < 2:
 	sys.exit(1)
 inputfilename = sys.argv[len(sys.argv) - 1]
 inputbasefilename = inputfilename[0:inputfilename.rfind('.')]
-outputbasefilename = 'output/' + inputbasefilename
+outputbasefilename = inputbasefilename
 if len(sys.argv) > 2:
 	ic = 1
 	while ic + 1 < len(sys.argv):
@@ -597,6 +550,7 @@ if len(sys.argv) > 2:
 				sys.exit(0)
 			spritemode = True
 			spriteneutralindex = int(p1)
+			givencolors = [spriteneutralindex] + givencolors
 		elif p0 == '-color':
 			n = int(p1)
 			if n < 0 or n > 15:
@@ -744,7 +698,6 @@ elif spritemode:
 		num_most_used_indices = 2
 	enable_mixing = False
 	dynamicgreylimit = False
-	fixindices += [spriteneutralindex]
 	# add three lines of neutral colors to make sprite fit in block with neutral color,
 	# for every row of sprites.
 	pxyuv_extended = []
@@ -766,10 +719,12 @@ elif hiresmode:
 fixindices += givencolors
 if num_most_used_indices > len(fixindices):
 	for j in range(0, num_most_used_indices - len(fixindices)):
-		mui = 0
+		mui = -1
 		for i in range(0, 16):
-			if index_use_count[i] > index_use_count[mui] and i not in fixindices:
+			if (mui < 0 or index_use_count[i] > index_use_count[mui]) and index_use_count[i] > 0 and i not in fixindices:
 				mui = i
+		if mui < 0:
+			raise ValueError("illegal index use count")
 		fixindices += [mui]
 print('Fix indices for image:', fixindices)
 

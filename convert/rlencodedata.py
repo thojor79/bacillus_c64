@@ -1,6 +1,5 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # coding=utf8
-import Image
 import sys
 from rlencode import RLEncode
 
@@ -10,7 +9,7 @@ from rlencode import RLEncode
 #
 ###########################################################################################
 
-# load level image
+# load data
 if len(sys.argv) < 2:
 	print('Usage: ', sys.argv[0], ' [Options] INPUTFILENAME')
 	sys.exit(1)
@@ -33,20 +32,19 @@ def dumpbytes(v):
 		n += 16
 	return z
 
-im = Image.open(inputfilename)
-img_w = im.size[0]
-img_h = im.size[1]
-px = im.getdata()
-bytes = []
-for y in range(0, img_h):
-	for x in range(0, img_w):
-		bytes += [ px[y * img_w + x] ]
-enc = RLEncode(bytes)
-
-dfl = dumpbytes(bytes)
-f = open(outputbasefilename + '_raw.a','wt')
-f.writelines(dfl)
+# read input file
+f = open(inputfilename, 'rt')
+ifl = f.readlines()
 f.close()
+
+# generate byte array
+bytes = []
+for i in ifl:
+	nbrs = i[:-1].split('$')[1:]
+	for x in nbrs:
+		bytes += [int(x[0:2], 16)]
+
+enc = RLEncode(bytes)
 
 dfl = dumpbytes(enc)
 f = open(outputbasefilename + '_rle.a','wt')

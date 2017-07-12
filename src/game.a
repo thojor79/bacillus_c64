@@ -481,8 +481,10 @@ nextlevel
 	jsr prepare_level_data
 	; level charset	
 	+memcopy_pages VICCHARSET, level1_chardata, 8	; 2k = 8 pages
-	; level sprites
-	+memcopy_pages VICSPRITES_GAME, level1_sprites, 31 ; 8k-1p = 31 pages, don't overwrite last page
+	; level sprites - note! write at most 31 pages (7.75k), don't overwrite last page because of IRQ vectors
+	+set16im TEMPADR0, level1_sprites_rle
+        +set16im TEMPADR1, VICSPRITES_GAME
+        jsr rle_decode
 	; level specific colors
 	+copy8 VICFGCOL, level1_fixcolors
 	+copy8 VICFGCOL+1, level1_fixcolors+1
@@ -595,7 +597,7 @@ rle_decode
 	lda (TEMPADR0),y
 	bmi rle_decode_repeat
 	; No repeat or stop, just copy data that follows
-	tax	; copy repeat count (copy one more than this count!)
+	tax	; copy repeat count (copy one more than this count - we have always at least 1 data byte!)
 	; Increase read address by one
 	inc TEMPADR0
 	bne +
@@ -627,7 +629,7 @@ rle_decode_repeat
 	rts	; done
 +	and #$7F
 	clc
-	adc #3
+	adc #3	; repeat is only chosen if at least 3 equal bytes, so count is always >= 3
 	tax
 	; Increase read address by one
 	inc TEMPADR0
@@ -689,12 +691,9 @@ scorepanel_chardata		; 160 bytes
 level1_fixcolors
 !src "data/cheese_alltiles_fixcolors.a"
 
-!align 255, 0
-level1_sprites
-!src "data/level1_sprites.a"
-!src "data/level1_sprites.a" ; fixme for testing more sprites, to have 16. atm data 7pages
-!src "data/level1_sprites.a"
-!src "data/level1_sprites.a"
+; sprite data for level 1 packed as RLE.
+level1_sprites_rle
+!src "data/level1_sprites_rle.a"
 
 ; pack level data from png as rle and store it.
 ; unpack directly to $B400 and replace every category number by real tile

@@ -25,32 +25,14 @@ VICBITMAPBLOCK = 1
 VICBITMAP = VICBANK*$4000+VICBITMAPBLOCK*$2000
 VICSCREENBLOCKBITMAP = 0
 VICBITMAPCHARDATA = VICBANK*$4000+VICSCREENBLOCKBITMAP*$0400
+; so bitmap is at $E000 and screen at $C000.
+; sprites are at $D000 (text sprites) so it all works
 
 show_intro
-; VIC memory area set up
-	lda #VICSCREENBLOCKBITMAP*16+VICBITMAPBLOCK*8+1	; in bitmap mode bit 3 sets bitmap block, in charmode bits 1-3 charblock!
-	sta VICMEMCTRL
-;	lda #>VICBITMAPCHARDATA	; inform Kernal where screen is - no, kernal disabled
-;	sta $288
-
-; setup VIC bitmap multicolor mode, fixme rather set registers directly
-	lda VICCTRL1
-	ora #$20
-	sta VICCTRL1	; Bitmap mode on
-	lda VICCTRL2
-	ora #$10
-	sta VICCTRL2	; Multicolor mode on
-
-; set background color
-	lda #$00
-	sta VICBGCOL
-	lda introscreen_backgroundcolor
-	sta VICFGCOL
-
-; turn off VIC display
-	lda $D011
-	and #$EF
-	sta $D011
+; set background color and turn off display
+	+set8im VICCTRL1, 0
+	+set8im VICBGCOL, 0
+	+copy8 VICFGCOL, introscreen_backgroundcolor
 
 ; copy data to destination
 	+set16im TEMPADR0, introscreen_bitmapdata_rle
@@ -63,15 +45,16 @@ show_intro
 	+set16im TEMPADR1, COLORRAM
 	jsr rle_decode
 
+; turn on display and set video mode and memory area
+	+set8im VICMEMCTRL, VICSCREENBLOCKBITMAP*16+VICBITMAPBLOCK*8    ; in bitmap mode bit 3 sets bitmap block
+	+set8im VICCTRL1, $3B
+	+set8im VICCTRL2, $18
+	
+; set up interrupt
 	sei
 	+set16im $FFFE, rasterirq_intro_text
 	+set8im VICRASTER, INTRO_RL0
 	cli
-
-; turn on VIC display
-	lda $D011
-	ora #$10
-	sta $D011
 
 ; We have 3 lines of text with 21 lines each, out of 200.
 ; Makes a difference of ~34 lines between each text line,
@@ -133,15 +116,15 @@ INTRO_RL2 = INTRO_SL2 + INTRO_SPRITE_TO_RASTER_OFFSET
 ; fixme have states for intro
 ; state 0 scrolls in "presents" text.
 ; state 1 scrolls out presents text.
+
+; maybe later:
 ; state 2 scrolls in logo from above and large sprite from bottom
 ;    (maybe copy new multicolor data to top of screen line by line and clear rest of screen)
 ; state 3 vaporize bacillus at lower part of screen?
-; draw some colorful logo?
-; or use background color with colorful raster bar as logo!
-; so stage 3 would be to blend in the logo. can be done line by line switch of vic bank or
-; copying in the data. having 8 lines of gap allows copying the charset/colordata as well.
-; would be easier.
-; argh now the background image data is broken, has worked before!!!
+
+; fixme argh now the background image data is broken, has worked before!!!
+
+; store x coords to use in main code, irq uses them
 
 ; the raster irq that shows the texts
 rasterirq_intro_text
@@ -198,7 +181,8 @@ rasterirq_intro_text
 	lda intro_sprite_real_xh,x
 	sta TEMP1
 ++	; now convert to sprite coordinate space by shifting 6 bits to the right.
-	cmp #$80	; set carry from highest bit, keeps accu!
+	cmp #$80	; set carry from highest bit, keeps accu! - fixme this shifts in always the same bit!!!
+	; why not shift left 2 ?!
 	ror TEMP1
 	ror TEMP0
 	cmp #$80	; set carry from highest bit
@@ -325,7 +309,6 @@ intro_sprite_real_axh
 
 intro_sprite_ptr
 ; "THORSTEN JORDAN PRESENTS"
-;fixme we have different text sprites now!
 !byte 83,71,78,81,82,83,68,77,42,73,78,81,67,64,77,42,79,81,68,82,68,77,83,82
 
 intro_state_byte
@@ -358,4 +341,3 @@ intro_text_colors
 
 ; the intro screen
 !src "data/introscreen_rle.a"
-

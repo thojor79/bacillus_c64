@@ -1,10 +1,17 @@
 ToDo - higher priority first
 ============================
 
+MORE DATA
 implement data for more levels! maybe same tileset and just other level
 first, later new tilesets for other worlds/levels
 with level2 and same tileset we can check level init code then.
 More tilesets: candy world / salad world etc.
+
+MORE DATA
+implement more enemies:
+long legs
+one consisting only of eyes
+etc.
 
 make more tile graphics for cheese:
 diagonal and vertically stacked parts of cheese
@@ -13,9 +20,10 @@ with red,blue,green speckles
 dripping cheese.
 category: floor, ceiling, obstacle a/B and island and traps
 
->>
-fix intro - only sprite display in irq, coordinate computation in normal
+INTRO
+fix - only sprite display in irq, coordinate computation in normal
 code. not much work then intro is done!
+data usage for temps in zeropage. e.g. temps for scroll
 
 boni in uppermost line can not be collected because actor can't go high
 enough to collect them
@@ -35,6 +43,10 @@ Store animation data at $0200 or $B000-$B200. 512 bytes are enough for the
 background animation (2 chars a 32 phases are 64 chars)
 we should use less data for bg animation. 8 byte per char is enough for
 64 phases, at 8 phases we can animate 8 chars.
+-> always use same tiles, document that.
+-> we have enough space for many tiles so fix numbers are no problem
+-> animation can be interleaved to various frames so it doesnt take much
+raster time
 
 blend_in: sprites delay raster irq most probably and give visual glitch, but
 not critical. maybe just disable scorepanel by setting fgcol to all
@@ -43,22 +55,18 @@ black then
 background animated tiles with fire/knives/diamond like cheese parts?
 maybe some spare sprites with actor numbers >= 16 as boni or traps.
 
-player also exists as enemy, this is wrong, but it is because of reusing
-sprite data for enemy types >= 6 as we have no data yet.
-
-store more temporary data in zeropage or at $0200, define space centrally in game.a
-mostly checked!
-checks pending:
-intro (can use same space as scrolling!)
-
 implement blend out effect for level end - reverse reading of blend in,
 rather easy but rarely used
 
 implement different actor behavior, either by type or by flag (less types
 available then). Generate them pseudo randomly by position (done)
 Behaviour: walk with fall down, follow player, flying pattern, flying homing
+maybe use only 8 enemies with 1 bit to control behaviour
 
 implement dying animation with morph to skull or so
+
+gameplay:
+have special boni like 1up, kill-all-enemies-on-screen, invulnerable
 
 gameplay:
 handle step into hole/trap

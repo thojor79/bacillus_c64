@@ -699,8 +699,8 @@ no_collision
 spawn_actor
 	txa
 	pha
-	; find empty actor
-	ldx #0
+	; find empty actor (from index 1 on, 0 is player)
+	ldx #1
 -	lda actor_state,x
 	beq spawn_actor_do_it
 	inx
@@ -760,21 +760,11 @@ spawn_actor_color_read_adr
 	sta actor_shape,x
 	; set behaviour, later by type, fixme
 	+set8imx actor_behaviour, 1
-	cpx #0
-	beq ++	; don't set behaviour for player
 	; only behaviour for now, just walk.
 	; other behaviours: walk/fall down, flying (later) and flying homing,
 	; maybe also walk and follow with jumping.
 	; set horizontal speed when spawing
 	+set8imx actor_vx, -PIXELTOPOS
-++
-
-;	and #1
-;	beq +
-;	+set8imx actor_vx, -$10
-;	jmp ++
-;+	+set8imx actor_vx, $10
-
 spawn_actor_end
 	pla
 	tax
