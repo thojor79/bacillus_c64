@@ -10,6 +10,12 @@ bacillus.prg : src/game.a src/macros.a src/actor.a src/intro.a src/rasterirq.a s
 bacillus.d64 : bacillus.prg
 	c1541 -format diskname,id d64 bacillus.d64 -attach bacillus.d64 -write bacillus.prg bacillus
 
+bacillus_x.prg : bacillus.prg
+	~/c64/exomizer/src/exomizer sfx sys bacillus.prg -o bacillus_x.prg
+
+bacillus_x.d64 : bacillus_x.prg
+	c1541 -format diskname,id d64 bacillus_x.d64 -attach bacillus_x.d64 -write bacillus_x.prg bacillus
+
 run : bacillus.prg
 	x64 --autostart bacillus.prg
 
