@@ -76,7 +76,7 @@ run_level
 	bne -
 
 ; render score panel once
-	jsr update_score_panel
+	jsr update_score_panel_with_level
 
 ; Set up sprite based blend in effect (also sets up a raster irq!)
 	jsr blend_in_init
@@ -224,6 +224,23 @@ game_over_next_frame
 
 ; ----------------------- show score in score panel
 ; Uses	A, X
+update_score_panel_with_level
+	; level
+	lda level_nr
+	and #$0F
+	sec
+	adc #SCPO
+	sta SCREEN0+24*40+22
+	sta SCREEN1+24*40+22
+	lda level_nr
+	lsr
+	lsr
+	lsr
+	lsr
+	sec
+	adc #SCPO
+	sta SCREEN0+24*40+21
+	sta SCREEN1+24*40+21
 update_score_panel
 	lda score
 	and #$0F

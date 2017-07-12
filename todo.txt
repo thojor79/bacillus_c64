@@ -26,7 +26,7 @@ etc.
 
 BUG
 boni in uppermost line can not be collected because actor can't go high
-enough to collect them
+enough to collect them - if he jumps from high island it works sometimes!
 
 GAMEPLAY
 have some tiles that vaporize if player is on top of them, e.g. 8 phases
@@ -84,6 +84,9 @@ game over: wait for joy button not in first 1-2 seconds
 INFO
 in interrupts don't save Y register if we don't change it - only in
 scoreline irq, and not really critical there
+
+FEATURE
+secret passages or rooms in levels
 
 FEATURE
 implement game complete screen (outtro)

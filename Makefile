@@ -7,13 +7,9 @@
 bacillus.prg : src/game.a src/macros.a src/actor.a src/intro.a src/rasterirq.a src/mainscreen.a src/blendin.a src/level.a src/scrolling.a data/textcharset_sprdata.a data/introscreen_rle.a data/mainlogo_rle.a data/cheese_alltiles_chardata.a data/level*sprites_rle.a data/cheese_level*_rle.a
 	acme src/game.a
 	
-bacillus.d64 : bacillus.prg
+bacillus.all : bacillus.prg
 	c1541 -format diskname,id d64 bacillus.d64 -attach bacillus.d64 -write bacillus.prg bacillus
-
-bacillus_x.prg : bacillus.prg
 	~/c64/exomizer/src/exomizer sfx sys bacillus.prg -o bacillus_x.prg
-
-bacillus_x.d64 : bacillus_x.prg
 	c1541 -format diskname,id d64 bacillus_x.d64 -attach bacillus_x.d64 -write bacillus_x.prg bacillus
 
 run : bacillus.prg
