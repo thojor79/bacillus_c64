@@ -4,7 +4,8 @@ ToDo - in categories
 BUGS
 ====
 
-.
+Sometimes boni in first row are collected but not erased from visible
+screen. when scrolling out and in again they are gone.
 
 VISUAL GLITCHES
 ===============
@@ -29,6 +30,19 @@ we should use less data for bg animation. 8 byte per char is enough for
 -> we have enough space for many tiles so fix numbers are no problem
 -> animation can be interleaved to various frames so it doesnt take much
 raster time
+-
+more background tiles needed:
+inverse cheese for secret rooms
+exit sign
+-> planned tile ranges:
+background tiles 4x4 (3 * 2x2, 4 * 1x1), indices 0..15, special indices 0,1,7,9
+floor tiles 8 (4* 2x1), indices 16..23
+obstacleA tiles 4* 2x2, indices 24..39
+obstacleB tiles 2* 2x1, indices 40..43
+island tiles 4* 2x1, indices 44..51
+ceiling tiles 2* 2x1, indices 52..55
+special boni tiles: shield, killall, 1up, indices 56-58, maybe better as part of the background index range!
+
 
 
 GAMEPLAY EXTENSIONS
