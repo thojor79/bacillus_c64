@@ -194,6 +194,7 @@ game_over
 	sta $D010
 	; Cycle colors between greys and still cycle score panel
 	+set8im framecounter, 0
+	+set8im TEMP0, 0
 game_over_next_frame
 -	lda VICRASTER
 	cmp #251	; end of visible screen and close to wrap so only triggered once per frame
@@ -212,10 +213,16 @@ game_over_next_frame
 	; wait until raster line is > 255
 -	lda VICRASTER
 	bmi -
-	; Wait for joystick button here - but not during the first 2-3 seconds,
+	; Wait for joystick button here - but not during the first 1-2 seconds,
 	; to avoid clicks still done by player to quickly move away game over
-	; message. not yet implemented, fixme
-	lda CIA1_DATAPORT_A
+	; message.
+	lda TEMP0
+	bne +
+	lda framecounter
+	cmp #75
+	bcc game_over_next_frame
+	+set8im TEMP0, 1
++	lda CIA1_DATAPORT_A
 	and #$10
 	bne game_over_next_frame	; only wait for press yet
 	; disable all sprites

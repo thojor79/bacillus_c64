@@ -380,7 +380,10 @@ actor_moves_up
 	+add_actor_x_pixel TEMP2, 11+TILEWIDTHINPIXELS		;+TW because we do < TEMP2 later
 	; subtract height of actor and store tile y offset in TEMP1
 	+add_actor_y_pixel TEMP1, -21
-	;bmi actor_y_checked	; if the tile position is < 0, don't check! fixme just a try, to have open sky
+	; value is still in Accu. Allow actor to go upwards out of the
+	; screen at least for one tile. So if A==$FF skip the check
+	cmp #$FF
+	beq actor_y_checked
 	; now check for tiles with y between TEMP0 and including TEMP2 if blocked
 -	jsr check_if_tile_is_ground
 	bcs actor_stop_up
@@ -410,7 +413,10 @@ actor_moves_right
 	+add_actor_x_pixel TEMP0, 11
 	; subtract height of actor and store tile y offset in TEMP1
 	+add_actor_y_pixel TEMP1, -21
-	; same for lower position
+	; clamp the check at zero, so TEMP1 to 0 if it is negative
+	bpl +
+	+set8im TEMP1, 0
++	; same for lower position
 	+add_actor_y_pixel TEMP2, -1+TILEHEIGHTINPIXELS	;+TH because we do < TEMP2 later
 	; now check for tiles with y between TEMP1 and including TEMP2 if blocked
 -	jsr check_if_tile_is_ground
@@ -437,7 +443,10 @@ actor_moves_left
 	+add_actor_x_pixel TEMP0, -12
 	; subtract height of actor and store tile y offset in TEMP1
 	+add_actor_y_pixel TEMP1, -21
-	; same for lower position
+	; clamp the check at zero, so TEMP1 to 0 if it is negative
+	bpl +
+	+set8im TEMP1, 0
++	; same for lower position
 	+add_actor_y_pixel TEMP2, -1+TILEHEIGHTINPIXELS	;+TH because we do < TEMP2 later
 	; now check for tiles with y between TEMP1 and TEMP2 if blocked
 -	jsr check_if_tile_is_ground

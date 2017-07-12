@@ -4,15 +4,14 @@ ToDo - in categories
 BUGS
 ====
 
-boni in uppermost line can not be collected because actor can't go high
-enough to collect them - if he jumps from high island it works sometimes!
+.
+
+VISUAL GLITCHES
+===============
 
 blend_in: sprites delay raster irq most probably and give visual glitch, but
 not critical. maybe just disable scorepanel by setting fgcol to all
 black then
-
-game over: wait for joy button not in first 1-2 seconds
-
 
 GENERIC
 =======
@@ -47,9 +46,12 @@ have special boni like 1up, kill-all-enemies-on-screen, invulnerable
 
 handle step into hole/trap
 
+>>>
 implement high score enter and management, that is improve main screen
 
 secret passages or rooms in levels
+
+score dependent on enemy type (with table)
 
 
 GENERAL FEATURES
@@ -79,6 +81,7 @@ with red,blue,green speckles
 dripping cheese.
 category: floor, ceiling, obstacle a/B and island and traps
 
+>>>
 implement data for more levels! maybe same tileset and just other level
 first, later new tilesets for other worlds/levels
 with level2 and same tileset we can check level init code then.
