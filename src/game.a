@@ -257,6 +257,7 @@ SCPCOUNT = 22
 ANIMATED_BGTILE_INDEX = 16	; one tile is animated
 FIRST_GROUND_TILE_INDEX = 12	; first tile index that is no background
 VAPOR_TILE_INDEX = 52		; this and next tile vaporize
+VAPOR_TILE_NUMS = 6		; number of vaporating tiles
 ; --------------- temporary variables in zeropage
 TEMP0 = $02
 TEMP1 = $03
@@ -438,6 +439,7 @@ nextlevel
         jsr rle_decode
 	; level specific colors
 	+copy8 VICFGCOL, level1_fixcolors
+	sta rasterbar_colors + 7	; store also for rasterirq, is level specific
 	+copy8 VICFGCOL+1, level1_fixcolors+1
 	+copy8 VICFGCOL+2, level1_fixcolors+2
 	+set8im VICSPRITECOMMONCOLOR0, 0

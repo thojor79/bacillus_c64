@@ -26,6 +26,8 @@ Technical facts:
 * intro
 * main screen
 * two levels
+* special tiles that vaporize
+* special boni like invulnerability and 1up
 
 Planned:
 * Outtro
@@ -33,7 +35,6 @@ Planned:
 * More levels (planned 3-6)
 * More level graphics
 * More enemies
-* Boni like 1up, shield, explode
 * Music/Sfx
 
 ![ScreenShot](screenshots/level1.jpg)

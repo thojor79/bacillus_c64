@@ -128,6 +128,8 @@ mainloop
 	jsr handle_dead_actors
 	; change actor shapes
 	jsr compute_actor_animations
+	; handle ground vaporizing below actor and traps
+	jsr handle_special_tiles_below_player
 	; handle the AI for actor movement
 	jsr handle_actor_behaviour
 	; increment frame counter
@@ -449,8 +451,7 @@ rasterirq_scoreline_end
 ; 8  - obstacleB		(2x1) Tiles 36-37,38-39
 ; 9  - exit sign		(2x1) Tiles 10-11
 ; 10 - ceiling			(2x1) Tiles 48-49,50-51
-; 11 - vaporating island	(2x1) Tiles 52-55 later 52-53 - or make 6 different 2x1 tiles!
-; 12 - traps (later)		(2x1) Tiles 54-55,56-57
+; 11 - vaporating island	(1x1) Tiles 52-57 (phases, initial 52)
 ; We have 234 chars available (256-22 for scorepanel), that are
 ; 58 tiles without reuse of chars. Some chars are reused, so we could add
 ; more tiles.
@@ -623,10 +624,8 @@ prepare_level_data_tile10	; ceiling 2x1 index 48+,50+
 	adc #48
 	adc TEMP4
 	rts
-prepare_level_data_tile11	; vaporating island, now 2x2 tile index 52+
-	lda TEMP2
-	clc
-	adc #52
+prepare_level_data_tile11	; vaporating island, 1x1 tile index 52+
+	lda #VAPOR_TILE_INDEX
 	rts
 
 ; ------------ data
@@ -672,8 +671,7 @@ prepare_level_jump_table_hi
 !byte >prepare_level_data_tile11
 
 rasterbar_colors
-!byte 6,14,13,1,13,14,6, 9	; fixme: the last number is only valid for cheese levels! needs to be level specific
-; read and copy it from register? or store in extra lookup var when it is set?
+!byte 6,14,13,1,13,14,6, 13	; last value is level specific and overwritten on init of level
 
 game_over_sprite_ptr
 !byte 64+6, 64+0, 64+12, 64+4, 64+14, 64+21, 64+4, 64+17

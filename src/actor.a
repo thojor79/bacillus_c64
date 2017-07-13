@@ -253,6 +253,66 @@ joy2_not_up
 	bne -
 	rts
 
+; ----------------- Check for special tiles below actor (vaporize, traps) ----------
+; Uses TEMPADR0, TEMPADR1, TEMPADR2, TEMP0, TEMP1, TEMP2, A, X, Y
+handle_special_tiles_below_player
+	; here check if player is on ground and tile below player is
+	; vaporating island. Then let it erode and occasionally clear it from map!
+	; Note here we would check for tiles that contain traps too! (later)
+	lda actor_state
+	cmp #ACTOR_ON_GROUND
+	bne handle_special_tiles_below_player_done	; if not on ground, no vaporizing is done
+	; actor is on ground - check for framecounter (changes only every N frames!)
+	lda framecounter
+	and #$07
+	bne handle_special_tiles_below_player_done
+	; iterate over all tiles below actor, as first compute their coordinates
+	ldx #0	; actor 0!
+	+add_actor_x_pixel TEMPADR2, -8
+	+add_actor_x_pixel TEMP2,  7+TILEWIDTHINPIXELS  ; one more for comparison
+	; Y coordinate stays the same, compute once
+	lda actor_yh
+	clc
+        adc #>LEVEL_DATA
+        sta TEMPADR2+1
+handle_special_tiles_below_player_one_tile
+	ldy #0
+	lda (TEMPADR2),y
+        cmp #VAPOR_TILE_INDEX
+	bcc handle_special_tiles_below_player_next_tile		; actor is on tile < vapor_index
+	cmp #(VAPOR_TILE_INDEX+VAPOR_TILE_NUMS)
+	bcs handle_special_tiles_below_player_next_tile		; actor is on tile >= vapor_indices
+	; we are on vaporizing tile - change tile number
+	; we can't animate it, need to switch tile numbers!
+	lda (TEMPADR2),y
+	; increase tile index
+	clc
+	adc #1
+	cmp #(VAPOR_TILE_INDEX+VAPOR_TILE_NUMS)
+	bcc +		; not yet state reached that tile is vaporized
+	; tile is gone, set actor to air
+	+set8im actor_state, ACTOR_IN_AIR
+	; compute replacement tile index
+	lda TEMPADR2		; extract bit 0 of X coord.
+	lsr
+	lda actor_yh		; extract bit 0 of Y coord.
+	and #1			; keep bit 0 as bit 1
+	rol			; now A is tilenumber 0...3
++	; replace tile and render it to
+	sta (TEMPADR2),y	; store new tile number
+	sta TEMP0		; store tile number for render_tile
+	; redraw tile on current screen then!
+	ldx TEMPADR2		; load X address
+	ldy actor_yh		; load Y address
+	jsr render_tile		; only used TEMPADR0,TEMPADR1
+handle_special_tiles_below_player_next_tile
+	inc TEMPADR2
+	lda TEMPADR2
+	cmp TEMP2
+	bne handle_special_tiles_below_player_one_tile
+handle_special_tiles_below_player_done
+	rts
+
 ; ----------------- Actor movement --------------------
 ; Uses	TEMPADR0, TEMPADR1, TEMPADR2, TEMPADR3, TEMP0, TEMP1, TEMP2, TEMP3, TEMP4, A, X, Y
 handle_actor_movement
@@ -267,10 +327,9 @@ handle_actor_movement
 	; We need to keep TileX-Start/Limit and TileY-Start/Limit after computing start address (TEMP1-TEMP4)
 	ldx #0	; actor 0!
 	+add_actor_x_pixel TEMP1, -8
-	+add_actor_x_pixel TEMP2,  7
+	+add_actor_x_pixel TEMP2,  7+TILEWIDTHINPIXELS	; one more for comparison
 	+add_actor_y_pixel TEMP3, -18
 	+add_actor_y_pixel TEMP4, -3
-	inc TEMP2	; one more for comparison
 	inc TEMP4
 	lda TEMP1	; avoid -1 as x start address.
 	cmp #$FF
@@ -294,10 +353,10 @@ handle_actor_movement
 	sta TEMPADR2+1
 	; now we can use TEMP0 again
 
-	; for player check for special tiles
+; ------------ for player check for special tiles (boni) - only makes sense when actor has moved
 check_for_bonus_tile	
 	; load tile data and compare with boni tiles, remove and account it if hit
-	ldy #0
+	ldy #0			; clear y as offset is always 0.
 	lda (TEMPADR2),y	; load tile nr from level data
 	cmp #5			; if tile < 5 or >= 10 continue
 	bcc check_for_bonus_tile_next
@@ -324,17 +383,15 @@ check_for_bonus_tile_add_live
 	+addlive
 check_for_bonus_tile_remove_it
 	lda TEMPADR2		; extract bit 0 of X coord.
-	and #1
-	sta TEMP0
+	tax			; needed in X later
+	lsr			; bit 0 to carry
 	lda TEMP3		; extract bit 0 of Y coord.
-	and #1			; keep bit 0 as bit 1
-	asl
-	ora TEMP0		; combine with bit 0 of x coord
+	and #1			; keep bit 0
+	rol			; bring in carry -> now A = Y0*2+X0 = 0...3
 	sta (TEMPADR2),y	; store position specific background tile!
 	sta TEMP0		; store tile number for render_tile
 	; redraw tile on current screen then!
-	ldx TEMPADR2
-	ldy TEMP3		; load Y address
+	ldy TEMP3		; load Y address, X address already set
 	jsr render_tile		; only used TEMPADR0,TEMPADR1
 check_for_bonus_tile_next
 	; now check next tile!
@@ -350,29 +407,7 @@ check_for_bonus_tile_next
 	cmp TEMP4
 	bne check_for_bonus_tile
 
-	; here check if player is on ground and tile below player is
-	; vaporating island. Then let it erode and occasionally clear it from map!
-	lda actor_state
-	cmp #ACTOR_ON_GROUND
-	bne +
-	; compute tile address to TEMPADR2
-        lda #>LEVEL_DATA
-        clc
-        adc actor_yh
-        sta TEMPADR2+1
-        lda actor_xh
-        sta TEMPADR2
-	ldy #0
-	lda (TEMPADR2),y
-	and #$FE
-        cmp #VAPOR_TILE_INDEX
-	bne +
-	; we are on vaporizing tile - change tile number
-	; fixme we can't animate it, need to switch tile numbers!!!
-;fixme	jmp *
-+
-
-	; Compute movement of all actors!
+; -------------- Compute movement of all actors!
 	ldx #0	; actor counter
 	stx actor_screen_xh	; 9th bits of x coords, empty it first
 handle_next_actor_movement
@@ -390,7 +425,15 @@ handle_next_actor_movement
 	jmp handle_actor_movement_end_of_loop
 +	; Y movements first! so bounce at ceiling and don't stop forward move then!
 	+adds8to16_actor actor_y, actor_vy
-	; If actor is in air, add gravity
+	; if actor_y has become negative, stop it!
+	lda actor_yh,x
+	bpl +
+	; clamp at zero
+	lda #0
+	sta actor_y,x
+	sta actor_yh,x
+	sta actor_vy,x	; stop possible upward movement by setting vertical velocity to 0
++	; If actor is in air, add gravity
 	lda actor_state,x
 	cmp #ACTOR_IN_AIR
 	bne +
@@ -405,7 +448,9 @@ actor_moves_down_or_stays
 	lda actor_yh,x
 	cmp #TILESYPERSCREEN
 	bcc +
-	; actor falls below screen! stop it for now
+	; tile y coord is >= TILESYPERSCREEN or maybe a bit negative.
+	; negative is not allowed, so actor has fallen out of screen! stop
+	; it for now (later maybe dies)
 	+set8imx actor_yh, TILESYPERSCREEN
 	+set8imx actor_y, 0
 +

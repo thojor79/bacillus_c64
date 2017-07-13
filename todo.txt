@@ -7,8 +7,12 @@ BUGS
 Sometimes boni in first row are collected but not erased from visible
 screen. when scrolling out and in again they are gone.
 
-sometimes jumping near boni gives CPU JAM and code seems overwritten near $3fd0
-happened once
+sometimes when jumping on top out of screen colors are killed and random
+tiles overwritten, also CPU jam (now gone).
+Most probably tile coordinates with y < 0 or x with wrap are written.
+However the tile data is not near I/O range. Maybe CPU jumps to invalid
+code.
+Hard to reproduce...
 
 not all chars are copied for tiles, only 224 not 234
 
@@ -26,16 +30,10 @@ GENERIC
 
 maybe animate more tiles (rotating round cheese seen from side,
 or rotating roll)
-vaporating island isn't made as hires tile although should be!
-it should be 2x1, not 2x2 - fixme we can't animate that but need to switch
-tiles then!!!
 
 
 GAMEPLAY EXTENSIONS
 ===================
-
-have some tiles that vaporize if player is on top of them, e.g. 8 phases
-like the small bridges in Giana Sisters. Same check like with boni tiles.
 
 implement different actor behavior, either by type or by flag (less types
 available then). Generate them pseudo randomly by position (done)
