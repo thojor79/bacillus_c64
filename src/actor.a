@@ -268,9 +268,18 @@ handle_special_tiles_below_player
 	bne handle_special_tiles_below_player_done
 	; iterate over all tiles below actor, as first compute their coordinates
 	ldx #0	; actor 0!
-	+add_actor_x_pixel TEMPADR2, -8
-	+add_actor_x_pixel TEMP2,  7+TILEWIDTHINPIXELS  ; one more for comparison
-	; Y coordinate stays the same, compute once
+	+add_actor_x_pixel TEMPADR2, -12
+	+add_actor_x_pixel TEMP2,  11+TILEWIDTHINPIXELS  ; one more for comparison
+	; handle clamping for x address, TEMPADR2=-1=$FF to $0 and TEMP2=0->$FF
+	; (maybe wrap $1 too)
+	lda TEMPADR2
+	cmp #$FF
+	bne +
+	inc TEMPADR2
++	lda TEMP2
+	bne +
+	dec TEMP2
++	; Y coordinate stays the same, compute once
 	lda actor_yh
 	clc
         adc #>LEVEL_DATA
