@@ -65,18 +65,17 @@ run_level
 ; to read and backup mc register and colors (9 byte)
 	jsr render_tiles_on_screen
 
-; Set up score panel - only to screen0 !
+; Set up score panel - on both screens
 	ldx #40
 -	lda scorepanelchars-1,x
+	clc
+	adc #SCPO
 	sta SCREEN0+24*40-1,x
 	sta SCREEN1+24*40-1,x
 	lda #0
 	sta COLORRAM+24*40-1,x
 	dex
 	bne -
-
-; render score panel once
-	jsr update_score_panel_with_level
 
 ; Set up sprite based blend in effect (also sets up a raster irq!)
 	jsr blend_in_init
@@ -135,7 +134,7 @@ mainloop
 	inc framecounter
 	; cycle raster bar colors
 	jsr cycle_score_panel_colors
-	; render current score to score panel
+	; render current score/lives/food to score panel
 	jsr update_score_panel
 	; check if player is at end of level
 	lda actor_xh
@@ -231,28 +230,28 @@ game_over_next_frame
 
 ; ----------------------- show score in score panel
 ; Uses	A, X
-update_score_panel_with_level
-	; level
-	lda level_nr
+update_score_panel
+	; --- food
+	lda food
 	and #$0F
-	sec
-	adc #SCPO
-	sta SCREEN0+24*40+22
-	sta SCREEN1+24*40+22
-	lda level_nr
-	lsr
-	lsr
-	lsr
-	lsr
-	sec
-	adc #SCPO
+	clc
+	adc #SCPO0
 	sta SCREEN0+24*40+21
 	sta SCREEN1+24*40+21
-update_score_panel
+	lda food
+	lsr
+	lsr
+	lsr
+	lsr
+	clc
+	adc #SCPO0
+	sta SCREEN0+24*40+20
+	sta SCREEN1+24*40+20
+	; --- score
 	lda score
 	and #$0F
-	sec
-	adc #SCPO
+	clc
+	adc #SCPO0
 	sta SCREEN0+24*40+38
 	sta SCREEN1+24*40+38
 	lda score
@@ -260,14 +259,14 @@ update_score_panel
 	lsr
 	lsr
 	lsr
-	sec
-	adc #SCPO
+	clc
+	adc #SCPO0
 	sta SCREEN0+24*40+37
 	sta SCREEN1+24*40+37
 	lda score+1
 	and #$0F
-	sec
-	adc #SCPO
+	clc
+	adc #SCPO0
 	sta SCREEN0+24*40+36
 	sta SCREEN1+24*40+36
 	lda score+1
@@ -275,21 +274,30 @@ update_score_panel
 	lsr
 	lsr
 	lsr
-	sec
-	adc #SCPO
+	clc
+	adc #SCPO0
 	sta SCREEN0+24*40+35
 	sta SCREEN1+24*40+35
 	lda score+2
 	and #$0F
-	sec
-	adc #SCPO
+	clc
+	adc #SCPO0
 	sta SCREEN0+24*40+34
 	sta SCREEN1+24*40+34
-	; lives
+	lda score+2
+	lsr
+	lsr
+	lsr
+	lsr
+	clc
+	adc #SCPO0
+	sta SCREEN0+24*40+33
+	sta SCREEN1+24*40+33
+	; --- lives
 	lda lives
 	and #$0F
-	sec
-	adc #SCPO
+	clc
+	adc #SCPO0
 	sta SCREEN0+24*40+9
 	sta SCREEN1+24*40+9
 	lda lives
@@ -297,8 +305,8 @@ update_score_panel
 	lsr
 	lsr
 	lsr
-	sec
-	adc #SCPO
+	clc
+	adc #SCPO0
 	sta SCREEN0+24*40+8
 	sta SCREEN1+24*40+8
 	rts
@@ -334,13 +342,13 @@ compute_char_animations
 	asl
 	asl
 	sta compute_char_animations_adr0+1
-	lda #>bganimation_data0	; must be 256 byte aligned...
+	lda #>char_animation_data	; must be 256 byte aligned...
 	adc #0
 	sta compute_char_animations_adr0+2
 	ldx #0
 compute_char_animations_adr0
-	lda bganimation_data0,x
-	sta VICCHARSET+$10*8,x	; fixme char index and count and phases is hardcoded, depends on level
+	lda char_animation_data,x
+	sta VICCHARSET+ANIMATED_BGTILE_INDEX*8,x
 	inx
 	cpx #16
 	bne compute_char_animations_adr0
@@ -359,7 +367,7 @@ check_if_tile_is_ground
 	sta check_tile_adr+1
 check_tile_adr
 	lda LEVEL_DATA
-	cmp #8		; all tiles from no.8 on
+	cmp #FIRST_GROUND_TILE_INDEX
 	rts
 
 ; ----------------------------------- Interrupt routine for score line drawing
@@ -429,21 +437,23 @@ rasterirq_scoreline_end
 ; Otherwise they would look broken. But that doesn't seem to be a critical
 ; restriction. We need to have 3 or 4 random number generations then,
 ; as best in a subroutine.
-; 0  - background	(2x2)
-; 1  - animated background	(1x1)
-; 2  - enemies		(1x1)
-; 3  - floor		(2x1)
-; 4  - obstacleA	(2x2)
-; 5  - island		(2x1)
-; 6  - hole in ground	(2x1)
-; 7  - bonus		(1x1)
-; 8  - obstacleB	(2x1)
-; We have 236 chars available (256-20 for scorepanel), that are
-; 59 tiles without reuse of chars. Use e.g. 56 tiles that are 7 rows
-; of 2 * 2x2 tiles. Like the 7 categories. Background and animated
-; background with boni is one such row.
-; so we have 7 more rows: floor, ceiling, island, obstacle A, obstacle B,
-; traps (later).
+; Indices in level data for tile categories:
+; 0  - background		(2x2) Tiles 0-3
+; 1  - animated background	(1x1) Tile 4 (animated!)
+; 2  - enemies			(1x1) Tiles 0-3
+; 3  - floor			(2x1) Tiles 12-13,14-15,16-17,18-19
+; 4  - obstacleA		(2x2) Tiles 20-23,24-27,28-31,32-35
+; 5  - island			(2x1) Tiles 40-41,42-43,44-45,46-47
+; 6  - special boni		(1x1) Tiles 8,9
+; 7  - bonus			(1x1) Tiles 5,6,7
+; 8  - obstacleB		(2x1) Tiles 36-37,38-39
+; 9  - exit sign		(2x1) Tiles 10-11
+; 10 - ceiling			(2x1) Tiles 48-49,50-51
+; 11 - vaporating island	(2x1) Tiles 52-55 later 52-53 - or make 6 different 2x1 tiles!
+; 12 - traps (later)		(2x1) Tiles 54-55,56-57
+; We have 234 chars available (256-22 for scorepanel), that are
+; 58 tiles without reuse of chars. Some chars are reused, so we could add
+; more tiles.
 ; We need two different obstacles, because we need height 1 to have
 ; obstacles with odd height values!
 ; level data has already been unpacked to LEVEL_DATA. Iterate over it and replace values.
@@ -538,7 +548,7 @@ prepare_level_data_tile0	; background tiles 0...3 as 2x2 metatile
 	lda TEMP2		; use subtile index as tilenumber
 	rts
 prepare_level_data_tile1	; animated background tile 4
-	lda #4			; always same tilenumber
+	lda #4			; always same tilenumber (hardcoded)
 	rts
 prepare_level_data_tile2	; enemies
 	jsr generate_random_index_1x1
@@ -550,36 +560,38 @@ prepare_level_data_tile2	; enemies
 	ora #$80
 	ora TEMP2
 	rts
-prepare_level_data_tile3	; floor tiles 8,9 or 10,11 or 12,13 as 2x1 metatile
+prepare_level_data_tile3	; floor tiles 12,13 or 14,15 or 16,17 or 18,19 as 2x1 metatile
 	jsr generate_random_index_2x1
 	tax
-	lda pseudo_rand_table_3,x
+	lda pseudo_rand_table_4,x
 	asl			; multiply by 2, then carry clear
-	adc #8
+	adc TEMP4
+	adc #12
 	rts
-prepare_level_data_tile4	; obstacle A 2x2 metatile index 16-19,20-23,24-27 or 28-31
+prepare_level_data_tile4	; obstacle A 2x2 metatile index 20+,24,28+,32+
 	jsr generate_random_index_2x2
 	tax
-	lda pseudo_rand_table_16,x
-	and #3
+	lda pseudo_rand_table_4,x
 	asl
 	asl
-	adc TEMP2	; carry is already 0 by asl
-	adc #16
+	adc TEMP2		; carry is already 0 by asl
+	adc #20
 	rts
-prepare_level_data_tile5	; island 2x1 sized, 36,37 or 38,39
+prepare_level_data_tile5	; island 2x1 sized, 40+,42+,44,46+
 	jsr generate_random_index_2x1
 	tax
-	lda pseudo_rand_table_16,x
-	and #2
-	clc
-	adc #36
+	lda pseudo_rand_table_4,x
+	asl
 	adc TEMP4
+	adc #40
 	rts
-prepare_level_data_tile6	; floor hole tile 14,15
-	lda TEMP4
-	clc
-	adc #14
+prepare_level_data_tile6	; special boni tiles 8 or 9. have shield 3* more than 1up! (shield=9)
+	jsr generate_random_index_1x1
+	tax
+	lda pseudo_rand_table_4,x
+	cmp #1			; sets carry if >= 1
+	lda #0
+	adc #8			; is 8 or 9 depending on carry
 	rts
 prepare_level_data_tile7	; bonus tiles 5,6,7 as 1x1 sized tile
 	jsr generate_random_index_1x1
@@ -588,20 +600,42 @@ prepare_level_data_tile7	; bonus tiles 5,6,7 as 1x1 sized tile
 	clc
 	adc #5
 	rts
-prepare_level_data_tile8	; obstacle B metatile 2x1 index 32,33 or 34,35
+prepare_level_data_tile8	; obstacle B metatile 2x1 index 36+,38+
 	jsr generate_random_index_2x1
 	tax
 	lda pseudo_rand_table_16,x
 	and #2
 	clc
-	adc #32
+	adc #36
 	adc TEMP4
+	rts
+prepare_level_data_tile9	; exit sign tiles 10,11
+	lda TEMP4		; subtileindex 0..1
+	clc
+	adc #10
+	rts
+prepare_level_data_tile10	; ceiling 2x1 index 48+,50+
+	jsr generate_random_index_2x1
+	tax
+	lda pseudo_rand_table_16,x
+	and #2
+	clc
+	adc #48
+	adc TEMP4
+	rts
+prepare_level_data_tile11	; vaporating island, now 2x2 tile index 52+
+	lda TEMP2
+	clc
+	adc #52
 	rts
 
 ; ------------ data
 
 pseudo_rand_table_3
 !byte 2,0,1, 0,1,2, 1,2,0, 2,1,0, 0,2,1, 1,0,2, 1
+
+pseudo_rand_table_4
+!byte 3,2,1,0, 2,0,1,3, 0,3,2,1, 1,2,3,0
 
 pseudo_rand_table_8
 !byte 3,4,7,0,2,6,1,5, 6,4,1,7,5,2,3,0
@@ -619,6 +653,9 @@ prepare_level_jump_table_lo
 !byte <prepare_level_data_tile6
 !byte <prepare_level_data_tile7
 !byte <prepare_level_data_tile8
+!byte <prepare_level_data_tile9
+!byte <prepare_level_data_tile10
+!byte <prepare_level_data_tile11
 
 prepare_level_jump_table_hi
 !byte >prepare_level_data_tile0
@@ -630,6 +667,9 @@ prepare_level_jump_table_hi
 !byte >prepare_level_data_tile6
 !byte >prepare_level_data_tile7
 !byte >prepare_level_data_tile8
+!byte >prepare_level_data_tile9
+!byte >prepare_level_data_tile10
+!byte >prepare_level_data_tile11
 
 rasterbar_colors
 !byte 6,14,13,1,13,14,6, 9	; fixme: the last number is only valid for cheese levels! needs to be level specific
@@ -642,8 +682,6 @@ game_over_sprite_x
 !byte 64, 128, 192, 0, $88
 
 scorepanelchars
-!byte  0+SCPO,16+SCPO,18+SCPO,17+SCPO,15+SCPO,11+SCPO,19+SCPO, 0+SCPO
-!byte  1+SCPO, 4+SCPO, 0+SCPO, 0+SCPO, 0+SCPO, 0+SCPO,16+SCPO,15+SCPO
-!byte 17+SCPO,15+SCPO,16+SCPO,19+SCPO, 0+SCPO, 1+SCPO, 2+SCPO, 0+SCPO
-!byte  0+SCPO, 0+SCPO, 0+SCPO,11+SCPO,12+SCPO,13+SCPO,14+SCPO,15+SCPO
-!byte 19+SCPO, 0+SCPO, 3+SCPO, 4+SCPO, 5+SCPO, 6+SCPO, 7+SCPO, 0+SCPO
+; " LIVES: 00    FOOD: 00    SCORE: 000000 "
+; " 0123456789CDEFILORSV:"	22 chars
+!byte 0,16,15,20,13,19,21,0,1,1,0,0,0,0,14,17,17,12,21,0,1,1,0,0,0,0,19,11,17,18,13,21,0,1,1,1,1,1,1,0

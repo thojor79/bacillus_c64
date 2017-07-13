@@ -96,6 +96,39 @@ ACTOR_WIDTH_FOR_COLLISION_CHECK = 20	; normally 24 but check only less pixel
 	sta .dest+MAX_ACTOR_COUNT,x
 }
 
+!macro addscore .SC2, .SC1, .SC0 {
+	sed
+	clc
+	lda score
+	adc #.SC0
+	sta score
+	lda score+1
+	adc #.SC1
+	sta score+1
+	lda score+2
+	adc #.SC2
+	sta score+2
+	cld
+}
+
+!macro addlive {
+	sed
+	lda lives
+	clc
+	adc #1
+	sta lives
+	cld
+}
+
+!macro takelive {
+	sed
+	lda lives
+	sec
+	sbc #1
+	sta lives
+	cld
+}
+
 ; ----------------------- animate sprites -------------------
 compute_actor_animations
 	; increase sprite animation phase
@@ -221,7 +254,7 @@ joy2_not_up
 	rts
 
 ; ----------------- Actor movement --------------------
-; Uses	TEMPADR0, TEMPADR1, TEMPADR2, TEMPADR3, TEMP0, TEMP1, TEMP2, A, X, Y
+; Uses	TEMPADR0, TEMPADR1, TEMPADR2, TEMPADR3, TEMP0, TEMP1, TEMP2, TEMP3, TEMP4, A, X, Y
 handle_actor_movement
 	;inc VICBGCOL	; test how costly ~ 48 raster lines for 8 actors!
 
@@ -232,7 +265,6 @@ handle_actor_movement
 	; posx-8...posx+7, posy-18...posy-3.
 	; render_tile needs tile_nr in TEMP0.
 	; We need to keep TileX-Start/Limit and TileY-Start/Limit after computing start address (TEMP1-TEMP4)
-	; For tile computation we need one more (TEMP5).
 	ldx #0	; actor 0!
 	+add_actor_x_pixel TEMP1, -8
 	+add_actor_x_pixel TEMP2,  7
@@ -261,15 +293,36 @@ handle_actor_movement
 	adc #>LEVEL_DATA
 	sta TEMPADR2+1
 	; now we can use TEMP0 again
+
+	; for player check for special tiles
 check_for_bonus_tile	
 	; load tile data and compare with boni tiles, remove and account it if hit
 	ldy #0
 	lda (TEMPADR2),y	; load tile nr from level data
-	cmp #5
-	bcc +
+	cmp #5			; if tile < 5 or >= 10 continue
+	bcc check_for_bonus_tile_next
+	cmp #10
+	bcs check_for_bonus_tile_next
+	; We have a bonus map tile. Handle reaction.
 	cmp #8
-	bcs +
-	; We have a bonus map tile. Remove it. Compute replacement tile!
+	beq check_for_bonus_tile_add_live
+	cmp #9
+	bne +
+	; bonus 9 is shield
+        +set8im player_invulnerable_counter, $FF
+        jmp check_for_bonus_tile_remove_it
++	; bonus tile 5..7, account tile nr - 1 to food. just keep last two bits
+	and #3
+	sed
+	clc
+	adc food	; food value is in BCD.
+	sta food
+	cld
+	bcc check_for_bonus_tile_remove_it		; no overflow
+	; food overflow - increase lives
+check_for_bonus_tile_add_live
+	+addlive
+check_for_bonus_tile_remove_it
 	lda TEMPADR2		; extract bit 0 of X coord.
 	and #1
 	sta TEMP0
@@ -279,13 +332,12 @@ check_for_bonus_tile
 	ora TEMP0		; combine with bit 0 of x coord
 	sta (TEMPADR2),y	; store position specific background tile!
 	sta TEMP0		; store tile number for render_tile
-	; count collected boni to score! Do not trash the many temporary values...
-	+addscore $00, $00, $03
 	; redraw tile on current screen then!
 	ldx TEMPADR2
 	ldy TEMP3		; load Y address
 	jsr render_tile		; only used TEMPADR0,TEMPADR1
-+	; now check next tile!
+check_for_bonus_tile_next
+	; now check next tile!
 	inc TEMPADR2
 	lda TEMPADR2
 	cmp TEMP2
@@ -297,6 +349,28 @@ check_for_bonus_tile
 	lda TEMP3
 	cmp TEMP4
 	bne check_for_bonus_tile
+
+	; here check if player is on ground and tile below player is
+	; vaporating island. Then let it erode and occasionally clear it from map!
+	lda actor_state
+	cmp #ACTOR_ON_GROUND
+	bne +
+	; compute tile address to TEMPADR2
+        lda #>LEVEL_DATA
+        clc
+        adc actor_yh
+        sta TEMPADR2+1
+        lda actor_xh
+        sta TEMPADR2
+	ldy #0
+	lda (TEMPADR2),y
+	and #$FE
+        cmp #VAPOR_TILE_INDEX
+	bne +
+	; we are on vaporizing tile - change tile number
+	; fixme we can't animate it, need to switch tile numbers!!!
+;fixme	jmp *
++
 
 	; Compute movement of all actors!
 	ldx #0	; actor counter
@@ -938,6 +1012,8 @@ handle_dead_actors_enemies
 	; account for score
 	; fixme score should depend on actor type, is this coded in actor_behaviour? certainly not actor_shape!
 	; read score table actor type indexed... needs y register for type
+	; or use selfmod code for this - remove macro then, it is only used
+	; here!
 	+addscore $00, $05, $00
 	lda #ACTOR_DISABLED
 	sta actor_state,x

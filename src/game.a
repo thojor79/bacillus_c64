@@ -251,7 +251,12 @@ NR_TILES = 64	; number of tiles used in a level
 VICSPRITEENABLE = $D015
 VICSPRITECOMMONCOLOR0 = $D025
 VICSPRITECOMMONCOLOR1 = $D026
-SCPO = 236	; Score Panel Char Offset
+SCPO = 234	; Score Panel Char Offset
+SCPO0 = 235
+SCPCOUNT = 22
+ANIMATED_BGTILE_INDEX = 16	; one tile is animated
+FIRST_GROUND_TILE_INDEX = 12	; first tile index that is no background
+VAPOR_TILE_INDEX = 52		; this and next tile vaporize
 ; --------------- temporary variables in zeropage
 TEMP0 = $02
 TEMP1 = $03
@@ -314,50 +319,20 @@ temp_data_end = $C6		; final address
 temp_data_limit = $F8		; last usable address
 
 ; must not be overwritten by zeroing of memory, so place at end of zero page!
-vicctrl2_scrolling = $FA
+vicctrl2_scrolling = $F9
 
 ; must not be cleared at level start, so place at end of zero page!
+food = $FA
 score = $FB	; stored in BCD values, 3 bytes
 level_nr = $FE
 lives = $FF
+
+char_animation_data = $0200	; space for 512 bytes
 
 
 ; ------------------------ macros --------------------------
 
 !src "src/macros.a"
-
-!macro addscore .SC2, .SC1, .SC0 {
-	sed
-	clc
-	lda score
-	adc #.SC0
-	sta score
-	lda score+1
-	adc #.SC1
-	sta score+1
-	lda score+2
-	adc #.SC2
-	sta score+2
-	cld
-}
-
-!macro addlive {
-	sed
-	lda lives
-	clc
-	adc #1
-	sta lives
-	cld
-}
-
-!macro takelive {
-	sed
-	lda lives
-	sec
-	sbc #1
-	sta lives
-	cld
-}
 
 ; -------------------------------------- program ------------------------------------------
 
@@ -433,6 +408,8 @@ startmainscreen
 	sta score
 	sta score+1
 	sta score+2
+; clear food
+	sta food
 
 ; handle next level
 nextlevel
@@ -451,7 +428,10 @@ nextlevel
 	jsr rle_decode
 	jsr prepare_level_data
 	; level charset	
-	+memcopy_pages VICCHARSET, level1_chardata, 8	; 2k = 8 pages
+	+memcopy_pages VICCHARSET, level1_chardata, 7	; 2k = 8 pages - fixme this overwrites score panel!
+		; copy only 7 pages = 224 characters plus some extra to have 234 fixme
+	; char animation data
+	+memcopy_pages char_animation_data, level1_char_animation_data, 2		; 512b = 2p
 	; level sprites - note! write at most 31 pages (7.75k), don't overwrite last page because of IRQ vectors
 	+set16im TEMPADR0, level1_sprites_rle
         +set16im TEMPADR1, VICSPRITES_GAME
@@ -464,8 +444,6 @@ nextlevel
 	+set8im VICSPRITECOMMONCOLOR1, 1
 	; set level1_fixcolors+0 as last color in scorepanel color table
 	;fixme
-	; set score panel characters again (have been overwritten)
-	jsr prepare_score_panel_chardata
 	jmp ++
 check_level2
 	cmp #2
@@ -494,15 +472,6 @@ check_level3
 checkhighscore
 	; fixme later
 	jmp startmainscreen
-
-prepare_score_panel_chardata
-; set scorepanel char data (copy 20 characters = 160 bytes at char #SCPO)
-	ldx #160
--	lda scorepanel_chardata - 1,x
-	sta VICCHARSET + SCPO*8 - 1,x
-	dex
-	bne -
-	rts
 
 ; --------------------- function library ----------------------
 
@@ -620,12 +589,6 @@ rle_decode_repeat
 
 ; ----------------------------------- includes -------------------------------
 
-; fixme to level data
-; 32 versions of two chars for animation
-!align 255, 0	; aligning is important!
-bganimation_data0
-!src "src/cheese_bganimation0.png_phases.png_chardata.a"
-
 ; Raster IRQ
 !src "src/rasterirq.a"
 
@@ -654,9 +617,6 @@ bganimation_data0
 ; Text sprites (at max 64 sprites)
 !src "data/textcharset_sprdata.a"
 
-scorepanel_chardata		; 160 bytes
-!src "data/scorepanel_chardata.a"
-
 ; -------------------------- data for levels ------------------------------
 
 level1_fixcolors
@@ -677,6 +637,11 @@ level1_data_rle
 ; data for level2
 level2_data_rle
 !src "data/cheese_level2_rle.a"
+
+; 32 versions of two chars for animation
+!align 255, 0	; aligning is important!
+level1_char_animation_data
+!src "src/cheese_bganimation0.png_phases.png_chardata.a"
 
 ; data for tiles first
 !align 255, 0

@@ -47,6 +47,50 @@ mainscreen
 	+set8im 1, $35	; I/O on, else all RAM
 	cli
 
+; copy certain characters as negative values for chars SCPO ff:
+; space,0-9,CDEFILOSRV:
+; space=32,0-9=48-57,67,68,69,70,73,76,79,82,83,86,58.
+; address is number * 8 -> 10 bits.
+	ldx #0
+--	+set8im TEMPADR0+1,0
+	lda cbmchartocopy,x	; load CBM char number
+	asl			; *8
+	asl
+	rol TEMPADR0+1
+	asl
+	rol TEMPADR0+1		; afterwards carry clear
+	sta TEMPADR0
+	lda #>VICCHARSET
+	adc TEMPADR0+1
+	sta TEMPADR0+1		; read address ready
+	txa
+	asl
+	asl
+	asl			; write to 0...21*8=0...168
+	sec			; set carry to add 8 (one line shift!)
+	adc #<(SCPO*8)		; add SCPO*8
+	sta TEMPADR1
+	lda #>VICCHARSET
+	adc #>(SCPO*8)
+	sta TEMPADR1+1		; write address ready
+	; now copy 7 bytes with inverse
+	ldy #0
+-	lda (TEMPADR0),y
+	eor #$FF
+	sta (TEMPADR1),y
+	iny
+	cpy #7
+	bne -
+	; set first byte of target to $FF
+	dec TEMPADR1
+	lda #$FF
+	ldy #0
+	sta (TEMPADR1),y
+	; handle next char
+	inx
+	cpx #SCPCOUNT		; 22 chars to copy!
+	bne --
+
 ; show logo with color bar in interrupt
 ; text mode is enabled below logo.
 ; logo has 48 lines (6 chars) so 1920 bytes (kills ~ 32 sprites)
@@ -239,3 +283,5 @@ halloffame_scores
 halloffame_colors
 !byte 1,15,15,12,12,12,11,11,11,11
 
+cbmchartocopy
+!byte 32, 48,49,50,51,52,53,54,55,56,57, 67,68,69,70,73,76,79,82,83,86,58
