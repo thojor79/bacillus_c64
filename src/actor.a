@@ -146,7 +146,13 @@ compute_actor_animations
 	eor #$03
 	sta TEMP1
 	ldx #8
--	lda actor_vx-1,x
+-	; as first check if actor is disabled or dead
+	lda actor_state-1,x
+	beq +++	; disabled
+	cmp #ACTOR_DEAD
+	beq +++	; dead
+	; normal state(s), animate
+	lda actor_vx-1,x
 	bmi +
 	lda actor_shape-1,x
 	and #$FC
@@ -156,7 +162,7 @@ compute_actor_animations
 	and #$FC
 	ora TEMP1
 ++	sta actor_shape-1,x
-	dex
++++	dex
 	bne -
 	rts
 
@@ -815,7 +821,8 @@ killplayer
 	+set8im actor_dead_anim_phase, 0
 +	jmp no_collision
 killenemy
-	; disable enemy actor, later show corpse, play sound etc. add score! do that in main loop
+	; disable enemy actor, later show corpse, play sound etc. e.g. show
+	; score as sprite instead of enenmy sprite
 	+set8imx actor_state, ACTOR_DEAD
 	+set8imx actor_dead_anim_phase, 0
 no_collision
@@ -1007,56 +1014,64 @@ handle_dead_actors
 	dec player_invulnerable_counter
 	+copy8 $D027, player_invulnerable_counter
 +	jmp handle_dead_actors_enemies
-	; player is dead - check for first phase of that and count down lives then
 player_is_dead
+	; player is dead - check for first phase of that and count down lives then
 	lda actor_dead_anim_phase
 	bne +
-	; subtract 12 from x/y position for better display - fixme only for double size display!
-;	lda actor_x
-;	sec
-;	sbc #(12*PIXELTOPOS)
-;	sta actor_x
-;	lda actor_xh
-;	sbc #0
-;	sta actor_xh
-;	lda actor_screen_y
-;	sec
-;	sbc #11
-;	sta actor_screen_y
 	; count down one live and handle game over if needed
 	+takelive
 	; no need to check for lives==0 here because that is checked
 	; in main game loop.
-	; Show player dying animation, like morph to skull
-	; maybe show that double sized.
-	; some animation like vaporizing would be ok as well,
-	; copy player sprite to free space and modify it there
-	; like removing pixels every animation frame
-	; fixme here we blink with double size
-+	inc actor_dead_anim_phase
-	cmp #150	; show dying animation for 3 seconds
-	bcs end_of_player_dead_anim
++	; Show player dying animation, like morph to skull
+	inc actor_dead_anim_phase
+	cmp #128	; show dying animation for ~2.5 seconds. 128 frames match #anim frames * 8
+	bcs end_of_player_dead_anim	; with 128 we can also use bmi.
+	; set border color according to phase alternating red/black
 	lda actor_dead_anim_phase
-	and #31
-	cmp #16
-	bpl +
-	+set8im VICBGCOL, 2
-	lda $D017
-	ora #1
-	sta $D017
-	lda $D01D
-	ora #1
-	sta $D01D
-	jmp ++
-+
-	+set8im VICBGCOL, 0
-	lda $D017
-	and #$FE
-	sta $D017
-	lda $D01D
-	and #$FE
-	sta $D01D
-++	
+	lsr
+	lsr
+	lsr
+	tax			; phase/8 = animation phase, save value
+	and #2			; blink red 4 times
+	sta VICBGCOL
+	txa
+	clc
+	adc #(SPRITEPTR_GAME_OFFSET+4+16*4)
+	sta actor_shape
+; fixme restore original y values later! we need y,yh for smooth
+; computation, and update screen y. could abuse vy as well...
+; not very good if actor falls down...
+	; decrease actor_y so actor sprite rises - decrease more than 1 per frame
+	lda actor_y
+	sec
+	sbc #4
+	sta actor_y
+	lda actor_yh
+	sbc #0
+	bpl +		; avoid yh to become negative, otherwise CPU jam!
+	lda #0
++	sta actor_yh
+	; stop movement
+	lda #0
+	sta actor_vx
+	sta actor_vy
+	; update screen y coordinates for actor
+	lda actor_y
+	sta TEMP0
+	lda actor_yh
+	lsr
+	ror TEMP0
+	lsr
+	ror TEMP0
+	lsr
+	ror TEMP0
+	lsr
+	ror TEMP0
+	lda TEMP0
+	clc
+	adc #29		; offset: -actor_height(21) +screen_offset(50) = +29
+	sta actor_screen_y
+
 handle_dead_actors_enemies
 	ldx #1
 -	lda actor_state,x
@@ -1078,12 +1093,7 @@ handle_dead_actors_enemies
 end_of_player_dead_anim
 	; set back normal values
 	+set8im VICBGCOL, 0
-	lda $D017
-	and #$FE
-	sta $D017
-	lda $D01D
-	and #$FE
-	sta $D01D
+	+set8im actor_shape, SPRITEPTR_GAME_OFFSET
 	; set player to invulnerable for some time
 	+set8im player_invulnerable_counter, 255
 	+set8im actor_state, ACTOR_IN_AIR

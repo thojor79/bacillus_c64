@@ -6,6 +6,9 @@ BUGS
 
 Sometimes boni in first row are collected but not erased from visible
 screen. when scrolling out and in again they are gone.
+-
+maybe other parts of screen are cleared because of wrong address then
+(wrap?) some island part is gone, an indicator for that
 
 sometimes when jumping on top out of screen colors are killed and random
 tiles overwritten, also CPU jam (now gone).
@@ -15,6 +18,12 @@ code.
 Hard to reproduce...
 
 not all chars are copied for tiles, only 224 not 234
+
+on real C64r sprites in intro are borked because they refer to memory that is
+normally cleared (in emulator), but not with real device.
+clear memory of sprites 64+ as fix.
+
+after dead restart at same position, not fall from above
 
 
 VISUAL GLITCHES
@@ -81,6 +90,8 @@ maybe some spare sprites with actor numbers >= 16 as boni or traps.
 
 use leftover sprites for some animations or so...
 
+player dead animations shows first frame with intact player, wastes space.
+
 
 
 
@@ -119,6 +130,10 @@ experience with high effort. Ripping would be easier.
 
 image converter could change hue of colors of whole image and also
 brightness etc to give better results? but rarely needed...
+
+Killed enemy sprite could change to a sprite showing the score that was
+added for the kill and the score raises for 1-2 seconds above the enemy
+position...
 
 
 Ideas for other games / projects

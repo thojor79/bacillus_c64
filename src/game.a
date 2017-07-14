@@ -47,11 +47,15 @@
 ; C800 - CFFF    2k  Charset (RAM) - changes because of animated characters, so needs RAM
 ; D000 - D7FF    2k  I/O Area, Sprites below
 ; D800 - DFFF    2k  Color RAM, Sprites below
-; E000 - FFFF    8k  Kernal, but graphics/sprites below. Last 4 Bytes interrupt vectors!
+; E000 - FFFF    8k  Kernal, but graphics/sprites below. Last 6 Bytes interrupt vectors!
 ;
 ; So we have 12k for sprites (the last one is not fully usable), so we have space for 192 sprites!
 ; The first 4k of sprites (64 sprites) must be static, because I/O is blended above them.
 ; Use this area for text sprites (Intro, Game info).
+; So we have 128-1=127 sprites free for game. Every actor takes 4 sprites,
+; we have one player and 16 enemy sprites, so 4+64 + 16 for player dead
+; animation = 84, so there is still space for 43 sprites for some animations
+; etc. (traps, boni, decorations whatever)
 ;
 ; Level data is also stored in fix memory areas:
 ; B400 - BFFF    3k  Level data itself (index in tile table)
@@ -625,6 +629,8 @@ level1_fixcolors
 !src "data/cheese_alltiles_fixcolors.a"
 
 ; sprite data for level 1 packed as RLE.
+; note: contains also player and player die frames (because enemies are the
+; same for all levels anyway atm)
 level1_sprites_rle
 !src "data/level1_sprites_rle.a"
 

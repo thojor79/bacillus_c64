@@ -28,6 +28,7 @@ Technical facts:
 * two levels
 * special tiles that vaporize
 * special boni like invulnerability and 1up
+* dying animation
 
 Planned:
 * Outtro
