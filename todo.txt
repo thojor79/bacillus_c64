@@ -34,12 +34,8 @@ checked.
 GENERAL FEATURES
 ================
 
-give 1 score for every food particle?
-
 implement blend out effect for level end - reverse reading of blend in,
 rather easy but rarely used
-
-implement game complete screen (outtro)
 
 main screen: let sprites walk in from left/right below highscore until mid
 of screen, then back again, so show all sprites, like a demo.
@@ -52,31 +48,25 @@ width and there is space for sprites (3 lines needed)
 main screen: highscore handling with load/save to disk without kernal, or
 blend in kernal for this.
 
+outtro: implement game complete screen, e.g. the bacillus logo or some food
+picture
+
 outtro: with sprite scroller like turrican end
 
 
 MORE DATA
 =========
 
->>>
 implement data for more levels! maybe same tileset and just other level
 first, later new tilesets for other worlds/levels
 with level2 and same tileset we can check level init code then.
 More tilesets: candy world / salad world etc.
 
-implement more enemies:
-long legs
-one consisting only of eyes
-etc.
+maybe more enemies
 
-background animated tiles with fire/knives/diamond like cheese parts?
+maybe animated tiles (boni?)
+
 maybe some spare sprites with actor numbers >= 16 as boni or traps.
-
-use leftover sprites for some animations or so...
-
-player dead animations shows first frame with intact player, wastes space.
-
-
 
 
 INFO

@@ -385,7 +385,7 @@ check_for_bonus_tile
 	bne +
 	; bonus 9 is shield
         +set8im player_invulnerable_counter, $FF
-	; fixme add some score here! load score to some register?
+	lda #SCORE_FOR_SHIELD
         jmp check_for_bonus_tile_remove_it
 +	; bonus tile 5..7, account tile nr - 1 to food. just keep last two bits
 	and #3
@@ -394,13 +394,24 @@ check_for_bonus_tile
 	adc food	; food value is in BCD.
 	sta food
 	cld
-	bcc check_for_bonus_tile_remove_it		; no overflow
+	lda #SCORE_FOR_BONUS	; Note! carry is kept, is important!
+	bcc check_for_bonus_tile_remove_it	; no overflow -> normal bonus, else 1up
 	; food overflow - increase lives
 check_for_bonus_tile_add_live
 	+addlive
-	; fixme add some score here!
+	lda #SCORE_FOR_1UP
 check_for_bonus_tile_remove_it
-;	lda TEMP0		; read score to add
+	sed			; score to add is in Accu
+	clc
+	adc score
+	sta score
+	lda score+1
+	adc #0
+	sta score+1
+	lda score+2
+	adc #0
+	sta score+2
+	cld
 	
 	lda TEMPADR2		; extract bit 0 of X coord.
 	tax			; needed in X later

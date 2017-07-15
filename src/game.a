@@ -264,6 +264,9 @@ VAPOR_TILE_INDEX = 52		; this and next tile vaporize
 VAPOR_TILE_NUMS = 6		; number of vaporating tiles
 PLAYER_DYING_ANIM_PHASES = 128	; number of animation phases for dying anim. for player
 PLAYER_DYING_Y_DEC = 4		; speed in y coords that sprite rises
+SCORE_FOR_1UP = $99		; can give more than 99 or code would be more complex
+SCORE_FOR_SHIELD = $60
+SCORE_FOR_BONUS = $03
 ; --------------- temporary variables in zeropage
 TEMP0 = $02
 TEMP1 = $03
