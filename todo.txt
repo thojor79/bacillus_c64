@@ -4,13 +4,6 @@ ToDo - in categories
 BUGS
 ====
 
-Sometimes boni in first row are collected but not erased from visible
-screen! yes because some part of screen has already been copied to new
-buffer when scrolling!
-it only happens when scrolling!
-other parts of visible screen are killed then!
-not certain how that is related!
-
 
 VISUAL GLITCHES
 ===============

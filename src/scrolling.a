@@ -454,7 +454,7 @@ render_tile_column_2lines0
 	cpy #(TILESYPERSCREEN*2)
 	bne render_tile_column_src_adr0
 	; done
-;	+set8im VICBGCOL, 0	;fixme benchmark
+;	+set8im VICBGCOL, 0	; benchmark
 ;	rts
 	jmp copy_temporary_chardata_to_screen_column
 ; render column 1 of any tiles
@@ -534,29 +534,17 @@ copy_temporary_chardata_to_screen_column
 ; But if screen scrolls at some frame the render buffer advances, visible screen is set a few frames later.
 ; Note that color ram always matches visible screen so we have to compute two destination addresses
 ; differently... we already have the shift value computed!
-;fixme when left scrolling sometimes wrong buffer is rendered to... yes because upper half of screen
-;that is already copied but not yet render buffer set, so we rather need full frame copy...
-;same for color ram... how costly is half screen copy in raster lines? ~72?
-;fixme also boni in first row of tiles seem to be cleared from wrong buffer!
-;hmm same reason, part of buffer is already shifted, especially upper
-;part!!! rather render tile to both screens with valid address each?!
-;ah explains the problem, but not why random tiles are overwritten on
-;screen!
 render_tile
 	; if subtile position is 1 (render_pos_x is >= 128) then second half
 	; of tile is shown in column 0 of screen. Thus the offset on the
 	; screen in columns is -1 + tile_x * 2. The tile_x * 2 part is
 	; computed later with Y-register-relative adressing. So compute as
-	; base address the start address of a row here and shift that either
-	; by 0 or -1 !
+	; base address the start address of a row here and add to that either
+	; 0 or -1, or decrease it by 1
 	lda table_mul80_lo,y
 	sta TEMPADR0
 	sta TEMPADR1
-	lda render_pos_x
-	bpl +
-	dec TEMPADR0
-	dec TEMPADR1
-+	lda table_mul80_hi,y
+	lda table_mul80_hi,y
 	clc
 	adc #>COLORRAM		; maybe include colorramshift_to_renderpos here already somehow...
 	sta TEMPADR1+1
@@ -565,7 +553,13 @@ render_tile
 	; render to framebuffer that is shown next (different to visibleframebuffer when scrolling!)
 	adc renderframebuffer_adrmsb
 	sta TEMPADR0+1
-	; add colorram shift to address
+	; handle shift because of render_pos_x (see comment above)
+	lda render_pos_x
+        bpl +
+	+dec16 TEMPADR0
+	+dec16 TEMPADR1
++
+	; add colorram shift to address (is -1,0 or +1)
 	; When we are scrolling the render_buffer has the picture already shifted. So to get matching
 	; colorram pos we need to ADD the scroll direction to target address.
 	; Because column X of render buffer shows column X+1 of visible frame buffer (right scroll),

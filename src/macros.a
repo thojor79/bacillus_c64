@@ -289,3 +289,19 @@
 	bne .read0
 }
 
+; decrement 16bit value by 1
+!macro dec16 .adr {
+	lda .adr
+	bne +
+	dec .adr+1
++	dec .adr
+}
+
+; increment 16bit value by 1
+!macro inc16 .adr {
+	inc .adr
+	lda .adr
+	bne +
+	inc .adr+1
++
+}
