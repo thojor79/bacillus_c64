@@ -47,3 +47,4 @@ Planned:
 ![ScreenShot](screenshots/level1.jpg)
 ![ScreenShot](screenshots/intro.jpg)
 ![ScreenShot](screenshots/mainmenu.jpg)
+![ScreenShot](screenshots/dyinganimation.jpg)
