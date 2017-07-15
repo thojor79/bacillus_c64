@@ -30,7 +30,7 @@ GENERAL FEATURES
 ================
 
 implement blend out effect for level end - reverse reading of blend in,
-rather easy but rarely used
+rather easy to do but low effect
 
 main screen: let sprites walk in from left/right below highscore until mid
 of screen, then back again, so show all sprites, like a demo.
@@ -54,8 +54,8 @@ MORE DATA
 
 implement data for more levels! maybe same tileset and just other level
 first, later new tilesets for other worlds/levels
-with level2 and same tileset we can check level init code then.
-More tilesets: candy world / salad world etc.
+one level with large room only enterable by right walk, closed by vapor tile
+More tilesets: candy world / salad world etc.!
 
 maybe more enemies
 
