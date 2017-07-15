@@ -40,11 +40,8 @@ run_level
 ; set initial screen_pos - it is NOT 0,0 and influences scrolling and VICMEMCTRL!
 	+set8im screen_pos_x, $40	; Pixel Offset 4 (neutral position)
 
-; set initial buffer addresses
-	lda #>SCREEN1
-        sta backframebuffer_adrmsb
+; set initial buffer address (rest is set in setvisibleframebuffer)
         lda #>SCREEN0
-        sta visibleframebuffer_adrmsb
         sta renderframebuffer_adrmsb
 
 ; sprite multicolor off for all sprites
@@ -112,13 +109,18 @@ mainloop
 	bcc -
 	; for debugging of used raster time set BG color
 	; so far the game logic isn't that expensive, as long as there are
-	; no actors around, fixme test with actors
+	; no actors around, with actors it is a bit more, but scrolling
+	; costs most.
+	; when scrolling and all 8 actors are active we still have ~40
+	; raster lines left at least (mostly much more). This means roughly
+	; 85% of CPU time are used at most.
 ;	+set8im VICBGCOL, 13
 	; first handle animation of characters, not so critical, but fast, must be done before color ram copy!
 	jsr compute_char_animations
 	; write actor positions to sprite data, rather critical, do this before color ram copy! it is very fast.
 	jsr update_actors
 	; check if scrolling must be handled and do the scrolling! very critical with color ram copy!
+	; note! this sets renderframebuffer_adrmsb.
 	jsr handle_scrolling
 	;
 	; not so time critical tasks to be done every frame

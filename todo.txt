@@ -5,9 +5,11 @@ BUGS
 ====
 
 Sometimes boni in first row are collected but not erased from visible
-screen! mabye in first line it comes too early and the visible framebuffer
-number hasn't changed yet...
+screen! yes because some part of screen has already been copied to new
+buffer when scrolling!
 it only happens when scrolling!
+other parts of visible screen are killed then!
+not certain how that is related!
 
 
 VISUAL GLITCHES
@@ -87,6 +89,11 @@ Maybe animated boni tiles in hires with white border and white logo like
 rotating molecule or jumping water drop, better than what we have now.
 No, it doesn't look good.
 
+Scrolling is NOT done in the raster irq, but in main CPU code when bottom of
+screen is reached (raster line 251). We also shift color RAM then, which is
+the most critical part for timing.
+It takes at least 147 raster lines (150 lines ~ 9000cyc with badlines, so
+~9cyc per byte to copy, that is rather fast)
 
 
 Ideas for later
