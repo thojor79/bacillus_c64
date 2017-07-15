@@ -6,7 +6,6 @@ BUGS
 
 Sometimes boni in first row are collected but not erased from visible
 screen. when scrolling out and in again they are gone.
--
 maybe other parts of screen are cleared because of wrong address then
 (wrap?) some island part is gone, an indicator for that
 
@@ -17,14 +16,6 @@ However the tile data is not near I/O range. Maybe CPU jumps to invalid
 code.
 Hard to reproduce...
 
-not all chars are copied for tiles, only 224 not 234
-
-on real C64r sprites in intro are borked because they refer to memory that is
-normally cleared (in emulator), but not with real device.
-clear memory of sprites 64+ as fix.
-
-after dead restart at same position, not fall from above
-
 
 VISUAL GLITCHES
 ===============
@@ -34,41 +25,40 @@ not critical. maybe just disable scorepanel by setting fgcol to all
 black then
 
 
-GENERIC
-=======
-
-maybe animate more tiles (rotating round cheese seen from side,
-or rotating roll)
-
-
 GAMEPLAY EXTENSIONS
 ===================
 
 implement different actor behavior, either by type or by flag (less types
 available then). Generate them pseudo randomly by position (done)
 Behaviour: walk with fall down, follow player, flying pattern, flying homing
-maybe use only 8 enemies with 1 bit to control behaviour
+maybe use only 8 enemies with 1 bit to control behaviour - would reduce
+sprite data as well
 
 handle step into trap - animate trap tiles!
-
->>>
-implement high score enter and management, that is improve main screen
-
-different score for every enemy that is killed
 
 
 GENERAL FEATURES
 ================
 
+give 1 score for every food particle?
+
 implement blend out effect for level end - reverse reading of blend in,
 rather easy but rarely used
 
-implement dying animation with morph to skull or so
-
 implement game complete screen (outtro)
 
-implement part of image converter with rle encoding (for logo in upper part
-of screen only!)
+main screen: let sprites walk in from left/right below highscore until mid
+of screen, then back again, so show all sprites, like a demo.
+
+main screen: color cycling in text?
+
+main screen: high score only 9 places, score 6 chars, so text matches better
+width and there is space for sprites (3 lines needed)
+
+main screen: highscore handling with load/save to disk without kernal, or
+blend in kernal for this.
+
+outtro: with sprite scroller like turrican end
 
 
 MORE DATA
@@ -118,7 +108,13 @@ No, it doesn't look good.
 Ideas for later
 ===============
 
-secret passages or rooms in levels - no!
+secret passages or rooms in levels - not for this game
+
+player can shoot - not for this game
+
+boss monster - only sensible when player can shoot - not for this game
+
+jump from below to walls for boni - not for this game
 
 if we have only 64 tiles and 8 background tiles as now we can use 24 actor
 types, not 16, by using bit6|bit7 as flag of actor! But 16 is enough for
@@ -134,6 +130,16 @@ brightness etc to give better results? but rarely needed...
 Killed enemy sprite could change to a sprite showing the score that was
 added for the kill and the score raises for 1-2 seconds above the enemy
 position...
+
+music and sfx is important! play 1-3 sfx or play music in a level. play an
+existing SID file would be simplest solution, however we can't distribute it
+because of rights? or are they free?
+
+animate level tiles like vertically or horizontally rotating cheese rolls,
+maybe better in candy world (later)
+
+implement part of image converter with rle encoding (for logo in upper part
+of screen only!)
 
 
 Ideas for other games / projects

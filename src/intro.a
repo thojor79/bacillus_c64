@@ -45,6 +45,13 @@ show_intro
 	+set16im TEMPADR1, COLORRAM
 	jsr rle_decode
 
+; set emptry sprite at sprite pointer 128 (game offset)
+	ldx #63
+	lda #0
+-	sta VICSPRITES_GAME-1,x
+	dex
+	bne -
+
 ; turn on display and set video mode and memory area
 	+set8im VICMEMCTRL, VICSCREENBLOCKBITMAP*16+VICBITMAPBLOCK*8    ; in bitmap mode bit 3 sets bitmap block
 	+set8im VICCTRL1, $3B
@@ -306,7 +313,7 @@ intro_sprite_real_axh
 
 intro_sprite_ptr
 ; "THORSTEN JORDAN PRESENTS"
-!byte 83,71,78,81,82,83,68,77,42,73,78,81,67,64,77,42,79,81,68,82,68,77,83,82
+!byte 83,71,78,81,82,83,68,77, 128,73,78,81,67,64,77,128, 79,81,68,82,68,77,83,82
 
 ; a generic sprite multiplexer would be useful, for text scroller or maybe zone split technique
 ; but we need rather a special raster irq here, that puts the showsprite commands out

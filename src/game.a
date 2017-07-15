@@ -262,6 +262,8 @@ ANIMATED_BGTILE_INDEX = 16	; one tile is animated
 FIRST_GROUND_TILE_INDEX = 12	; first tile index that is no background
 VAPOR_TILE_INDEX = 52		; this and next tile vaporize
 VAPOR_TILE_NUMS = 6		; number of vaporating tiles
+PLAYER_DYING_ANIM_PHASES = 128	; number of animation phases for dying anim. for player
+PLAYER_DYING_Y_DEC = 4		; speed in y coords that sprite rises
 ; --------------- temporary variables in zeropage
 TEMP0 = $02
 TEMP1 = $03
@@ -432,9 +434,8 @@ nextlevel
 	+set16im TEMPADR1, LEVEL_DATA
 	jsr rle_decode
 	jsr prepare_level_data
-	; level charset	
-	+memcopy_pages VICCHARSET, level1_chardata, 7	; 2k = 8 pages - fixme this overwrites score panel!
-		; copy only 7 pages = 224 characters plus some extra to have 234 fixme
+	; level charset	(note that we can use 234, but use and copy only 224 chars!)
+	+memcopy_pages VICCHARSET, level1_chardata, 7	; 2k-1p = 7 pages = 224 chars = 56 tiles minimum
 	; char animation data
 	+memcopy_pages char_animation_data, level1_char_animation_data, 2		; 512b = 2p
 	; level sprites - note! write at most 31 pages (7.75k), don't overwrite last page because of IRQ vectors

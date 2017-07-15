@@ -96,21 +96,6 @@ ACTOR_WIDTH_FOR_COLLISION_CHECK = 20	; normally 24 but check only less pixel
 	sta .dest+MAX_ACTOR_COUNT,x
 }
 
-!macro addscore .SC2, .SC1, .SC0 {
-	sed
-	clc
-	lda score
-	adc #.SC0
-	sta score
-	lda score+1
-	adc #.SC1
-	sta score+1
-	lda score+2
-	adc #.SC2
-	sta score+2
-	cld
-}
-
 !macro addlive {
 	sed
 	lda lives
@@ -1024,7 +1009,7 @@ player_is_dead
 	; in main game loop.
 +	; Show player dying animation, like morph to skull
 	inc actor_dead_anim_phase
-	cmp #128	; show dying animation for ~2.5 seconds. 128 frames match #anim frames * 8
+	cmp #PLAYER_DYING_ANIM_PHASES	; show dying animation for ~2.5 seconds. 128 frames match #anim frames * 8
 	bcs end_of_player_dead_anim	; with 128 we can also use bmi.
 	; set border color according to phase alternating red/black
 	lda actor_dead_anim_phase
@@ -1038,13 +1023,12 @@ player_is_dead
 	clc
 	adc #(SPRITEPTR_GAME_OFFSET+4+16*4)
 	sta actor_shape
-; fixme restore original y values later! we need y,yh for smooth
-; computation, and update screen y. could abuse vy as well...
-; not very good if actor falls down...
+	; (restore original values later by just adding again what we
+	; subtracted in all frames together)
 	; decrease actor_y so actor sprite rises - decrease more than 1 per frame
 	lda actor_y
 	sec
-	sbc #4
+	sbc #PLAYER_DYING_Y_DEC
 	sta actor_y
 	lda actor_yh
 	sbc #0
@@ -1077,13 +1061,26 @@ handle_dead_actors_enemies
 -	lda actor_state,x
 	cmp #ACTOR_DEAD
 	bne +
-	; dead enemy
-	; account for score
-	; fixme score should depend on actor type, is this coded in actor_behaviour? certainly not actor_shape!
-	; read score table actor type indexed... needs y register for type
-	; or use selfmod code for this - remove macro then, it is only used
-	; here!
-	+addscore $00, $05, $00
+	; dead enemy!
+	; account for score - depends on type. read score table actor type indexed
+	; use scores 1..99 to make adding easier.
+	stx TEMP0	; save x register
+	lda actor_type,x	; note this is 1...16, so offset score reading by -1!
+	tax	
+	lda score_for_enemy-1,x
+	sed
+	clc
+	adc score
+	sta score
+	lda score+1
+	adc #0
+	sta score+1
+	lda score+2
+	adc #0
+	sta score+2
+	cld
+	ldx TEMP0	; restore x register!
+
 	lda #ACTOR_DISABLED
 	sta actor_state,x
 +	inx
@@ -1098,6 +1095,12 @@ end_of_player_dead_anim
 	+set8im player_invulnerable_counter, 255
 	+set8im actor_state, ACTOR_IN_AIR
 	+set8im actor_dead_anim_phase, 0
+	; restore original actor Y position by simply adding num phases * count
+	; note that we have 128 phases * 4 = 512, so just add 2 to actor_y
+	; note that this will work only with the hardcoded values in game.a,
+	; but ok for us here!
+	inc actor_yh
+	inc actor_yh
 	jmp handle_dead_actors_enemies
 
 ; -------------------- data --------------------------------
@@ -1106,7 +1109,10 @@ bits_for_x
 bits_for_not_x
 !byte 255-1,255-2,255-4,255-8,255-16,255-32,255-64,255-128
 
-; fixme We can have at most 16 different actor types.
+; We can have at most 16 different actor types.
 ; Store shape, color, behaviour and initial vx for each type and set it when spawning.
 ; This means behaviour 0/1 and move direction 0/1 takes 2 bits, so we have 4 different enemy types per level.
 ; Or always let them walk left and have 8 types. Encoding vx would maybe be better.
+
+score_for_enemy
+!byte $20,$30,$40,$50,$60,$70,$80,$90, $25,$35,$45,$55,$65,$75,$85,$15

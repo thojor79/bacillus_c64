@@ -15,9 +15,9 @@ bacillus.all : bacillus.prg
 run : bacillus.prg
 	x64 --autostart bacillus.prg
 
-data : gfx/textcharset.png gfx/introscreen.jpg gfx/mainlogo.png gfx/cheese_alltiles.png
+data : gfx/textcharset.png gfx/introscreen.png gfx/mainlogo.png gfx/cheese_alltiles.png
 	cd gfx && ../convert/c64fy.py -hires 1 -sprite 0 -quiet 1 -color 1 textcharset.png && mv textcharset_sprdata.a ../data && cd ..
-	cd gfx && ../convert/c64fy.py -quiet 1 introscreen.jpg && mv introscreen_bmpdata_rle.a ../data/introscreen_rle.a && cd ..
+	cd gfx && ../convert/c64fy.py -quiet 1 introscreen.png && mv introscreen_bmpdata_rle.a ../data/introscreen_rle.a && cd ..
 	cd gfx && ../convert/c64fy.py -quiet 1 -color 1 mainlogo.png && mv mainlogo_bmpdata_rle.a ../data/mainlogo_rle.a && cd ..
 	cd gfx && ../convert/c64fy.py -quiet 1 -charset 234 -tilewidth 2 -tileheight 2 -color 9 -color 8 -color 7 -datalabels 0 cheese_alltiles.png && mv cheese_alltiles_chardata.a ../data/ && mv cheese_alltiles_fixcolors.a ../data/ && mv cheese_alltiles_tiledata.a ../data/ && cd ..
 	rm gfx/*_c64.png gfx/*.a
