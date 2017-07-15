@@ -329,23 +329,39 @@ handle_actor_movement
 	+add_actor_x_pixel TEMP1, -8
 	+add_actor_x_pixel TEMP2,  7+TILEWIDTHINPIXELS	; one more for comparison
 	+add_actor_y_pixel TEMP3, -18
-	+add_actor_y_pixel TEMP4, -3
-	inc TEMP4
-	lda TEMP1	; avoid -1 as x start address.
+	+add_actor_y_pixel TEMP4, -3+TILEHEIGHTINPIXELS  ; one more for comparison
+	; actor can jump a bit out of screen, so TEMP3 can be $FE.
+	; it only happens with high jumps from lower places, could be
+	; checked else where as well.
+	; we clamp the coordinates. If no range is left, then whole check is
+	; skipped.
+	; Check for X start address and avoid -1 = $FF, -2 = $FE can not happen
+	; X end address is not yet limited, as it can't cause harm.
+	lda TEMP1
 	cmp #$FF
 	bne +
 	inc TEMP1
-+	lda TEMP3	; avoid -1 as y start address
-	cmp #$FF
-	bne +
-	inc TEMP3
-+	lda TEMP4	; limit y max
-	cmp #(TILESYPERSCREEN+1)
++	; Check for Y start address. Must not be negative (we can check it
+	; simply that way because Y coords are always < 128 here!
+	lda TEMP3	; avoid negative values as start address!
+	bpl +
+	+set8im TEMP3, 0	; clamp to 0
++	cmp #(TILESYPERSCREEN+1)
+	bcc +
+	; TEMP3 as already below screen, skip whole test
+	jmp check_for_bonus_tile_end
+	; Check for Y end address. Clamp to max Y and avoid negative values
+	lda TEMP4
+	cmp #(TILESYPERSCREEN+1)	; should also avoid < 0 values
 	bcc +
 	+set8im TEMP4, TILESYPERSCREEN
-+	; x max not yet limited.
++	; Now compare that Y end is larger than Y start, otherwise skip all tests
+	lda TEMP3
+	cmp TEMP4
+	bcc +		; if TEMP3 < TEMP4 then continue
+	jmp check_for_bonus_tile_end
 
-	; prepare read address
++	; prepare read address
 	+copy8 TEMPADR2, TEMP1
 	lda TEMP3
 	clc
@@ -369,6 +385,7 @@ check_for_bonus_tile
 	bne +
 	; bonus 9 is shield
         +set8im player_invulnerable_counter, $FF
+	; fixme add some score here! load score to some register?
         jmp check_for_bonus_tile_remove_it
 +	; bonus tile 5..7, account tile nr - 1 to food. just keep last two bits
 	and #3
@@ -381,7 +398,10 @@ check_for_bonus_tile
 	; food overflow - increase lives
 check_for_bonus_tile_add_live
 	+addlive
+	; fixme add some score here!
 check_for_bonus_tile_remove_it
+;	lda TEMP0		; read score to add
+	
 	lda TEMPADR2		; extract bit 0 of X coord.
 	tax			; needed in X later
 	lsr			; bit 0 to carry
@@ -406,6 +426,7 @@ check_for_bonus_tile_next
 	lda TEMP3
 	cmp TEMP4
 	bne check_for_bonus_tile
+check_for_bonus_tile_end
 
 ; -------------- Compute movement of all actors!
 	ldx #0	; actor counter

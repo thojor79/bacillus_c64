@@ -5,16 +5,9 @@ BUGS
 ====
 
 Sometimes boni in first row are collected but not erased from visible
-screen. when scrolling out and in again they are gone.
-maybe other parts of screen are cleared because of wrong address then
-(wrap?) some island part is gone, an indicator for that
-
-sometimes when jumping on top out of screen colors are killed and random
-tiles overwritten, also CPU jam (now gone).
-Most probably tile coordinates with y < 0 or x with wrap are written.
-However the tile data is not near I/O range. Maybe CPU jumps to invalid
-code.
-Hard to reproduce...
+screen! mabye in first line it comes too early and the visible framebuffer
+number hasn't changed yet...
+it only happens when scrolling!
 
 
 VISUAL GLITCHES
@@ -34,7 +27,8 @@ Behaviour: walk with fall down, follow player, flying pattern, flying homing
 maybe use only 8 enemies with 1 bit to control behaviour - would reduce
 sprite data as well
 
-handle step into trap - animate trap tiles!
+handle step into trap - animate trap tiles! check where vaporizing tiles are
+checked.
 
 
 GENERAL FEATURES

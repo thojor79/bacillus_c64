@@ -104,10 +104,16 @@ run_level
 
 ; --------------------------------------- main loop of a level
 mainloop
+	; for debugging of time (re)set BG color
+;	+set8im VICBGCOL, 0
 	; wait until raster line is at bottom of foreground screen
 -	lda VICRASTER
 	cmp #251	; end of visible screen
 	bcc -
+	; for debugging of used raster time set BG color
+	; so far the game logic isn't that expensive, as long as there are
+	; no actors around, fixme test with actors
+;	+set8im VICBGCOL, 13
 	; first handle animation of characters, not so critical, but fast, must be done before color ram copy!
 	jsr compute_char_animations
 	; write actor positions to sprite data, rather critical, do this before color ram copy! it is very fast.

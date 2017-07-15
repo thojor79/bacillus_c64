@@ -16,6 +16,12 @@ available) and transfer it with X1541 to a real floppy disk and load
 the game with read hardware. Or use the floppy emulator hardware with SD
 cards etc.
 
+For example use OpenCBM and its program d64copy to transfer the .D64 files:
+
+d64copy bacillus.d64 8
+
+for a drive connected via a X(U)1541 cable or device.
+
 Technical facts:
 * 2-way side scrolling game
 * parallax scrolling
