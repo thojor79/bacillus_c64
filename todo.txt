@@ -56,6 +56,11 @@ implement data for more levels! maybe same tileset and just other level
 first, later new tilesets for other worlds/levels
 one level with large room only enterable by right walk, closed by vapor tile
 More tilesets: candy world / salad world etc.!
+candy: bg color 14, fg colors light grey or white and red or dark grey,
+individual colors for tiles then all simple colors like red, green, blue,
+yellow, purple etc.
+candy needs different enemy sprite colors, so set them later (rather dark
+colors)
 
 maybe more enemies
 

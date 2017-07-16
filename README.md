@@ -23,7 +23,7 @@ d64copy bacillus.d64 8
 for a drive connected via a X(U)1541 cable or device.
 
 Technical facts:
-* 2-way side scrolling game
+* 2-way side scrolling game (smooth 50 fps)
 * parallax scrolling
 * animated background and level data
 * animated characters
@@ -33,7 +33,7 @@ Technical facts:
 * main screen
 * two levels
 * special tiles that vaporize
-* special boni like invulnerability and 1up
+* special boni like invulnerability and 1-up
 * dying animation
 
 Planned:
@@ -48,3 +48,4 @@ Planned:
 ![ScreenShot](screenshots/intro.jpg)
 ![ScreenShot](screenshots/mainmenu.jpg)
 ![ScreenShot](screenshots/dyinganimation.jpg)
+![ScreenShot](screenshots/candyworld.jpg)
