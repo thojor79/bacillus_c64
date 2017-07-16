@@ -426,9 +426,10 @@ nextlevel
 	lda level_nr
 	; check for level 1
 	cmp #1
-	beq +
+	beq prepare_level1
 	jmp check_level2
-+	; load data for level 1
+prepare_level1
+	; load data for level 1
 	; now load level specific data to fix memory places and handle level
 	; level tile data and tile indices, stored
 	+memcopy_pages LEVEL_TILE_DATA, level1_tiledata, 2	; 0.5k = 2 pages
@@ -439,8 +440,7 @@ nextlevel
 	jsr prepare_level_data
 	; level charset	(note that we can use 234, but use and copy only 224 chars!)
 	+memcopy_pages VICCHARSET, level1_chardata, 7	; 2k-1p = 7 pages = 224 chars = 56 tiles minimum
-	; char animation data
-	+memcopy_pages char_animation_data, level1_char_animation_data, 2		; 512b = 2p
+	jsr prepare_char_animations
 	; level sprites - note! write at most 31 pages (7.75k), don't overwrite last page because of IRQ vectors
 	+set16im TEMPADR0, level1_sprites_rle
         +set16im TEMPADR1, VICSPRITES_GAME
@@ -452,14 +452,13 @@ nextlevel
 	+copy8 VICFGCOL+2, level1_fixcolors+2
 	+set8im VICSPRITECOMMONCOLOR0, 0
 	+set8im VICSPRITECOMMONCOLOR1, 1
-	; set level1_fixcolors+0 as last color in scorepanel color table
-	;fixme
 	jmp ++
 check_level2
 	cmp #2
-	beq +
+	beq prepare_level2
 	jmp check_level3
-+	; load data for level 2
+prepare_level2
+	; load data for level 2
 	; tiles and sprites are the same!
 	; RLE decode level tile data and generate tile numbers from tile category indices
 	+set16im TEMPADR0, level2_data_rle
@@ -597,6 +596,132 @@ rle_decode_repeat
 	inc TEMPADR0+1
 +	jmp --
 
+prepare_char_animations
+	; read 2 chars and shift their columns with varying speeds and write
+	; it to animation data area (char_animation_data)
+	; chars at address VICCHARSET+ANIMATED_BGTILE_INDEX*8
+	; source address is fixed, destination address varies over 512 byte,
+	; so can't use register.
+	; we iterate over the 16 bytes of the two chars and mask out 4 parts
+	; of their data to have it as source table (64 bytes long)
+	; then we only need to combine the data.
+	; Then we can loop over phase counter and just add
+	; the varying speeds to get the read address.
+	; TEMPADR0 Table-read-address
+	; TEMPADR1 Write-addres
+	; TEMP0 q0
+	; TEMP1 q1
+	; TEMP2 Column
+	; TEMP3 Phase
+	; TEMP4 p
+	; TEMP5 p+8
+	; The table has 4*16 bytes
+	; --- as first clear destination
+	ldx #0
+-	sta char_animation_data,x
+	sta char_animation_data+$100,x
+	inx
+	bne -
+	; --- distribute the 16 source bytes to 64byte table
+	+set16im TEMPADR0, SCREEN1	; used as table
+	+set8im TEMP0, $03	; AND-mask
+--	ldy #0			; count 16 bytes
+-	lda VICCHARSET+ANIMATED_BGTILE_INDEX*8,y
+	and TEMP0
+	sta (TEMPADR0),y
+	iny
+	cpy #16
+	bne -
+	lda TEMPADR0	; increase write address
+	clc
+	adc #16		; no overflow possible
+	sta TEMPADR0
+	asl TEMP0	; prepare next and-mask
+	asl TEMP0
+	; if its 0 now, all 4 passes are done
+	bne --
+	; --- set up target address
+	+set16im TEMPADR1, char_animation_data
+	; -- initiate column shift counters
+	ldx #16
+-	sta chardata_tempcolumn-1,x	; clear all shift values
+	dex
+	bne -
+	; -- now iterate over the 32 phases
+	+set8im TEMP3, 32		; nr of phases
+prepare_char_animations_next_phase
+	+set8im TEMP2, 4		; 4 columns
+	+set8im TEMPADR0, 3*16		; table-read-adr offset init
+prepare_char_animations_next_column
+	ldx TEMP2			; column 4..1
+	lda chardata_tempcolumn-1,x	; compute q0
+	lsr
+	lsr
+	lsr
+	and #7
+	sta TEMP0			; store q0
+	lda chardata_tempcolumn+4-1,x	; compute q1
+	lsr
+	lsr
+	lsr
+	and #7
+	sta TEMP1			; store q1
+	+set8im TEMP4, 0		; p = 0
+	+set8im TEMP5, 8		; p+8 = 8
+	tax				; initialize p-counter
+prepare_char_animations_next_byte
+	lda TEMP4			; compute q0+p
+	clc
+	adc TEMP0
+	and #7				; (q0+p) & 7
+	tay
+	lda (TEMPADR0),y		; read andmask
+	ldy TEMP4
+	ora (TEMPADR1),y		; or-write to write address
+	sta (TEMPADR1),y		; store it
+	lda TEMP4
+	clc
+	adc TEMP1
+	and #7				; (q1+p) & 7
+	clc
+	adc #8				; ((q1+p) & 7) + 8
+	tay
+	lda (TEMPADR0),y		; read andmask
+	ldy TEMP5
+	ora (TEMPADR1),y		; or-write to write-address+8
+	sta (TEMPADR1),y		; store it
+	inc TEMP4
+	inc TEMP5
+	dex
+	bne prepare_char_animations_next_byte
+	; --- next column
+	lda TEMPADR0
+	sec
+	sbc #16
+	sta TEMPADR0
+	dec TEMP2
+	bne prepare_char_animations_next_column
+	; --- next phase
+	lda TEMPADR1
+	clc
+	adc #16
+	sta TEMPADR1
+	lda TEMPADR1+1
+	adc #0
+	sta TEMPADR1+1
+	; --- modify column shift counters
+	ldx #8
+-	lda chardata_tempcolumn-1,x
+	clc
+	adc chardata_columnshift_values-1,x
+	sta chardata_tempcolumn-1,x
+	dex
+	bne -
+	; handle phase counter
+	dec TEMP3
+	bne prepare_char_animations_next_phase
+	rts
+
 ; ----------------------------------- includes -------------------------------
 
 ; Raster IRQ
@@ -624,6 +749,11 @@ rle_decode_repeat
 ; All the *** DATA ***
 ; ===========================================================================
 
+; Shift per column of background animation (fixme should be level dependant!)
+; level independency is the reason why we compute animations here...
+chardata_columnshift_values
+!byte -8, -4, -2, -4, -8, -2, -4, -2
+
 ; Text sprites (at max 64 sprites)
 !src "data/textcharset_sprdata.a"
 
@@ -631,6 +761,7 @@ rle_decode_repeat
 
 level1_fixcolors
 !src "data/cheese_alltiles_fixcolors.a"
+;!src "data/candy_alltiles_fixcolors.a"
 
 ; sprite data for level 1 packed as RLE.
 ; note: contains also player and player die frames (because enemies are the
@@ -650,17 +781,14 @@ level1_data_rle
 level2_data_rle
 !src "data/cheese_level2_rle.a"
 
-; 32 versions of two chars for animation
-!align 255, 0	; aligning is important!
-level1_char_animation_data
-!src "src/cheese_bganimation0.png_phases.png_chardata.a"
-
 ; data for tiles first
 !align 255, 0
 level1_tiledata
 !src "data/cheese_alltiles_tiledata.a"
+;!src "data/candy_alltiles_tiledata.a"
 
 ; be careful - blocks with one color are coded as multicolor, gives problems with background tiles!
 !align 255,0
 level1_chardata
 !src "data/cheese_alltiles_chardata.a"
+;!src "data/candy_alltiles_chardata.a"

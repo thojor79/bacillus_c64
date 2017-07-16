@@ -29,6 +29,8 @@ checked.
 GENERAL FEATURES
 ================
 
+the animation of the background tile should be level dependant
+
 implement blend out effect for level end - reverse reading of blend in,
 rather easy to do but low effect
 

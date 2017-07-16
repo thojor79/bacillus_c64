@@ -341,7 +341,7 @@ cycle_score_panel_colors
 compute_char_animations
 	; Handle background animation
 	inc background_animation_phase
-	lda background_animation_phase	; 32 phases - something is still a bit wrong
+	lda background_animation_phase	; 32 phases
 	lsr	; only every 2nd frame
 	and #31
 	; Phase is now in Accu, 0-31. We have 16 bytes per phase. So multiply phase
