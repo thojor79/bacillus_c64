@@ -4,6 +4,9 @@ ToDo - in categories
 BUGS
 ====
 
+At end of dying animation a black empty sprite frame is shown.
+maybe sprite pointer is one too big and points to empty space.
+
 
 VISUAL GLITCHES
 ===============
@@ -30,6 +33,8 @@ GENERAL FEATURES
 ================
 
 the animation of the background tile should be level dependant
+easier to do it with separate data or separate code.
+generation of animation could be done at runtime, as it is now.
 
 implement blend out effect for level end - reverse reading of blend in,
 rather easy to do but low effect
@@ -63,6 +68,9 @@ individual colors for tiles then all simple colors like red, green, blue,
 yellow, purple etc.
 candy needs different enemy sprite colors, so set them later (rather dark
 colors)
+green world, colors light green, green, bright red or orange?
+lower individual colors: red, magenta, yellow, maybe mix yellow and light
+green for lemon
 
 maybe more enemies
 
@@ -131,6 +139,10 @@ maybe better in candy world (later)
 
 implement part of image converter with rle encoding (for logo in upper part
 of screen only!)
+
+multicolor extra colors can be changed in certain lines with rasterirq, to
+bring more colors, but not easy to manage (the game creatures does it that
+way)
 
 
 Ideas for other games / projects

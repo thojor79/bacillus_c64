@@ -26,6 +26,7 @@ data : gfx/textcharset.png gfx/introscreen.png gfx/mainlogo.png gfx/cheese_allti
 leveldata : gfx/cheese_level1.png gfx/cheese_level2.png
 	cd gfx && ../convert/indexpng_to_data.py cheese_level1.png && mv cheese_level1_rle.a ../data && rm cheese_level1_raw.a && cd ..
 	cd gfx && ../convert/indexpng_to_data.py cheese_level2.png && mv cheese_level2_rle.a ../data && rm cheese_level2_raw.a && cd ..
+	cd gfx && ../convert/indexpng_to_data.py candy_level1.png && mv candy_level1_rle.a ../data && rm candy_level1_raw.a && cd ..
 
 spritedata : gfx/*sprite*
 	cd gfx && ../convert/c64fy.py -quiet 1 -sprite 4 -color 0 -color 1 -datalabels 0 bacillus_sprite_frames.png && mv bacillus_sprite_frames_sprdata.a ../data/level1_sprites.a && cd ..

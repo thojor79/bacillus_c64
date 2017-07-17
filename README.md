@@ -35,6 +35,7 @@ Technical facts:
 * special tiles that vaporize
 * special boni like invulnerability and 1-up
 * dying animation
+* enemies leaving screen stay alive and can return
 
 Planned:
 * Outtro
