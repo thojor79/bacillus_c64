@@ -448,18 +448,19 @@ rasterirq_scoreline_end
 ; restriction. We need to have 3 or 4 random number generations then,
 ; as best in a subroutine.
 ; Indices in level data for tile categories:
-; 0  - background		(2x2) Tiles 0-3
-; 1  - animated background	(1x1) Tile 4 (animated!)
-; 2  - enemies			(1x1) Tiles 0-3
-; 3  - floor			(2x1) Tiles 12-13,14-15,16-17,18-19
-; 4  - obstacleA		(2x2) Tiles 20-23,24-27,28-31,32-35
-; 5  - island			(2x1) Tiles 40-41,42-43,44-45,46-47
-; 6  - special boni		(1x1) Tiles 8,9
-; 7  - bonus			(1x1) Tiles 5,6,7
-; 8  - obstacleB		(2x1) Tiles 36-37,38-39
-; 9  - exit sign		(2x1) Tiles 10-11
-; 10 - ceiling			(2x1) Tiles 48-49,50-51
-; 11 - vaporating island	(1x1) Tiles 52-57 (phases, initial 52)
+; 0  - background		(2x2) 1 Tiles 0-3
+; 1  - animated background	(1x1) 1 Tile 4 (animated!)
+; 2  - enemies			(1x1) - Tiles 0-3
+; 3  - floor			(2x1) 4 Tiles 12-13,14-15,16-17,18-19
+; 4  - obstacleA		(2x2) 3 Tiles 20-23,24-27,28-31
+; 5  - island			(2x1) 4 Tiles 32-33,34-35,36-37,38-39
+; 6  - special boni		(1x1) 2 Tiles 8,9
+; 7  - bonus			(1x1) 3 Tiles 5,6,7
+; 8  - obstacleB		(2x1) 6 Tiles 40-41,42-43,44-45,46-47,48-49,50-51
+; 9  - exit sign		(2x1) 1 Tiles 10-11
+; 10 - ceiling			(2x1) 2 Tiles 52-53,54-55
+; 11 - vaporating island	(1x1) 6 Tiles 56-61 (6 phases, initial 56)
+; 12 - traps                    (1x1) 2 Tiles 62,63
 ; We have 234 chars available (256-22 for scorepanel), that are
 ; 58 tiles without reuse of chars. Some chars are reused, so we could add
 ; more tiles.
@@ -506,10 +507,12 @@ prepare_level_data_case
 	cmp #TILESYPERSCREEN
 	bne prepare_level_data_next_tile
 	rts
-; Uses TEMP3, expects row to be in TEMP0 register, column in Y register
+; Uses TEMP3, expects row to be in TEMP0 variable, column in Y register,
+; row with bit 0 masked out in TEMP1 variable.
+; use 4 bits from level xored with top 4 and bottom 4 bits of x coord and
+; xored with y coord. y coord = row = TEMP0, x coord = col = Y-Reg.
+; bits 0 of x or y coord are cleared for the 2x1 and 2x2 versions.
 generate_random_index_1x1
-	; combine 4 bits of x with 2 nibbles of y for a index 0...15 where
-	; you read from a pseudo random table containing values 0...7 (3 bits)
 	tya
 	lsr
 	lsr
@@ -519,12 +522,11 @@ generate_random_index_1x1
 	tya
 	eor TEMP3
 	eor TEMP0
+	eor level_nr
 	and #$0F
 	rts
 ; Uses TEMP3, expects row to be in TEMP0 register, column in Y register
 generate_random_index_2x1
-	; combine 4 bits of x with 2 nibbles of y for a index 0...15 where
-	; you read from a pseudo random table containing values 0...7 (3 bits)
 	tya
 	lsr
 	lsr
@@ -535,12 +537,11 @@ generate_random_index_2x1
 	and #$FE	; clear bit 0 of y!
 	eor TEMP3
 	eor TEMP0
+	eor level_nr
 	and #$0F
 	rts
 ; Uses TEMP3, expects row to be in TEMP0 register, column in Y register
 generate_random_index_2x2
-	; combine 4 bits of x with 2 nibbles of y for a index 0...15 where
-	; you read from a pseudo random table containing values 0...7 (3 bits)
 	tya
 	lsr
 	lsr
@@ -551,16 +552,17 @@ generate_random_index_2x2
 	and #$FE	; clear bit 0 of y!
 	eor TEMP3
 	eor TEMP1
+	eor level_nr
 	and #$0F
 	rts
-prepare_level_data_tile0	; background tiles 0...3 as 2x2 metatile
+prepare_level_data_tile0	; 1x background tile 0...3 as 2x2 metatile
 	lda TEMP2		; use subtile index as tilenumber
 	rts
-prepare_level_data_tile1	; animated background tile 4
+prepare_level_data_tile1	; 1x animated background tile 4
 	lda #4			; always same tilenumber (hardcoded)
 	rts
 prepare_level_data_tile2	; enemies
-	jsr generate_random_index_1x1
+	jsr generate_random_index_1x1	;fixme just xor level,x>>4,x,y as index in tables!
         tax
         lda pseudo_rand_table_16,x
 	asl
@@ -569,7 +571,7 @@ prepare_level_data_tile2	; enemies
 	ora #$80
 	ora TEMP2
 	rts
-prepare_level_data_tile3	; floor tiles 12,13 or 14,15 or 16,17 or 18,19 as 2x1 metatile
+prepare_level_data_tile3	; 4x floor tiles 12+,14+,16+,18+ as 2x1 metatile
 	jsr generate_random_index_2x1
 	tax
 	lda pseudo_rand_table_4,x
@@ -577,24 +579,24 @@ prepare_level_data_tile3	; floor tiles 12,13 or 14,15 or 16,17 or 18,19 as 2x1 m
 	adc TEMP4
 	adc #12
 	rts
-prepare_level_data_tile4	; obstacle A 2x2 metatile index 20+,24,28+,32+
+prepare_level_data_tile4	; 3x obstacle A 2x2 metatile index 20+,24,28+
 	jsr generate_random_index_2x2
 	tax
-	lda pseudo_rand_table_4,x
+	lda pseudo_rand_table_3,x
 	asl
 	asl
 	adc TEMP2		; carry is already 0 by asl
 	adc #20
 	rts
-prepare_level_data_tile5	; island 2x1 sized, 40+,42+,44,46+
+prepare_level_data_tile5	; 4x island 2x1 metatile, 32+,34+,36+,38+
 	jsr generate_random_index_2x1
 	tax
 	lda pseudo_rand_table_4,x
 	asl
 	adc TEMP4
-	adc #40
+	adc #32
 	rts
-prepare_level_data_tile6	; special boni tiles 8 or 9. have shield 3* more than 1up! (shield=9)
+prepare_level_data_tile6	; 2x special boni tiles 8 or 9. have shield 3* more than 1up! (shield=9)
 	jsr generate_random_index_1x1
 	tax
 	lda pseudo_rand_table_4,x
@@ -602,53 +604,63 @@ prepare_level_data_tile6	; special boni tiles 8 or 9. have shield 3* more than 1
 	lda #0
 	adc #8			; is 8 or 9 depending on carry
 	rts
-prepare_level_data_tile7	; bonus tiles 5,6,7 as 1x1 sized tile
+prepare_level_data_tile7	; 3x bonus tiles 5,6,7 as 1x1 sized tile
 	jsr generate_random_index_1x1
 	tax
 	lda pseudo_rand_table_3,x
 	clc
 	adc #5
 	rts
-prepare_level_data_tile8	; obstacle B metatile 2x1 index 36+,38+
+prepare_level_data_tile8	; 6x obstacle B metatile 2x1 index 40+,42+,44+,46+,48+,50+
 	jsr generate_random_index_2x1
 	tax
-	lda pseudo_rand_table_16,x
-	and #2
-	clc
-	adc #36
+	lda pseudo_rand_table_6,x
+	asl
+	adc #40
 	adc TEMP4
 	rts
-prepare_level_data_tile9	; exit sign tiles 10,11
+prepare_level_data_tile9	; 1x exit 2x1 metatile 10,11
 	lda TEMP4		; subtileindex 0..1
 	clc
 	adc #10
 	rts
-prepare_level_data_tile10	; ceiling 2x1 index 48+,50+
+prepare_level_data_tile10	; 2x ceiling metatile 2x1 index 52+,54+
 	jsr generate_random_index_2x1
 	tax
-	lda pseudo_rand_table_16,x
-	and #2
-	clc
-	adc #48
+	lda pseudo_rand_table_2,x
+	asl
+	adc #52
 	adc TEMP4
 	rts
-prepare_level_data_tile11	; vaporating island, 1x1 tile index 52+
+prepare_level_data_tile11	; 1x vaporating island, 1x1 tile index 58+
 	lda #VAPOR_TILE_INDEX
+	rts
+prepare_level_data_tile12	; 2x traps tile 1x1, index 62,63
+	jsr generate_random_index_1x1
+	tax
+	lda pseudo_rand_table_2,x
+	clc
+	adc #62
 	rts
 
 ; ------------ data
 
+; tables with 16 permutated values of range [0,...x[ with x in 2,3,4,6,16
+
+pseudo_rand_table_2
+!byte 1, 0, 1, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0
+
 pseudo_rand_table_3
-!byte 2,0,1, 0,1,2, 1,2,0, 2,1,0, 0,2,1, 1,0,2, 1
+!byte 0, 0, 2, 0, 0, 2, 0, 1, 1, 1, 2, 1, 2, 0, 1, 2
 
 pseudo_rand_table_4
-!byte 3,2,1,0, 2,0,1,3, 0,3,2,1, 1,2,3,0
+!byte 3, 2, 2, 0, 1, 0, 1, 1, 3, 3, 2, 0, 3, 1, 2, 0
 
-pseudo_rand_table_8
-!byte 3,4,7,0,2,6,1,5, 6,4,1,7,5,2,3,0
+pseudo_rand_table_6
+!byte 5, 0, 3, 1, 0, 5, 1, 4, 4, 2, 2, 3, 2, 0, 3, 1
 
 pseudo_rand_table_16
-!byte 13,7,5,8,0,12,4,9,15,2,6,3,10,1,14
+!byte 7, 3, 4, 6, 14, 13, 10, 9, 12, 2, 8, 15, 11, 1, 5, 0
 
 prepare_level_jump_table_lo
 !byte <prepare_level_data_tile0
@@ -663,6 +675,7 @@ prepare_level_jump_table_lo
 !byte <prepare_level_data_tile9
 !byte <prepare_level_data_tile10
 !byte <prepare_level_data_tile11
+!byte <prepare_level_data_tile12
 
 prepare_level_jump_table_hi
 !byte >prepare_level_data_tile0
@@ -677,6 +690,7 @@ prepare_level_jump_table_hi
 !byte >prepare_level_data_tile9
 !byte >prepare_level_data_tile10
 !byte >prepare_level_data_tile11
+!byte >prepare_level_data_tile12
 
 rasterbar_colors
 !byte 6,14,13,1,13,14,6, 13	; last value is level specific and overwritten on init of level

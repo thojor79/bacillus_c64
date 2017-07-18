@@ -31,7 +31,7 @@ Technical facts:
 * score accounting
 * intro
 * main screen
-* two levels
+* 3 levels in 2 worlds
 * special tiles that vaporize
 * special boni like invulnerability and 1-up
 * dying animation
@@ -40,7 +40,8 @@ Technical facts:
 Planned:
 * Outtro
 * Highscore handling in mainscreen
-* More levels (planned 3-6)
+* traps in game
+* More levels (planned 6)
 * More level graphics
 * More enemies
 * Music/Sfx

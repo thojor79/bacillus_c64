@@ -260,7 +260,7 @@ SCPO0 = 235
 SCPCOUNT = 22
 ANIMATED_BGTILE_INDEX = 16	; one tile is animated
 FIRST_GROUND_TILE_INDEX = 12	; first tile index that is no background
-VAPOR_TILE_INDEX = 52		; this and next tile vaporize
+VAPOR_TILE_INDEX = 56		; tiles from theese on vaporize
 VAPOR_TILE_NUMS = 6		; number of vaporating tiles
 PLAYER_DYING_ANIM_PHASES = 128	; number of animation phases for dying anim. for player
 PLAYER_DYING_Y_DEC = 4		; speed in y coords that sprite rises
@@ -467,6 +467,31 @@ prepare_level2
 	jsr prepare_level_data
 	jmp ++
 check_level3
+	cmp #3
+	beq prepare_level3
+	jmp check_level4
+prepare_level3
+	; load data for level 3
+	; now load level specific data to fix memory places and handle level
+	; level tile data and tile indices, stored
+	+memcopy_pages LEVEL_TILE_DATA, level3_tiledata, 2	; 0.5k = 2 pages
+	; RLE decode level tile data and generate tile numbers from tile category indices
+	+set16im TEMPADR0, level3_data_rle
+	+set16im TEMPADR1, LEVEL_DATA
+	jsr rle_decode
+	jsr prepare_level_data
+	; level charset	(note that we can use 234, but use and copy only 224 chars!)
+	+memcopy_pages VICCHARSET, level3_chardata, 7	; 2k-1p = 7 pages = 224 chars = 56 tiles minimum
+	jsr prepare_char_animations
+	; level sprites - just store old and set new colors
+	;fixme
+	; level specific colors
+	+copy8 VICFGCOL, level3_fixcolors
+	sta rasterbar_colors + 7	; store also for rasterirq, is level specific
+	+copy8 VICFGCOL+1, level3_fixcolors+1
+	+copy8 VICFGCOL+2, level3_fixcolors+2
+	jmp ++
+check_level4
 	; no level number matches, so last level completed
 	; jsr outtro fixme
 	jmp checkhighscore
@@ -759,6 +784,8 @@ chardata_columnshift_values
 
 ; -------------------------- data for levels ------------------------------
 
+; ----------------- LEVEL 1
+
 level1_fixcolors
 !src "data/cheese_alltiles_fixcolors.a"
 ;!src "data/candy_alltiles_fixcolors.a"
@@ -776,10 +803,7 @@ level1_sprites_rle
 ; The data for a level (256 tiles horizontally, 12 tiles vertically, hence 3072 bytes).
 level1_data_rle
 !src "data/cheese_level1_rle.a"
-
-; data for level2
-level2_data_rle
-!src "data/cheese_level2_rle.a"
+;!src "data/candy_level1_rle.a"
 
 ; data for tiles first
 !align 255, 0
@@ -792,3 +816,26 @@ level1_tiledata
 level1_chardata
 !src "data/cheese_alltiles_chardata.a"
 ;!src "data/candy_alltiles_chardata.a"
+
+; ----------------- LEVEL 2
+
+level2_data_rle
+!src "data/cheese_level2_rle.a"
+
+; ----------------- LEVEL 3
+
+level3_fixcolors
+!src "data/candy_alltiles_fixcolors.a"
+
+; level3_spritecolors ; fixme define!
+
+level3_data_rle
+!src "data/candy_level1_rle.a"
+
+!align 255, 0
+level3_tiledata
+!src "data/candy_alltiles_tiledata.a"
+
+!align 255,0
+level3_chardata
+!src "data/candy_alltiles_chardata.a"

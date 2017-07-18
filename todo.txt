@@ -7,6 +7,8 @@ BUGS
 At end of dying animation a black empty sprite frame is shown.
 maybe sprite pointer is one too big and points to empty space.
 
+background anim and vaporizing tiles in cheese level broken
+
 
 VISUAL GLITCHES
 ===============
@@ -28,6 +30,10 @@ sprite data as well
 handle step into trap - animate trap tiles! check where vaporizing tiles are
 checked.
 
+add cheat to main menu, like joy up,up,down,down,left,left,right,right and
+then number of ups is start level or so...
+problem, sprite init may be missed then...
+
 
 GENERAL FEATURES
 ================
@@ -35,6 +41,11 @@ GENERAL FEATURES
 the animation of the background tile should be level dependant
 easier to do it with separate data or separate code.
 generation of animation could be done at runtime, as it is now.
+
+group tile char data in worlds, not levels, but we can easily do that at
+level init
+
+have different sprite colors for candy world! rather dark!
 
 implement blend out effect for level end - reverse reading of blend in,
 rather easy to do but low effect
@@ -72,11 +83,6 @@ green world, colors light green, green, bright red or orange?
 lower individual colors: red, magenta, yellow, maybe mix yellow and light
 green for lemon
 
-maybe more enemies
-
-maybe animated tiles (boni?)
-
-maybe some spare sprites with actor numbers >= 16 as boni or traps.
 
 
 INFO
@@ -110,6 +116,10 @@ Ideas for later
 secret passages or rooms in levels - not for this game
 
 player can shoot - not for this game
+
+animate boni tiles
+
+use spare sprites with actor numbers >= 16 as boni or traps.
 
 boss monster - only sensible when player can shoot - not for this game
 

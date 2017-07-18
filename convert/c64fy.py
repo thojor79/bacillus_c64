@@ -817,7 +817,7 @@ def dumpbytes(v):
 # man kann ja einfach Farben tauschen! Wobei nur eine Farbe getauscht werden kann im char mode.
 # das fehlt hier wohl noch!
 if charmode:
-	print('Num Chars initial',len(blocks),'of',numblockstotal)
+	print('Num Chars initial',len(blocks),'of',numblockstotal,'numchars',numchars)
 	while len(blocks) > numchars:
 		# Finde seltensten Block
 		mincount = 10000000
