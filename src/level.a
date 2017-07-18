@@ -559,7 +559,7 @@ prepare_level_data_tile0	; 1x background tile 0...3 as 2x2 metatile
 	lda TEMP2		; use subtile index as tilenumber
 	rts
 prepare_level_data_tile1	; 1x animated background tile 4
-	lda #4			; always same tilenumber (hardcoded)
+	lda #ANIMATED_BGTILE	; always same tilenumber (hardcoded)
 	rts
 prepare_level_data_tile2	; enemies
 	jsr generate_random_index_1x1	;fixme just xor level,x>>4,x,y as index in tables!

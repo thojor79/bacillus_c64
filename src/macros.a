@@ -289,6 +289,16 @@
 	bne .read0
 }
 
+; Copy up to 256 bytes
+; Uses	A, X
+!macro memcopy_bytes .dstadr, .srcadr, .nrbytes {
+	ldx #.nrbytes
+-	lda .srcadr-1,x
+	sta .dstadr-1,x
+	dex
+	bne -
+}
+
 ; decrement 16bit value by 1
 !macro dec16 .adr {
 	lda .adr

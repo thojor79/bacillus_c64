@@ -258,7 +258,8 @@ VICSPRITECOMMONCOLOR1 = $D026
 SCPO = 234	; Score Panel Char Offset
 SCPO0 = 235
 SCPCOUNT = 22
-ANIMATED_BGTILE_INDEX = 16	; one tile is animated
+ANIMATED_BGTILE = 4
+ANIMATED_BGTILE_INDEX = 16	; one tile is animated, this is the charnumber, two chars follow
 FIRST_GROUND_TILE_INDEX = 12	; first tile index that is no background
 VAPOR_TILE_INDEX = 56		; tiles from theese on vaporize
 VAPOR_TILE_NUMS = 6		; number of vaporating tiles
@@ -438,8 +439,9 @@ prepare_level1
 	+set16im TEMPADR1, LEVEL_DATA
 	jsr rle_decode
 	jsr prepare_level_data
-	; level charset	(note that we can use 234, but use and copy only 224 chars!)
+	; level charset
 	+memcopy_pages VICCHARSET, level1_chardata, 7	; 2k-1p = 7 pages = 224 chars = 56 tiles minimum
+	+memcopy_bytes VICCHARSET+224*8, level1_chardata+224*8, 10*8	; copy chars 224...233
 	jsr prepare_char_animations
 	; level sprites - note! write at most 31 pages (7.75k), don't overwrite last page because of IRQ vectors
 	+set16im TEMPADR0, level1_sprites_rle
@@ -482,6 +484,7 @@ prepare_level3
 	jsr prepare_level_data
 	; level charset	(note that we can use 234, but use and copy only 224 chars!)
 	+memcopy_pages VICCHARSET, level3_chardata, 7	; 2k-1p = 7 pages = 224 chars = 56 tiles minimum
+	+memcopy_bytes VICCHARSET+224*8, level3_chardata+224*8, 10*8
 	jsr prepare_char_animations
 	; level sprites - just store old and set new colors
 	;fixme
@@ -788,7 +791,6 @@ chardata_columnshift_values
 
 level1_fixcolors
 !src "data/cheese_alltiles_fixcolors.a"
-;!src "data/candy_alltiles_fixcolors.a"
 
 ; sprite data for level 1 packed as RLE.
 ; note: contains also player and player die frames (because enemies are the
@@ -803,19 +805,16 @@ level1_sprites_rle
 ; The data for a level (256 tiles horizontally, 12 tiles vertically, hence 3072 bytes).
 level1_data_rle
 !src "data/cheese_level1_rle.a"
-;!src "data/candy_level1_rle.a"
 
 ; data for tiles first
 !align 255, 0
 level1_tiledata
 !src "data/cheese_alltiles_tiledata.a"
-;!src "data/candy_alltiles_tiledata.a"
 
 ; be careful - blocks with one color are coded as multicolor, gives problems with background tiles!
 !align 255,0
 level1_chardata
 !src "data/cheese_alltiles_chardata.a"
-;!src "data/candy_alltiles_chardata.a"
 
 ; ----------------- LEVEL 2
 

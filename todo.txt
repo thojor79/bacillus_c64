@@ -7,7 +7,8 @@ BUGS
 At end of dying animation a black empty sprite frame is shown.
 maybe sprite pointer is one too big and points to empty space.
 
-background anim and vaporizing tiles in cheese level broken
+background anim now broken! looks like if wrong char is used to generate
+animated tiles but all values are as before
 
 
 VISUAL GLITCHES
@@ -41,9 +42,6 @@ GENERAL FEATURES
 the animation of the background tile should be level dependant
 easier to do it with separate data or separate code.
 generation of animation could be done at runtime, as it is now.
-
-group tile char data in worlds, not levels, but we can easily do that at
-level init
 
 have different sprite colors for candy world! rather dark!
 
