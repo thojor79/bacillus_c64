@@ -4,6 +4,8 @@ ToDo - in categories
 BUGS
 ====
 
+introscreen image seems broken at upper left corner, but c64fy.py seems ok
+
 At end of dying animation a black empty sprite frame is shown.
 maybe sprite pointer is one too big and points to empty space.
 
