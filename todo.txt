@@ -4,13 +4,12 @@ ToDo - in categories
 BUGS
 ====
 
-introscreen image seems broken at upper left corner, but c64fy.py seems ok
-
 At end of dying animation a black empty sprite frame is shown.
 maybe sprite pointer is one too big and points to empty space.
 
 background anim now broken! looks like if wrong char is used to generate
 animated tiles but all values are as before
+in candy world it works!
 
 
 VISUAL GLITCHES
@@ -166,3 +165,34 @@ game with huge world map (256x256 maybe) so that the C64 can generate the
 data on the fly. Would also be more interesting to play in unknown data.
 Could be done for jump and runs or shoot em ups as well but much harder to
 have playable and funny levels that way.
+
+Creating good graphics isn't easy, converters are not smart enough. So
+writing adventure games isn't that easy and it will take much space to use
+multicolor graphics. Without scrolling we can store multicolor tiles and
+build up a screen with them to have more colors. It will take much more ram
+though. But would be an alternative. Designing graphics is hard, making the
+simple levels of bacillus is no fun, if we could generate levels in 2d as
+well like turrican it may be better. However content creation is not that
+fun for programmers, so automatic generation is a possible alternative.
+
+Space for multicolor tiles: 2x2 tiles are 4*8 bytes pixel data and 2*4 bytes
+color data = 40 bytes per tile. With 4x4 tiles it is 160 bytes per tile. How
+many tiles could we store? Up to 256 are possible, using 10k or 40k of
+memory. Level data would take 200 bytes per screen or 50. For a large level
+with 100 screens this would be 20k or 5k. Together 30k or 45k of ram, if
+there are no meta tiles. 30k seems doable, but 45k is too limited, we need
+space to render to and sprites etc. 17k roughly are used for that, what
+would leave 17k or 2k for code. 17k seems doable, but not 2k.
+So we could create a game multicolor room based with 100 rooms. With many
+different tiles for walls we could create some dungeon master like game.
+Various types of wall bricks and decorations, traps, gates, doors etc would
+fit in memory. Generate appearance of screen by general locality and
+position dependent pseudo randomness. It would be easy to fit a large
+labyrinth into memory. we don't need to use tiles for this but just various
+parts of graphics that are combined. if labyrinth shape, monsters and goods
+are distributed randomly it will be a bit like nethack. rooms will need to
+get generated as well.
+
+what can easily be done with c64fy is conversion if line drawings to c64
+pictures like the turrican2 intro.
+

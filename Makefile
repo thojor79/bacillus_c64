@@ -17,6 +17,10 @@ run : bacillus.prg
 
 all : data leveldata spritedata bacillus.all
 
+test : testsrc/*.a
+	acme testsrc/bitmapview.a
+	acme testsrc/bitmapview_rle.a
+
 data : gfx/textcharset.png gfx/introscreen.png gfx/mainlogo.png gfx/cheese_alltiles.png gfx/candy_alltiles.png
 	cd gfx && ../convert/c64fy.py -hires 1 -sprite 0 -quiet 1 -color 1 textcharset.png && mv textcharset_sprdata.a ../data && cd ..
 	cd gfx && ../convert/c64fy.py -quiet 1 introscreen.png && mv introscreen_bmpdata_rle.a ../data/introscreen_rle.a && cd ..

@@ -141,8 +141,6 @@
 ; bonus accounting! list number of diamonds in score bar?!
 ; atm only collects score
 
-; maybe tile with EXIT sign for level end - with extra color in level image
-
 ; When scrolling actors lag behind a bit! yes scroll is triggered and frame immediatly shifts,
 ; but actor data handling is called only next frame, so always lags behind.
 ; Maybe don't start scrolling immediatly but delay 1 frame? But it would only delay the

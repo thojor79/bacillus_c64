@@ -1,0 +1,225 @@
+!to "bitmapview_rle.o", cbm	; Program name
+!cpu 6510
+
+; view a bitmap. we need to use a different VIC bank!
+
+VICBANK = 2
+COLORRAM = $D800
+VICCHARSETBLOCK = 2
+VICBITMAPBLOCK = 1
+VICSCREENBLOCK = 1
+SCREEN0 = VICBANK*$4000+VICSCREENBLOCK*$0400
+VICBITMAP = VICBANK*$4000+VICBITMAPBLOCK*$2000
+TEMP0 = $02
+TEMP1 = $FD
+TEMP2 = $FE
+TEMPADR0 = $03
+TEMPADR1 = $05
+TEMPADR2 = $07
+TEMPADR3 = $FB
+VICBGCOL = $D020
+VICFGCOL = $D021
+VICCTRL2 = $D016
+VICMEMCTRL = $D018
+VICCTRL1 = $D011
+VICRASTER = $D012
+TILEWIDTH = 2
+TILEWIDTHINPIXELS = TILEWIDTH*8
+TILESYPERSCREEN = 12
+CIA2_DATAPORT_A = $DD00
+
+; ------------------------ macros --------------------------
+
+!src "src/macros.a"
+
+!macro storeaddress .adr, .target {	; is set16im in new macros!
+	lda #<.adr
+	sta .target
+	lda #>.adr
+	sta .target+1
+}
+
+!macro memcopy1K .srcadr, .dstadr {
+	ldx #$00
+-	lda .srcadr,x
+	sta .dstadr,x
+	lda .srcadr+$100,x
+	sta .dstadr+$100,x
+	lda .srcadr+$200,x
+	sta .dstadr+$200,x
+	lda .srcadr+$300,x
+	sta .dstadr+$300,x
+	inx
+	bne -
+}
+
+; -------------------------------------- program ------------------------------------------
+
+*= $0801	; Program start at 2049
+
+; Basic start code 1979 SYS2066:REM TJ
+!byte $10,$08,$BB,$07,$9E,$32,$30,$36,$36,$3A,$8F,$20,$54,$4A,$00,$00,$00
+ 
+main
+; as first set VIC bank and where VIC finds data
+	sei
+	lda CIA2_DATAPORT_A+2
+	ora #$03
+	sta CIA2_DATAPORT_A+2
+	lda CIA2_DATAPORT_A
+	and #$FC
+	ora #(3 - VICBANK)
+	sta CIA2_DATAPORT_A
+; VIC memory area set up
+	lda #VICSCREENBLOCK*16+VICBITMAPBLOCK*8+1	; in bitmap mode bit 3 sets bitmap block, in charmode bits 1-3 charblock!
+	sta VICMEMCTRL
+	lda #>SCREEN0	; inform Kernal where screen is
+	sta $288
+	cli
+
+; setup VIC bitmap multicolor mode
+	lda VICCTRL1
+	ora #$20
+	sta VICCTRL1	; Bitmap mode on
+	lda VICCTRL2
+	ora #$10
+	sta VICCTRL2	; Multicolor mode on
+
+; set background color
+	lda #$00
+	sta VICBGCOL
+	lda backgroundcolor
+	sta VICFGCOL
+
+; turn off VIC display
+	lda $D011
+	and #$EF
+	sta $D011
+
+	jmp +
+
+; prepare display
+	; clear bitmap
+	lda #0
+	ldy #32
+-	ldx #0
+clearbitmap
+	sta VICBITMAP,x
+	dex
+	bne clearbitmap
+	inc clearbitmap+2
+	dey
+	bne -
+	; clear screen and color ram
+	+memset1K SCREEN0, 0
+	+memset1K COLORRAM, 0
++
+	
+; copy data to destination
+	+set16im TEMPADR0, bitmapdata_rle
+	+set16im TEMPADR1, VICBITMAP
+	jsr rle_decode
+	+set16im TEMPADR0, chardata_rle
+	+set16im TEMPADR1, SCREEN0
+	jsr rle_decode
+	+set16im TEMPADR0, colordata_rle
+	+set16im TEMPADR1, COLORRAM
+	jsr rle_decode
+
+; turn on VIC display
+	lda $D011
+	ora #$10
+	sta $D011
+
+; wait
+	jmp *
+
+; -------------------- decode RLE data ---------------------
+; Input	TEMPADR0	Source address of data
+; Input TEMPADR1	Destination address of data
+; Uses	A,X,Y
+rle_decode
+	ldy #0
+	lda (TEMPADR0),y
+	bmi rle_decode_repeat
+	; No repeat or stop, just copy data that follows
+	tax	; copy repeat count (copy one more than this count!)
+	; Increase read address by one
+	inc TEMPADR0
+	bne +
+	inc TEMPADR0+1
++
+-	lda (TEMPADR0),y
+	sta (TEMPADR1),y
+	iny
+	dex
+	bpl -
+	; now add Y to both addresses
+	tya
+	clc
+	adc TEMPADR0
+	sta TEMPADR0
+	bcc +
+	inc TEMPADR0+1
++
+--	tya
+	clc	; maybe already 0?
+	adc TEMPADR1
+	sta TEMPADR1
+	bcc +
+	inc TEMPADR1+1
++	jmp rle_decode
+rle_decode_repeat
+	cmp #255
+	bne +
+	rts	; done
++	and #$7F
+	clc
+	adc #3
+	tax
+	; Increase read address by one
+	inc TEMPADR0
+	bne +
+	inc TEMPADR0+1
++	ldy #0
+	lda (TEMPADR0),y
+-	sta (TEMPADR1),y
+	iny
+	dex
+	bne -
+	; Increase read address by one and write address by Y
+	inc TEMPADR0
+	bne +
+	inc TEMPADR0+1
++	jmp --
+
+; --------------- function that copies memory -------------
+; Input	TEMP0		Number of pages to copy
+;	TEMP1		Number of additional bytes to copy
+;	TEMPADR0	Source address
+;	TEMPADR1	Destination address
+memcopy
+	ldx TEMP0
+--	cpx #$00
+	beq +
+	ldy #$00
+-	lda (TEMPADR0),y
+	sta (TEMPADR1),y
+	iny
+	bne -
+; increase source and dest address by one page (increase MSB)
+	inc TEMPADR0+1
+	inc TEMPADR1+1
+	dex
+	jmp --
++
+-	cpy TEMP1
+	beq +
+	lda (TEMPADR0),y
+	sta (TEMPADR1),y
+	iny
+	jmp -
++	rts
+
+!src "testsrc/test_bmpdata_rle.a"
+
