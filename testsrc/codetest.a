@@ -1,0 +1,761 @@
+!to "codetest.o", cbm	; Program name
+!cpu 6510
+
+; This code file is a library of functions!
+; Together with notes and a plan.
+
+; C64 effects that have been already testes
+; color mixing : tested, giving 14 new colors.
+; display graphics / combine with c64fy
+; use custom charset
+; sprites with non-irq muxing of 80 sprites on screen
+; raster IRQ
+; smooth side scrolling with color scrolling (bugfix needed)
+; tile rendering
+
+; C64 effects that could be tested later:
+; some code and macros need to be taken from tilesandscroll/level
+; interlace color mixing for 136 colors
+; sprite based text scroller
+; raster IRQ tricks
+; stable raster IRQ
+; sprite multiplex with raster IRQ
+; games with c64
+; improve side scrolling (stutters because of frame duplication sometimes)
+; 2 or even 8 way scrolling
+; fix score panel for game
+; good charset
+; rotating some char data to have fix background or parallax scrolling
+; jump and run with bbox collision checking
+; run length encoding of bitmap data (with python), decoding (with code)
+
+; Idea: if we change charset every 6 lines (240 characters) by IRQ we need 4 charsets and can
+; fill the whole screen with custom data. Use other background colors every N lines then.
+; This is the only way how "we are demo" full screen graphic scrolling can be done.
+; But they seem to have more than 3+1 colors per line...
+; Maybe with extended color code? But then only 64 chars so every 1-2 lines a new charset and there are
+; maximum 7... wouldnt work
+; It IS fullscreen graphic scrolling, c64 is fast enough for this when scrolling 1 pixel per frame!
+
+
+; Code improvement ideas
+; ======================
+; toggle bit 1 eor #$01 maybe better than inc/lda/and!
+; use more defines
+; use indirect indexed adressing rather than self modifying code, when not
+; absolutely time critical
+
+; general thoughts:
+; =================
+; cool graphic game would be isometric view with charset looking like last ninja but
+;   soft scrolling over map. role playing game with large world generator would
+;   be possible. but that would be only a tech demo.
+;   maybe pseudo random generated large world
+; on the other hand what would be missing? good short games? two player games?
+;   we would need another joystick then and would have bubble bobble, kickstart2
+;   and bombsquad. writing quick and funny two player games would be much easier
+;   with c++ and sdl2/gl on pc.
+; graphic adventures would be very cool, but totally pointless, much work in converting or
+;   painting graphics. would need c64fy with charset generator, c64fy in c++
+; maybe combining c64test generated graphics with code here would be a good start.
+;   python script outputs .byte statements to be included in acme program and can be shown
+;   by the program. would be funny to have them on real c64 with own foto, but we don't
+;   have a transfer cable yet. Need ZoomFloppy or XU1541 for this (35$, around 30-35€ with
+;   delivery), would be also cool for backup of old disks!
+; soft scrolling of charmode with colors would be cool for jump and run like, but what for?
+; this all is about what I wanted to do on a c64 in my youth and never did.
+; last thing was using assembler for tile based map rendering for strategy game.
+; The idea of Joern from retro programming is good, incremental improvement... don't start
+; too big... problem is we don't have sound that we need for a game, but we can rip it
+; from many sources
+; Using 128 colors or 136 was a good target but now doesn't work or at least we could try
+; it with x shift every frame to mix colors. This could work without raster irq,
+; just a cpu looping and shifting, makes interlace flicker, don't know how it would look.
+; Just coding something for results like DftD may be good for motivation but is also
+; stressing and less fun. C64 gives instant results for small tries, could be good for
+; motivation. Would be better to show it on real hardware...
+; But dftd doesn't really help or others, its more or less coding good effects to prove
+; myself, same as with c64...
+; popular games I like to play? graphic adventures? dune2? turrican clone? open world free play
+; games?
+; isometric labyrinth like nethack with brick walls or natural world, generated randomly,
+; collect goodies and fight monsters, show inventory below in gfx mode.
+; graphic adventure with charset based room above (use full 256 chars) and text/verbs/inventory
+; in gfx mode below (doesn't trash char set!)
+; try char gen in c64fy yourself...
+; convert ADV game to c64?!
+; implement advse on c64?!
+; supertux? tuxty-four as name? tux combined with sixty-four
+; vertical text scroller using sprites above background graphic would be possible
+; even nowadays c64 games are coded and sold...
+; can we bring new coding ideas to old machine like procedural content generation
+; for larger levels or worlds? maybe procedural content generation on pc to build
+; graphics to be used on c64, generate worlds there...
+; problem with content generation is that just converting graphics doesn't work well.
+; graphics adjusted by hand look much better on c64, color tricks can be used much
+; better. painting images so that objects occour at lines multiple of 8 and so on,
+; so they can be represented by characters better etc.
+; tricks like sprite coordinates in x with offset that is multiple of two, so
+; they can be stored and fetched better
+; experiments with c64fy and conversion of sprite graphics show that just converting
+; graphics doesn't work well. We need new hand painted graphics for c64, which is a
+; time consuming process.
+; This result is the killer argument against graphic adventures. Simple action
+; games can be done better or the labyrinth like game.
+; labyrinth arcade with monsters appearing from the sides/anywhere, collecting goodies
+; and weapons and maybe twoplayer would be a possible aim for development...
+; or something colorful and funny like monsters eating candy like bubble bobble would
+; be possible. Soft scrolling of character screens with colors and sprite multiplex,
+; would be like turrican...
+; handling sprite coordinates in half resolution would be good, fit in 8 bit,
+; would be same resolution as multicolor, so no big loss...
+; bring new ideas of games to c64? or rather funny short games?
+
+; The plan
+; ========
+; Let's make a side scrolling game like Giana Sisters or Katakis.
+; Maybe a colorful fun game like bubble bobble with monsters and candy.
+; Later make a cool start screen with logo and high-scores.
+;  i.e. flashing effect by manipulating color ram to make shining logo
+; Just side scrolling with tile based levels.
+; No raster tricks yet except fix score bar at bottom.
+; No sprite multiplexer yet, maybe later.
+; Tiles are number 0-255, maybe high bit indicates monster/bonus (spawn actor).
+; Tiles are what? 4x2 or 4x4 or 2x2? (16, 8 or 4 bytes per tile). Rather 2x2.
+; Lets assume max. 128 tiles that would be 2k, 1k or 512 bytes for tile data.
+; Score bar would be rather two or more lines, lets assume 1 for now.
+; With 2x2 tiles and 24 lines and 40 columns we need 12*20=240 tiles for a screen.
+; Ten screens make 2,4k that is ok. We need some kind of level editor as well
+; as a charset and tile editor...
+; Somehow get tileable stone maps and convert them in gimp to c64.
+; This doesn't work well, especially with limitations like 3 fix colors.
+; So what is next?
+; Store tile data and level tiles somewhere, best at page aligned address.
+; render screen with tiles.
+; Set new VIC bank layout to avoid colliding charset/screen and code/data.
+; scrolling uses level data to fill in new column and colors.
+; Only then we need real tile graphics.
+; Afterwards joystick control to scroll.
+; Then draw player character.
+; Implement bbox limited movement.
+; Then split screen with raster irq for score panel.
+; Then add monster ai.
+; Where to get tile/level editor? from anaconda? pygtk app? draw in gimp and let
+; c64fy convert it to chars? maybe works best for now
+; New idea: let the level be generated randomly. Generate varying ground level
+; by using various possible ground level tiles (normal cheese or cheese stacks
+; or just pieces of cheese). Rather group tiles my having flat areas and mountains.
+; Place some special tiles at flat areas, as decoration.
+; Add jumpable areas above ground.
+; Maybe generate the levels in python. Easier than runtime generation on c64.
+; Paint more tiles, fix level rendering.
+
+
+
+
+SCREEN0POSITION = 1
+SCREEN1POSITION = 15
+SCREEN0 = $0400*SCREEN0POSITION
+SCREEN1 = $0400*SCREEN1POSITION
+COLORRAM = $D800
+TEMP0 = $02
+TEMP1 = $FD
+TEMP2 = $FE
+TEMPADR0 = $03
+TEMPADR1 = $05
+TEMPADR2 = $07
+TEMPADR3 = $FB
+VICBGCOL = $D020
+VICFGCOL = $D021
+VICCTRL2 = $D016
+VICMEMCTRL = $D018
+VICCTRL1 = $D011
+VICRASTER = $D012
+TILEWIDTH = 2
+TILEWIDTHINPIXELS = TILEWIDTH*8
+TILESYPERSCREEN = 12
+
+; ------------------------ macros --------------------------
+
+!macro addx .value {
+	txa
+	sbx #(256 - .value)
+}
+
+!macro storeaddress .adr, .target {
+	lda #<.adr
+	sta .target
+	lda #>.adr
+	sta .target+1
+}
+
+!macro memset1K .dstadr, .value {
+	lda #.value
+	ldx #$00
+-	sta .dstadr,x
+	sta .dstadr+$100,x
+	sta .dstadr+$200,x
+	sta .dstadr+$300,x
+	inx
+	bne -
+}
+
+!macro memcopy1K .srcadr, .dstadr {
+	ldx #$00
+-	lda .srcadr,x
+	sta .dstadr,x
+	lda .srcadr+$100,x
+	sta .dstadr+$100,x
+	lda .srcadr+$200,x
+	sta .dstadr+$200,x
+	lda .srcadr+$300,x
+	sta .dstadr+$300,x
+	inx
+	bne -
+}
+
+; subtract 16bit values
+!macro sub16 .opA, .opB, .result {
+	lda .opA
+	sec
+	sbc .opB
+	sta .result
+	lda .opA+1
+	sbc .opB+1
+	sta .result+1
+}
+
+; add 8 bit value to 16 bit value
+!macro add8to16 .result, .src {
+	lda .src
+	clc
+	adc .result
+	sta .result
+	bcc +
+	inc .result+1
++
+}
+
+; store 16bit value (i.e. address)
+!macro set16im .target, .val {
+	lda #<.val
+	sta .target
+	lda #>.val
+	sta .target+1
+}
+
+; CMP val just subtracts val from accu and sets flags to result
+; Highest bit -> negative flag
+; Remains >= 0 -> carry flag
+; So use carry to compare unsigned, negative flag to compare signed
+; i.e. lda #60, cmp #80 -> C=0,N=1
+; i.e. lda #80, cmp #60 -> C=1,N=0
+; i.e. lda #20, cmp #200 -> C=0,N=0
+; i.e. lda #200, cmp #20 -> C=1,N=1
+; i.e. lda #200, cmp #200 -> C=1,N=0
+; i.e. lda #20, cmp #20 -> C=1,N=0
+; i.e. lda #-2, cmp #-1 -> C=0,N=1 result still negative, but -2=254 > -1=255
+
+; -------------------------------------- program ------------------------------------------
+
+*= $0801	; Program start at 2049
+
+; Basic start code 1979 SYS2066:REM TJ
+!byte $10,$08,$BB,$07,$9E,$32,$30,$36,$36,$3A,$8F,$20,$54,$4A,$00,$00,$00
+
+main
+	ldx #0
+	lda #$7F
+	cmp #$80
+	bcs +
+	inx
++	stx $D020
+	rts
+	
+
+	lda #$00
+	sta $0401
+	lda #220
+	sec
+	sbc #200
+	sta $0400
+	bcs +
+	dec $0401
++	rts
+
+	lda #242
+	cmp #242
+;	bcs +
+	bne +
+	rts
++	jmp dumpaccu
+
+	lda #$40
+	clc
+	sbc #$01
+	jmp dumpaccu
+
+	ldx #3
+	dex
+	bcs +
+	rts
++	jmp dumpaccu
+
+	lda #129
+	bmi +
+	rts
++	jmp dumpaccu
+
+COMP1 = 19
+COMP2 = 29
+	lda #COMP1
+	cmp #COMP2
+	bcs +
+	lda #0
+	sta VICBGCOL
+	jmp ++
++	lda #1
+	sta VICBGCOL
+++	
+	lda #COMP1
+	cmp #COMP2
+	bmi +
+	lda #0
+	sta VICFGCOL
+	jmp ++
++	lda #1
+	sta VICFGCOL
+++	
+	rts
+
+	bmi ++		; N=1 because -44 < 80
+	bpl +++
+	lda #0
+	sta VICBGCOL
+	rts
++	lda #1
+	sta VICBGCOL
+	rts
+++	lda #2
+	sta VICBGCOL
+	rts
++++	lda #3
+	sta VICBGCOL
+	rts
+
+	+set16im $c000, -1;23*16;23*16+15
+	lda $c001
+	cmp #>(24*16)
+	beq +
+	; if not equal, check if lower or higher
+	bpl no_collision
+	bmi collision
++	; high bytes equal, check low bytes
+	lda #1
+	sta VICFGCOL
+	lda $c000
+	cmp #<(24*16)
+	bpl no_collision	; low bytes >=, so totally >=
+	; definitly collision
+collision
+	lda #8
+	sta VICBGCOL
+no_collision
+	rts
+
+
+
+	sec
+	lda #5
+	sbc #4
+	jmp dumpaccu
+
+	lda #128
+;	cmp #0
+	bmi +
+	lda #0
+	jmp dumpaccu
++	lda #1
+	jmp dumpaccu
+
+	lda #$00
+	sta $c000
+	sta $c001
+	lda #-20
+	sta $c002
+	+add8to16 $c000, $c002
+	rts
+
+	lda #255
+	cmp #1
+	bmi +
+	lda #0
+	jmp dumpaccu
++	lda #1
+	jmp dumpaccu
+
+	lda #127
+	cmp #16
+	bpl +
+	lda #0
+	jmp dumpaccu
++	lda #1
+	jmp dumpaccu
+
+	lda #(128+32)
+	and #$80
+	cmp #0
+	rol	; A is 0 or 1 depending on carry
+	jmp dumpaccu
+	
+	cmp #16
+	bmi +
+	lda #0
+	jmp dumpaccu
++	lda #1
+	jmp dumpaccu
+
+	lda #255
+	sec
+	asl
+	asl
+	asl
+	asl
+	jmp dumpaccu
+
+	lda #5
+	cmp #16
+	bmi +
+	lda #0
+	jmp dumpaccu
++	lda #1
+	jmp dumpaccu
+
+	+storeaddress 800, TEMPADR0
+	+storeaddress 1000, TEMPADR1
+	+sub16 TEMPADR0, TEMPADR1, TEMPADR3
+	bmi +
+	lda TEMPADR3+1
+	jsr dumpaccu
++	rts
+	
+
+	ldx #230
+	ldx #0
+	dex
+	bvs +
+	lda #0
+	jmp ++
++	lda #1
+++	jsr dumpaccu
+	rts
+
+	jmp +
+	; rotate test
+	lda #129
+	sta TEMP0
+	lda #0
+	sta TEMP1
+	lda #1
+	sta TEMP2
+
+	lda TEMP2
+	ror
+	ror TEMP0
+	ror TEMP1
+	ror TEMP2
+	lda TEMP0
+
+	jsr dumpaccu
+	rts
++
+
+; test subtract -4 from x reg, is like adding 4, works!
+;	jsr clearscreen
+;	ldx #$33
+;	txa
+;	sbx #$FC
+;	txa
+;	jsr dumpaccu
+;	rts
+
+; set 5 lines with character 20, 5 with character 0 and 5 with character 160
+; to have both color combinations and full color
+	ldx #$00
+-	lda #$00
+	sta $0400,x
+	lda #$20
+	sta $0500,x
+	lda #$A0
+	sta $0600,x
+	sta $06E8,x
+	dex
+	bne -
+	
+; copy rom char set to 0x3800
+	ldx #$07	; block 7 of bank 0
+	jsr copycharrom
+
+; replace space character by alternating lines, space is $20
+; $20*8 is offset plus 0x3800, total 0x3900
+	lda #$00
+	ldx #$FF
+	sta $3900
+	stx $3901
+	sta $3902
+	stx $3903
+	sta $3904
+	stx $3905
+	sta $3906
+	stx $3907
+; replace character 0 by other alternating lines
+	stx $3800
+	sta $3801
+	stx $3802
+	sta $3803
+	stx $3804
+	sta $3805
+	stx $3806
+	sta $3807
+
+; show sprite 0 with yellow color
+; set sprite coordinates
+	lda #$40
+	sta $D000
+	sta $D001
+	sta $D002	;fixme ab sprite2 auch
+	sta $D003
+	sta $D004
+	sta $D005
+	sta $D006
+	sta $D007
+	sta $D008
+	sta $D009
+	sta $D00A
+	sta $D00B
+	sta $D00C
+	sta $D00D
+	lda #$00
+	sta $D010
+; enable sprite(s)
+	lda #$FF ; 01
+	ora $D015
+; enable double size
+	ora $D017
+	ora $D01D
+; set color
+	lda #$07
+	sta $D027
+; show in front of chars
+	lda #$00
+	sta $D01B
+; copy sprite data from sprite1 somewhere to VIC ram like 0x2000
+	lda #$80
+	sta $07F8
+	sta $07F9
+	sta $07FA
+	sta $07FB
+	sta $07FC
+	sta $07FD
+	sta $07FE
+	sta $07FF
+; copy 63 bytes from sprite1 to 0x2000
+	ldx #$00
+-	lda sprite1,x
+	sta $2000,x
+	inx
+	cpx #$3F
+	bne -
+	lda #$55	;fixme test
+	sta $2000
+	sta $2001
+	sta $2002
+	sta $2003
+
+; main loop:
+; set background and frame color to color1,
+; whole screen color to color2
+; loop with keypress until done
+	lda #$00
+	sta $02
+mainloop
+	ldx $02
+	lda color1,x
+	sta $D020
+	sta $D021
+	lda color2,x
+	jsr clearcolor
+	jsr waitforspacekey
+	inc $02
+	lda $02
+	cmp #7	; test 7 color combinations
+	bne mainloop
+
+; end of program
+	rts
+
+waitforspacekey
+-	lda $DC01
+	cmp #$EF
+	bne -
+-	lda $DC01
+	cmp #$EF
+	beq -
+	rts
+
+; copy character rom to target block in bank, number 0-7 in x register
+; bits 7-4 define screen position, 3-1 charset position, 0 bitmap position
+; uses self modifying code, cannot be called twice, only if $D0 is stored
+; at copycharromsrc+2 before the copy loop
+copycharrom
+	txa
+	asl
+	asl
+	asl
+	sta copycharromdst+2
+	lda #$1F	; screen at block 1, 0x400, char at 7 (0x3800)
+	sta $D018
+	sei
+	lda $01
+	pha
+	and #$FB
+	sta $01
+; copy part
+	ldy #$08
+-	ldx #$00
+copycharromsrc
+	lda $D000,x
+copycharromdst
+	sta $D000,x
+	dex
+	bne copycharromsrc
+	inc copycharromsrc+2
+	inc copycharromdst+2
+	dey
+	bne -
+; restoring
+	pla
+	sta $01
+	cli
+	rts
+
+; dump X register
+dumpxreg
+	pha
+	txa
+	jsr dumpaccu
+	pla
+	rts
+
+; dump Y register
+dumpyreg
+	pha
+	tya
+	jsr dumpaccu
+	pla
+	rts
+
+; dump register (accu) to screen - alternative use table of 16 bytes, but that would need extra register
+; dump to cursor position also possible. table stored as label, but would save only the clc/sbc and branch
+; commands. Without extra register works with selfmodifying code but only if table is on page boundary
+; or 16 byte boundary!
+dumpaccu
+	pha
+	and #$0F
+	cmp #$0A
+	bmi +
+	clc
+	sbc #$08
+	sta $0403
+	jmp ++
++	clc
+	adc #$30
+	sta $0403
+++	pla
+	pha
+	lsr
+	lsr
+	lsr
+	lsr
+	cmp #$0A
+	bmi +
+	clc
+	sbc #$08
+	sta $0402
+	jmp ++
++	clc
+	adc #$30
+	sta $0402
+++	pla
+	rts
+
+; --------------- function that clears the color ram (1024 byte) -------------
+; Set color in color ram for whole screen
+clearcolor
+	ldx #$00
+-	sta $D800,x
+	sta $D900,x
+	sta $DA00,x
+	sta $DB00,x
+	dex
+	bne -
+	rts
+
+; --------------- function that clears the screen (1000 chars) -------------
+; Clears screen with 1000 characters, 24 are cleared twice, but easier and shorter than two loops
+; alternative: clear 3*256 bytes and loop extra for 232 bytes ($E8)
+clearscreen
+	lda #$20
+	ldx #$00
+-	sta $0400,x
+	sta $0500,x
+	sta $0600,x
+	sta $06E8,x
+	dex
+	bne -
+	rts
+
+; --------------- function that copies memory -------------
+; Input	TEMP0		Number of pages to copy
+;	TEMP1		Number of additional bytes to copy
+;	TEMPADR0	Source address
+;	TEMPADR1	Destination address
+memcopy
+	ldx TEMP0
+--	cpx #$00
+	beq +
+	ldy #$00
+-	lda (TEMPADR0),y
+	sta (TEMPADR1),y
+	iny
+	bne -
+; increase source and dest address by one page (increase MSB)
+	inc TEMPADR0+1
+	inc TEMPADR1+1
+	dex
+	jmp --
++
+-	cpy TEMP1
+	beq +
+	lda (TEMPADR0),y
+	sta (TEMPADR1),y
+	iny
+	jmp -
++	rts
+
+color1
+!byte 6,11,4,12,10,15, 7
+color2
+!byte 9, 2,8,14, 5, 3,13
+
+!align 63, 0
+sprite1
+!byte $ff,$ff,$ff,$03,$00,$00,$f3,$3c,$01,$1b,$84,$09,$0b,$82,$08,$0b,$9e,$08,$1b,$b2,$7f
+!byte $33,$36,$10,$e3,$1c,$10,$03,$00,$10,$03,$80,$00,$9b,$89,$02,$7b,$89,$62,$2b,$8b,$14
+!byte $0b,$5a,$0c,$0b,$72,$0c,$03,$00,$1c,$bb,$7b,$12,$93,$30,$33,$13,$23,$00,$ff,$ff,$ff
+
+; examples
+;		basout = $ffd2		; explizite, globale Label-Definition
+;+		lda .string,x		; hole Zeichen
+;.string		!pet "Simples Beispiel", 13, 0
+

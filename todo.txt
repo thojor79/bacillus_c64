@@ -4,9 +4,6 @@ ToDo - in categories
 BUGS
 ====
 
-At end of dying animation a black empty sprite frame is shown.
-maybe sprite pointer is one too big and points to empty space.
-
 background anim now broken! looks like if wrong char is used to generate
 animated tiles but all values are as before
 in candy world it works!

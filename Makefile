@@ -20,6 +20,7 @@ all : data leveldata spritedata bacillus.all
 test : testsrc/*.a
 	acme testsrc/bitmapview.a
 	acme testsrc/bitmapview_rle.a
+	acme testsrc/codetest.a
 
 data : gfx/textcharset.png gfx/introscreen.png gfx/mainlogo.png gfx/cheese_alltiles.png gfx/candy_alltiles.png
 	cd gfx && ../convert/c64fy.py -hires 1 -sprite 0 -quiet 1 -color 1 textcharset.png && mv textcharset_sprdata.a ../data && cd ..
