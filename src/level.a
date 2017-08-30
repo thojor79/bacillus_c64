@@ -344,24 +344,22 @@ compute_char_animations
 	lda background_animation_phase	; 32 phases
 	lsr	; only every 2nd frame
 	and #31
-	; Phase is now in Accu, 0-31. We have 16 bytes per phase. So multiply phase
-	; by 16 and compute read address, then copy 16 bytes from there.
-	; shift 4 bytes, then leftmost bit is in carry
+	; Phase is now in Accu, 0-31. We have 8 bytes per phase and char. So multiply phase
+	; by 8 and compute read address, then copy 8 bytes from there.
 	asl
 	asl
 	asl
-	asl
-	sta compute_char_animations_adr0+1
-	lda #>char_animation_data	; must be 256 byte aligned...
-	adc #0
-	sta compute_char_animations_adr0+2
+	tay
 	ldx #0
-compute_char_animations_adr0
-	lda char_animation_data,x
+compute_char_animations_next_line
+	lda char_animation_data,y
 	sta VICCHARSET+ANIMATED_BGTILE_INDEX*8,x
+	lda char_animation_data+256,y
+	sta VICCHARSET+(ANIMATED_BGTILE_INDEX+1)*8,x
 	inx
-	cpx #16
-	bne compute_char_animations_adr0
+	iny
+	cpx #8
+	bne compute_char_animations_next_line
 	rts
 
 ; ----------------- Check if tile is blocker ---------

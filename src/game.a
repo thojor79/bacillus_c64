@@ -626,116 +626,108 @@ prepare_char_animations
 	; read 2 chars and shift their columns with varying speeds and write
 	; it to animation data area (char_animation_data)
 	; chars at address VICCHARSET+ANIMATED_BGTILE_INDEX*8
-	; source address is fixed, destination address varies over 512 byte,
-	; so can't use register.
-	; we iterate over the 16 bytes of the two chars and mask out 4 parts
-	; of their data to have it as source table (64 bytes long)
-	; then we only need to combine the data.
-	; Then we can loop over phase counter and just add
-	; the varying speeds to get the read address.
-	; TEMPADR0 Table-read-address
-	; TEMPADR1 Write-addres
-	; TEMP0 q0
-	; TEMP1 q1
-	; TEMP2 Column
-	; TEMP3 Phase
-	; TEMP4 p
-	; TEMP5 p+8
-	; The table has 4*16 bytes
-	; --- as first clear destination
+	; source address is fixed, destination address varies over 256 byte
+	; per character.
+	; three nested loops:
+	; 32 phases
+	; 4 columns (bit pairs)
+	; 8 lines.
+	; handle two bytes at once.
+
+	;chardata_tempcolumn : coloff[8]
+	;for phase=0; phase<32; ++phase
+	;	mask = 0x03
+	;	for col=0; col < 4;++col or break when mask==0
+	;		c0 = coloff[col]>>3 & 7
+	;		c1 = coloff[col+4]>>3 & 7
+	;		// we can just inc c0/c1 every line!
+	;		for line=0; line<8; ++line
+	;			y=(c0+line)&7
+	;			k = *(srcdata+y) & mask
+	;			*(dstdata+phase*8+line)|=k
+	;			y=(c1+line)&7
+	;			k = *(srcdata+8+y) & mask
+	;			*(dstdata+256+phase*8+line)|=k
+	;		mask <<= 2
+	;	add phase shift values per column
+	; TEMP0 c0
+	; TEMP1 c1
+	; TEMP2 Column 4...1
+	; TEMP3 Phase 32...1
+	; TEMP4 mask $3,$C,$30,$C0
+
+	; --- as first clear destination, values are ORed in, so set initial zeros.
 	ldx #0
+	txa
 -	sta char_animation_data,x
 	sta char_animation_data+$100,x
 	inx
 	bne -
-	; --- distribute the 16 source bytes to 64byte table
-	+set16im TEMPADR0, SCREEN1	; used as table
-	+set8im TEMP0, $03	; AND-mask
---	ldy #0			; count 16 bytes
--	lda VICCHARSET+ANIMATED_BGTILE_INDEX*8,y
-	and TEMP0
-	sta (TEMPADR0),y
-	iny
-	cpy #16
-	bne -
-	lda TEMPADR0	; increase write address
-	clc
-	adc #16		; no overflow possible
-	sta TEMPADR0
-	asl TEMP0	; prepare next and-mask
-	asl TEMP0
-	; if its 0 now, all 4 passes are done
-	bne --
-	; --- set up target address
-	+set16im TEMPADR1, char_animation_data
-	; -- initiate column shift counters
-	ldx #16
--	sta chardata_tempcolumn-1,x	; clear all shift values
+	; -- initiate column shift counters to all zero
+	ldx #8
+	lda #0
+-	sta chardata_tempcolumn-1,x
 	dex
 	bne -
 	; -- now iterate over the 32 phases
-	+set8im TEMP3, 32		; nr of phases
+	+set8im TEMP3, 0		; nr of phases
 prepare_char_animations_next_phase
 	+set8im TEMP2, 4		; 4 columns
-	+set8im TEMPADR0, 3*16		; table-read-adr offset init
+	+set8im TEMP4, $03		; mask
 prepare_char_animations_next_column
 	ldx TEMP2			; column 4..1
-	lda chardata_tempcolumn-1,x	; compute q0
+	lda chardata_tempcolumn-1,x	; compute c0
 	lsr
 	lsr
 	lsr
 	and #7
-	sta TEMP0			; store q0
-	lda chardata_tempcolumn+4-1,x	; compute q1
+	sta TEMP0			; store c0
+	lda chardata_tempcolumn+4-1,x	; compute c1
 	lsr
 	lsr
 	lsr
 	and #7
-	sta TEMP1			; store q1
-	+set8im TEMP4, 0		; p = 0
-	+set8im TEMP5, 8		; p+8 = 8
-	tax				; initialize p-counter
-prepare_char_animations_next_byte
-	lda TEMP4			; compute q0+p
-	clc
-	adc TEMP0
-	and #7				; (q0+p) & 7
-	tay
-	lda (TEMPADR0),y		; read andmask
-	ldy TEMP4
-	ora (TEMPADR1),y		; or-write to write address
-	sta (TEMPADR1),y		; store it
-	lda TEMP4
-	clc
-	adc TEMP1
-	and #7				; (q1+p) & 7
-	clc
-	adc #8				; ((q1+p) & 7) + 8
-	tay
-	lda (TEMPADR0),y		; read andmask
-	ldy TEMP5
-	ora (TEMPADR1),y		; or-write to write-address+8
-	sta (TEMPADR1),y		; store it
-	inc TEMP4
-	inc TEMP5
-	dex
-	bne prepare_char_animations_next_byte
-	; --- next column
-	lda TEMPADR0
+	sta TEMP1			; store c1
+	; -- now iterate over the 8 lines
+	; prepare x to be phase*8, use 32-phase as base, is shorter
+	lda #32
 	sec
-	sbc #16
-	sta TEMPADR0
+	sbc TEMP3
+	asl
+	asl
+	asl
+	tax
+	clc
+	adc #8
+	sta prepare_char_animations_next_limit_limit_value+1
+prepare_char_animations_next_line
+	lda TEMP0
+	and #7
+	tay
+	lda VICCHARSET+ANIMATED_BGTILE_INDEX*8,y
+	and TEMP4
+	ora char_animation_data,x
+	sta char_animation_data,x
+	lda TEMP1
+	and #7
+	tay
+	lda VICCHARSET+(ANIMATED_BGTILE_INDEX+1)*8,y
+	and TEMP4
+	ora char_animation_data+$100,x
+	sta char_animation_data+$100,x
+	; -- increase c0,c1 and line counter
+	inc TEMP0
+	inc TEMP1
+	inx
+prepare_char_animations_next_limit_limit_value
+	cpx #$00
+	bne prepare_char_animations_next_line
+	; --- next column, shift mask
+	asl TEMP4
+	asl TEMP4
 	dec TEMP2
 	bne prepare_char_animations_next_column
-	; --- next phase
-	lda TEMPADR1
-	clc
-	adc #16
-	sta TEMPADR1
-	lda TEMPADR1+1
-	adc #0
-	sta TEMPADR1+1
-	; --- modify column shift counters
+	; --- next phase, modify column shift counters
 	ldx #8
 -	lda chardata_tempcolumn-1,x
 	clc

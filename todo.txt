@@ -4,10 +4,7 @@ ToDo - in categories
 BUGS
 ====
 
-background anim now broken! looks like if wrong char is used to generate
-animated tiles but all values are as before
-in candy world it works!
-
+-
 
 VISUAL GLITCHES
 ===============
