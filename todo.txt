@@ -24,11 +24,7 @@ maybe use only 8 enemies with 1 bit to control behaviour - would reduce
 sprite data as well
 
 handle step into trap - animate trap tiles! check where vaporizing tiles are
-checked.
-
-add cheat to main menu, like joy up,up,down,down,left,left,right,right and
-then number of ups is start level or so...
-problem, sprite init may be missed then...
+checked. without animation it is not very sensible for gameplay
 
 
 GENERAL FEATURES
@@ -52,7 +48,7 @@ main screen: high score only 9 places, score 6 chars, so text matches better
 width and there is space for sprites (3 lines needed)
 
 main screen: highscore handling with load/save to disk without kernal, or
-blend in kernal for this.
+blend in kernal for this. maybe skip that for this game.
 
 outtro: implement game complete screen, e.g. the bacillus logo or some food
 picture
