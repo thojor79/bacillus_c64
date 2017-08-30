@@ -30,10 +30,6 @@ checked. without animation it is not very sensible for gameplay
 GENERAL FEATURES
 ================
 
-the animation of the background tile should be level dependant
-easier to do it with separate data or separate code.
-generation of animation could be done at runtime, as it is now.
-
 have different sprite colors for candy world! rather dark!
 
 implement blend out effect for level end - reverse reading of blend in,
@@ -47,8 +43,7 @@ main screen: color cycling in text?
 main screen: high score only 9 places, score 6 chars, so text matches better
 width and there is space for sprites (3 lines needed)
 
-main screen: highscore handling with load/save to disk without kernal, or
-blend in kernal for this. maybe skip that for this game.
+main screen: highscore handling
 
 outtro: implement game complete screen, e.g. the bacillus logo or some food
 picture
@@ -101,6 +96,13 @@ It takes at least 147 raster lines (150 lines ~ 9000cyc with badlines, so
 
 Ideas for later
 ===============
+
+the animation of the background tile should be level dependant
+easier to do it with separate data or separate code.
+generation of animation could be done at runtime, as it is now.
+
+load/save highscores to disk. own disk routines or better blend in kernal
+code for this.
 
 secret passages or rooms in levels - not for this game
 

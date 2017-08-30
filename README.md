@@ -36,6 +36,7 @@ Technical facts:
 * special boni like invulnerability and 1-up
 * dying animation
 * enemies leaving screen stay alive and can return
+* cheat in main menu to select level
 
 Planned:
 * Outtro

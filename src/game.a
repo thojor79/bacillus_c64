@@ -405,12 +405,14 @@ main
 ; fixme logo should overwrite only first 8 lines, so shorten rle data!
 startmainscreen
 	jsr mainscreen
+	; start level number is now in TEMP1, so copy it.
 
 ; *********************************** main game logic. *********************************************
 ; turn display off
 	+set8im VICCTRL1, $0B
 ; set level number to 1 and lives to 3
-	+set8im level_nr, 1	; set different start level number here for tests!
+	+copy8 level_nr, TEMP1	; set by main menu (default : 1, cheat : more)
+	;+set8im level_nr, 1	; set different start level number here for tests!
 	+set8im lives, 3
 ; clear score
 	lda #0
@@ -544,7 +546,7 @@ wait_for_joy2_button
 check_joy2_state
 	ldx #0
 	ldy #1
-	lda CIA1_DATAPORT_A
+	lda CIA1_DATAPORT_A	; last four bits are up, down, left, right, fire
 	lsr		; instead of lsr/bcs may use bit here, but would need loading of A.
 	bcs +
 	sty joy2_up

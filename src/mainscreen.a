@@ -147,12 +147,48 @@ mainscreen
 	jsr printtext
 }
 	; wait for joystick key press and release
-	jsr wait_for_joy2_button
+	; meanwhile handle level selector cheat
+	+set8im TEMP1, 1	; default start level
+	ldx #0
+-	lda CIA1_DATAPORT_A
+	and #$1F
+	cmp #$1F
+	bne -	; as long as any direction or fire is pressed, wait
+--	; wait until direction or key is pressed and released
+-	lda CIA1_DATAPORT_A
+	and #$1F
+	cmp #$1F
+	beq -	; as long as no direction nor fire pressed, wait
+	sta TEMP0	; store pressed dir/fire
+-	lda CIA1_DATAPORT_A
+	and #$1F
+	cmp #$1F
+	bne -	; as long as any direction or fire is pressed, wait
+	; now user pressed either fire or a direction.
+	lda TEMP0
+	cmp #$0F
+	beq +++	; fire released, go on
+	cmp levelselect_cheat_chain,x
+	beq +	; advance to next chain pos
+	; wrong cheat, reset chain
+	ldx #$FF
++	inx
+	jmp --
++++	; now if x >= 5, x - 4 is start level
+	cpx #5
+	bcc +
+	cpx #8
+	bcs +
+	+addx 256-4
+	stx TEMP1
 	; set dummy raster irq and return
-	sei
++	sei
 	+set16im $FFFE, rasterirq_noop
 	cli
 	rts
+
+levelselect_cheat_chain
+!byte $1E, $1D, $1B, $1E, $1D, $17, $17, $00
 
 ; ------------------------- text drawing
 ; Input	TEMPADR0	address of string
