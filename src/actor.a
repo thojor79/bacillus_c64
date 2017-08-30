@@ -250,6 +250,13 @@ handle_special_tiles_below_player
 	; here check if player is on ground and tile below player is
 	; vaporating island. Then let it erode and occasionally clear it from map!
 	; Note here we would check for tiles that contain traps too! (later)
+	; either check for trap tiles below player or let trap tiles be
+	; passageable and check if player is in them.
+	; looks better that way but more difficult to check, need to allow
+	; more tiles to be passageable, not only first 8 tiles or so
+	; however it must be passageable so player can walk in from side!
+	; we can rearrange tiles in gfx and in level generator.
+	; so check is easier.
 	lda actor_state
 	cmp #ACTOR_ON_GROUND
 	bne handle_special_tiles_below_player_done	; if not on ground, no vaporizing is done
@@ -991,7 +998,14 @@ handle_actor_behaviour_next
 	; as long as actor is in air, don't do anything
 	cmp #ACTOR_IN_AIR
 	beq handle_actor_behaviour_next
-	; actor must be on ground. Check move direction, start left move if not moving
+	; actor must be on ground.
+	; check actor_type for behaviour
+	lda actor_type,x
+	and #$08	; when bit 3 is set, use fall down behaviour (strategy 1)
+	bne handle_actor_behaviour_next
+	; otherwise strategy 2
+	; check move direction (nothing to do at 0, avoid fall down
+	; otherwise)
 	lda actor_vx,x
 	bne +
 	; actor has no horizontal speed, so just sits fix.

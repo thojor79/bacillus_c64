@@ -17,14 +17,12 @@ black then
 GAMEPLAY EXTENSIONS
 ===================
 
-implement different actor behavior, either by type or by flag (less types
-available then). Generate them pseudo randomly by position (done)
-Behaviour: walk with fall down, follow player, flying pattern, flying homing
-maybe use only 8 enemies with 1 bit to control behaviour - would reduce
-sprite data as well
-
 handle step into trap - animate trap tiles! check where vaporizing tiles are
 checked. without animation it is not very sensible for gameplay
+when traps are passageable we have more than 8 bg tiles - a problem!
+otherwise player couldnt enter trap from side. and it would look strange.
+so traps must be passageable. however if enemy is over trap and is stored,
+some strange things happen. but we may have to live with that.
 
 
 GENERAL FEATURES
@@ -100,6 +98,11 @@ Ideas for later
 the animation of the background tile should be level dependant
 easier to do it with separate data or separate code.
 generation of animation could be done at runtime, as it is now.
+
+implement more actor behaviors
+Behaviour: follow player, flying pattern, flying homing
+maybe use only 8 enemies with 1 bit to control behaviour - would reduce
+sprite data as well - but also ok to use 16 as it is now
 
 load/save highscores to disk. own disk routines or better blend in kernal
 code for this.
