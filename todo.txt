@@ -4,7 +4,7 @@ ToDo - in categories
 BUGS
 ====
 
--
+sometimes enemies are killed that fall from above, instead of killing player
 
 VISUAL GLITCHES
 ===============
@@ -17,13 +17,9 @@ black then
 GAMEPLAY EXTENSIONS
 ===================
 
-handle step into trap - animate trap tiles! check where vaporizing tiles are
-checked. without animation it is not very sensible for gameplay
-when traps are passageable we have more than 8 bg tiles - a problem!
-otherwise player couldnt enter trap from side. and it would look strange.
-so traps must be passageable. however if enemy is over trap and is stored,
-some strange things happen. but we may have to live with that.
+animate trap tiles
 
+change levels to make use of traps
 
 GENERAL FEATURES
 ================

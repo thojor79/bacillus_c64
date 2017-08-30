@@ -38,6 +38,7 @@ Technical facts:
 * enemies leaving screen stay alive and can return
 * cheat in main menu to select level
 * two different actor behaviours
+* traps
 
 Planned:
 * Outtro

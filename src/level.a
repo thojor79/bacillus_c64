@@ -449,16 +449,16 @@ rasterirq_scoreline_end
 ; 0  - background		(2x2) 1 Tiles 0-3
 ; 1  - animated background	(1x1) 1 Tile 4 (animated!)
 ; 2  - enemies			(1x1) - Tiles 0-3
-; 3  - floor			(2x1) 4 Tiles 12-13,14-15,16-17,18-19
-; 4  - obstacleA		(2x2) 3 Tiles 20-23,24-27,28-31
-; 5  - island			(2x1) 4 Tiles 32-33,34-35,36-37,38-39
+; 3  - floor			(2x1) 4 Tiles 14-15,16-17,18-19,20-21
+; 4  - obstacleA		(2x2) 3 Tiles 22-25,26-29,30-33
+; 5  - island			(2x1) 4 Tiles 34-35,36-37,38-39,40-41
 ; 6  - special boni		(1x1) 2 Tiles 8,9
 ; 7  - bonus			(1x1) 3 Tiles 5,6,7
-; 8  - obstacleB		(2x1) 6 Tiles 40-41,42-43,44-45,46-47,48-49,50-51
+; 8  - obstacleB		(2x1) 6 Tiles 42-43,44-45,46-47,48-49,50-51,52-53
 ; 9  - exit sign		(2x1) 1 Tiles 10-11
-; 10 - ceiling			(2x1) 2 Tiles 52-53,54-55
-; 11 - vaporating island	(1x1) 6 Tiles 56-61 (6 phases, initial 56)
-; 12 - traps                    (1x1) 2 Tiles 62,63
+; 10 - ceiling			(2x1) 2 Tiles 54-55,56-57
+; 11 - vaporating island	(1x1) 6 Tiles 58-63 (6 phases, initial 58)
+; 12 - traps                    (1x1) 2 Tiles 12,13
 ; We have 234 chars available (256-22 for scorepanel), that are
 ; 58 tiles without reuse of chars. Some chars are reused, so we could add
 ; more tiles.
@@ -569,30 +569,30 @@ prepare_level_data_tile2	; enemies
 	ora #$80
 	ora TEMP2
 	rts
-prepare_level_data_tile3	; 4x floor tiles 12+,14+,16+,18+ as 2x1 metatile
+prepare_level_data_tile3	; 4x floor tiles 14+,16+,18+,20+ as 2x1 metatile
 	jsr generate_random_index_2x1
 	tax
 	lda pseudo_rand_table_4,x
 	asl			; multiply by 2, then carry clear
 	adc TEMP4
-	adc #12
+	adc #14
 	rts
-prepare_level_data_tile4	; 3x obstacle A 2x2 metatile index 20+,24,28+
+prepare_level_data_tile4	; 3x obstacle A 2x2 metatile index 22+,26,30+
 	jsr generate_random_index_2x2
 	tax
 	lda pseudo_rand_table_3,x
 	asl
 	asl
 	adc TEMP2		; carry is already 0 by asl
-	adc #20
+	adc #22
 	rts
-prepare_level_data_tile5	; 4x island 2x1 metatile, 32+,34+,36+,38+
+prepare_level_data_tile5	; 4x island 2x1 metatile, 34+,36+,38+,40+
 	jsr generate_random_index_2x1
 	tax
 	lda pseudo_rand_table_4,x
 	asl
 	adc TEMP4
-	adc #32
+	adc #34
 	rts
 prepare_level_data_tile6	; 2x special boni tiles 8 or 9. have shield 3* more than 1up! (shield=9)
 	jsr generate_random_index_1x1
@@ -609,12 +609,12 @@ prepare_level_data_tile7	; 3x bonus tiles 5,6,7 as 1x1 sized tile
 	clc
 	adc #5
 	rts
-prepare_level_data_tile8	; 6x obstacle B metatile 2x1 index 40+,42+,44+,46+,48+,50+
+prepare_level_data_tile8	; 6x obstacle B metatile 2x1 index 42+,44+,46+,48+,50+,52+
 	jsr generate_random_index_2x1
 	tax
 	lda pseudo_rand_table_6,x
 	asl
-	adc #40
+	adc #42
 	adc TEMP4
 	rts
 prepare_level_data_tile9	; 1x exit 2x1 metatile 10,11
@@ -622,23 +622,23 @@ prepare_level_data_tile9	; 1x exit 2x1 metatile 10,11
 	clc
 	adc #10
 	rts
-prepare_level_data_tile10	; 2x ceiling metatile 2x1 index 52+,54+
+prepare_level_data_tile10	; 2x ceiling metatile 2x1 index 54+,56+
 	jsr generate_random_index_2x1
 	tax
 	lda pseudo_rand_table_2,x
 	asl
-	adc #52
+	adc #54
 	adc TEMP4
 	rts
 prepare_level_data_tile11	; 1x vaporating island, 1x1 tile index 58+
 	lda #VAPOR_TILE_INDEX
 	rts
-prepare_level_data_tile12	; 2x traps tile 1x1, index 62,63
+prepare_level_data_tile12	; 2x traps tile 1x1, index 12,13
 	jsr generate_random_index_1x1
 	tax
 	lda pseudo_rand_table_2,x
 	clc
-	adc #62
+	adc #12
 	rts
 
 ; ------------ data

@@ -247,16 +247,30 @@ joy2_not_up
 ; ----------------- Check for special tiles below actor (vaporize, traps) ----------
 ; Uses TEMPADR0, TEMPADR1, TEMPADR2, TEMP0, TEMP1, TEMP2, A, X, Y
 handle_special_tiles_below_player
-	; here check if player is on ground and tile below player is
+	; as first check the tile player is in if it is a trap.
+	; in that case kill player.
+	+copy8 TEMPADR2, actor_xh
+	lda actor_yh
+	clc
+        adc #>LEVEL_DATA
+        sta TEMPADR2+1
+	ldy #0
+	lda (TEMPADR2),y
+	and #$FE	; last bit doesn't matter for comparison
+	cmp #TRAP_TILE_INDEX
+	bne +		; no trap, normal check
+	; player stepped into trap, kill him
+	lda player_invulnerable_counter
+	bne +
+	; check if player is already dead
+	lda actor_state
+	cmp #ACTOR_DEAD
+	beq +
+	; set player actor state to dead and check that state in main loop.
+	+set8im actor_state, ACTOR_DEAD
+	+set8im actor_dead_anim_phase, 0
++	; here check if player is on ground and tile below player is
 	; vaporating island. Then let it erode and occasionally clear it from map!
-	; Note here we would check for tiles that contain traps too! (later)
-	; either check for trap tiles below player or let trap tiles be
-	; passageable and check if player is in them.
-	; looks better that way but more difficult to check, need to allow
-	; more tiles to be passageable, not only first 8 tiles or so
-	; however it must be passageable so player can walk in from side!
-	; we can rearrange tiles in gfx and in level generator.
-	; so check is easier.
 	lda actor_state
 	cmp #ACTOR_ON_GROUND
 	bne handle_special_tiles_below_player_done	; if not on ground, no vaporizing is done
@@ -285,7 +299,7 @@ handle_special_tiles_below_player
 handle_special_tiles_below_player_one_tile
 	ldy #0
 	lda (TEMPADR2),y
-        cmp #VAPOR_TILE_INDEX
+	cmp #VAPOR_TILE_INDEX
 	bcc handle_special_tiles_below_player_next_tile		; actor is on tile < vapor_index
 	cmp #(VAPOR_TILE_INDEX+VAPOR_TILE_NUMS)
 	bcs handle_special_tiles_below_player_next_tile		; actor is on tile >= vapor_indices
