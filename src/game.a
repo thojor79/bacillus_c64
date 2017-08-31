@@ -258,6 +258,7 @@ SCPO0 = 235
 SCPCOUNT = 22
 ANIMATED_BGTILE = 4
 ANIMATED_BGTILE_INDEX = 16	; one tile is animated, this is the charnumber, two chars follow
+ANIMATED_FGTILE_INDEX = 93	; in candy world two chars are animated
 FIRST_GROUND_TILE_INDEX = 14	; first tile index that is no background
 TRAP_TILE_INDEX = 12		; this and next tile are traps
 VAPOR_TILE_INDEX = 58		; tiles from theese on vaporize

@@ -13,7 +13,7 @@ Note that the .prg file is already available in the code repository.
 For a real C64 there are various possibilities. First is to use the existing
 .D64 disk image file (generated with  make bacillus.d64  or already
 available) and transfer it with X1541 to a real floppy disk and load
-the game with read hardware. Or use the floppy emulator hardware with SD
+the game with real hardware. Or use the floppy emulator hardware with SD
 cards etc.
 
 For example use OpenCBM and its program d64copy to transfer the .D64 files:
@@ -43,7 +43,6 @@ Technical facts:
 Planned:
 * Outtro
 * Highscore handling in mainscreen
-* traps in game
 * More levels (planned 6)
 * More level graphics
 * More enemies
