@@ -375,7 +375,11 @@ compute_char_animations_tt
 	; need to add -1 to drift address because x-reg is 1...64
 	; it takes ~ 12 rasterlines to copy it!
 	; prepare read address 
-	lda background_animation_phase
+	lda #0
+	sec
+	sbc background_animation_phase
+; use reverse order!
+;	lda background_animation_phase
 	asl
 	asl
 	asl	; highest bit to carry

@@ -16,11 +16,12 @@ blend_in: sprites delay raster irq most probably and give visual glitch, but
 not critical. maybe just disable scorepanel by setting fgcol to all
 black then
 
+animated fire could be better, yellow part could also vary, but not
+important.
+
 
 GAMEPLAY EXTENSIONS
 ===================
-
-change levels to make use of traps (level 2 and 3)
 
 some simple tune or at least sound effects would be cool,
 maybe one voice for effects, two for tune.
@@ -102,6 +103,9 @@ It takes at least 147 raster lines (150 lines ~ 9000cyc with badlines, so
 
 Ideas for later
 ===============
+
+Reorder trap animations and use them in forward order as originally
+intended.
 
 the animation of the background tile should be level dependant
 easier to do it with separate data or separate code.
