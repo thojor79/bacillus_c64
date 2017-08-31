@@ -34,6 +34,8 @@ leveldata : gfx/cheese_level1.png gfx/cheese_level2.png gfx/*alltiles.png
 	cd gfx && ../convert/indexpng_to_data.py candy_level1.png && mv candy_level1_rle.a ../data && rm candy_level1_raw.a && cd ..
 	cd gfx && ../convert/c64fy.py -quiet 1 -charset 234 -tilewidth 2 -tileheight 2 -color 9 -color 8 -color 7 -datalabels 0 cheese_alltiles.png && mv cheese_alltiles_chardata.a ../data/ && mv cheese_alltiles_fixcolors.a ../data/ && mv cheese_alltiles_tiledata.a ../data/ && cd ..
 	cd gfx && ../convert/c64fy.py -quiet 1 -charset 234 -tilewidth 2 -tileheight 2 -color 14 -color 15 -color 9 -datalabels 0 candy_alltiles.png && mv candy_alltiles_chardata.a ../data/ && mv candy_alltiles_fixcolors.a ../data/ && mv candy_alltiles_tiledata.a ../data/ && cd ..
+	cd gfx && ../convert/c64fy.py -quiet 1 -charset 64 -tilewidth 2 -tileheight 2 -color 9 -color 8 -color 7 -datalabels 0 -appendzeros 0 -reducechars 0 cheese_trap_tiles.png && mv cheese_trap_tiles_chardata.a ../data/ && rm cheese_trap_tiles_fixcolors.a && rm cheese_trap_tiles_tiledata.a && cd ..
+	cd gfx && ../convert/c64fy.py -quiet 1 -charset 64 -tilewidth 2 -tileheight 2 -color 14 -color 15 -color 9 -datalabels 0 -appendzeros 0 -reducechars 0 candy_trap_tiles.png && mv candy_trap_tiles_chardata.a ../data/ && rm candy_trap_tiles_fixcolors.a && rm candy_trap_tiles_tiledata.a && cd ..
 	rm -f gfx/*_c64.png gfx/*.a
 
 spritedata : gfx/*sprite*

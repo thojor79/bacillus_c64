@@ -343,7 +343,7 @@ compute_char_animations
 	inc background_animation_phase
 	lda background_animation_phase	; 32 phases
 	lsr	; only every 2nd frame
-	bcs +	; if carry set, skip computation
+	bcs compute_char_animations_tt	; if carry set, skip computation
 	and #31
 	; Phase is now in Accu, 0-31. We have 8 bytes per phase and char. So multiply phase
 	; by 8 and compute read address, then copy 8 bytes from there.
@@ -361,17 +361,52 @@ compute_char_animations_next_line
 	iny
 	cpx #8
 	bne compute_char_animations_next_line
+compute_char_animations_tt
+	; handle trap tile animations.
+	; only every 8th frame.
+	; 8 chars are copied over as 64 byte block from $0400+fn*64
+	lda background_animation_phase
+	and #$07
+	cmp #$03
+	bne compute_char_animations_fga
+	; bits 3-5 determine phase.
+	; would need to >> 3, and << 6 to multiply by 64, so
+	; just shift left 3 and shift out to carry bit and clear bits 0-5.
+	; need to add -1 to drift address because x-reg is 1...64
+	; it takes ~ 12 rasterlines to copy it!
+	; prepare read address 
+	lda background_animation_phase
+	asl
+	asl
+	asl	; highest bit to carry
+	ldx #>(char_animation_data+$0200)
+	bcc +
+	inx
++	and #$C0
+	sta compute_char_animations_trap_adr+1
+	bne +
+	dex
++	stx compute_char_animations_trap_adr+2
+	dec compute_char_animations_trap_adr+1
+	ldx #64
+compute_char_animations_trap_adr
+	lda char_animation_data+$0200,x
+	sta VICCHARSET+TRAPTILECHAR_INDEX*8-1,x
+	dex
+	bne compute_char_animations_trap_adr
+compute_char_animations_fga
 	; Handle foreground animations, rotate two characters.
 	; whole block takes ~7 raster lines every 4 frames.
 	; only for candy world, so check level
-+	lda level_nr
+	lda level_nr
 	and #$FE
 	cmp #$02
-	bne +	; only level 2 and 3
+	bne compute_char_animations_done	; only level 2 and 3
 	; only every 4th frame
 	lda background_animation_phase
 	and #$03
-	bne +	; nothing to do then
+	cmp #$01	; do it in frame 1,5,9,... so not same frame as bg animation!
+	bne compute_char_animations_done	; nothing to do then
 	ldx #8
 compute_char_animations_next_line_fg
 	; rotate two bits left for two bytes, as first shift left bit to carry
@@ -385,7 +420,8 @@ compute_char_animations_next_line_fg
 	rol VICCHARSET+ANIMATED_FGTILE_INDEX*8-1,x
 	dex
 	bne compute_char_animations_next_line_fg
-+	rts
+compute_char_animations_done
+	rts
 
 ; ----------------- Check if tile is blocker ---------
 ; Input	TEMP0,TEMP1 x,y offset in level data

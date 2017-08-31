@@ -5,7 +5,8 @@ BUGS
 ====
 
 sometimes enemies are killed that fall from above, instead of killing
-player, maybe when player moves also downwards
+player, maybe when player moves also downwards. We need to check also if
+player is above monster when he is moving down.
 
 
 VISUAL GLITCHES
@@ -19,11 +20,10 @@ black then
 GAMEPLAY EXTENSIONS
 ===================
 
-animate trap tiles, 4-8 phases per tile, precomputed frames?
-fire should rather flicker, moving up/down like with traps
-wouldn't work
+change levels to make use of traps (level 2 and 3)
 
-change levels to make use of traps
+some simple tune or at least sound effects would be cool,
+maybe one voice for effects, two for tune.
 
 
 GENERAL FEATURES
@@ -37,12 +37,14 @@ rather easy to do but low effect
 main screen: let sprites walk in from left/right below highscore until mid
 of screen, then back again, so show all sprites, like a demo.
 
-main screen: color cycling in text?
+main screen: color cycling in text? e.g. color gradient horizontally that
+moves quick.
 
 main screen: high score only 9 places, score 6 chars, so text matches better
 width and there is space for sprites (3 lines needed)
 
 main screen: highscore handling
+needs also keyboard enter code.
 
 outtro: implement game complete screen, e.g. the bacillus logo or some food
 picture
@@ -197,3 +199,54 @@ get generated as well.
 what can easily be done with c64fy is conversion if line drawings to c64
 pictures like the turrican2 intro.
 
+How can we make use of modern computers and computing power for c64 games?
+creating graphics and converting them or finding formulas for content
+generation is a possibility. Here is another idea.
+Use multicolor graphics mode for a game. Place all graphics in RAM, so no
+need to load them. Construct screen of several layers of graphics, e.g.
+three layers with fix distances. For every layer have N different graphics
+that can be placed at fix positions, that means char blocks. Have e.g.
+foreground layer with 12x8 sized graphics (blocks) and medium layer with 9x6
+and distant layer with 6x4 or so. Store images in ram and compose screen by
+them. Have e.g. background color blue and black/grey/brown with raster irq
+to switch at same height. Clouds could be sprites moving behind pixels, in
+sky there are no enemies, so can reuse sprites. have e.g. also sun as
+sprite. Use 90° turns and discrete steps. Have pseudo random generated
+256x256 map that tells per position wether road,gras,bush,tree,rock,house
+etc. then take the nearest 5x5 fields or some cone-like area to render the
+current screen. So we can store huge map in ram and huge world to explore.
+rendering is done with cool trick: every subimage of NxM blocks consists of
+pixel data and colors. it is rendered at any block of the screen. The
+background color is not written, only the three other colors. Render each
+block. If its colors are equal to that already on screen, just copy it. If
+colors are all existent, but different order, swap bit data. If three new
+colors are partly or fully not existing, have some computation, count for
+every existing color how many pixels are there and for the new colors as
+well. Use the three colors with highest count. replace other colors by
+possible mix of the three colors. Maybe better to not keep the three most
+used if two of them are similar, but rather keep one different color or so,
+to minimize total error. Here some testing and research needs to be done.
+Similar to c64fy. Have the graphics either packed by exomizer or even better
+idea: place all of them in a large image and run c64fy to generate 512, 1024
+or even 2048 characters. Then for every block of a subimage have 3 bytes, 2
+with char index and one color, 1 byte with two other colors. so only 3 byte
+per block. that way we can compress graphics well.
+we need 16k for screen and sprites, code size will certainly be also minimum
+16k, so at max 32k for graphics. With 1024 chars it would take 8k for pixel
+data and we could store roughly 2730 blocks. That would be 10-12 subimages
+per layer. 3 trees, 2 plants, 2 road, 1 bush, 1 rock, ... maybe some house
+data as well. Maybe mountains below clouds also as sprites. Have upper part
+of screen for display, 40 blocks wide, at most 20 blocks high.
+E.g. first layer 5 subimages of 10x8 or 12x8 blocks. second layer 4 blocks
+upwards with 8x6 size (2+6*6+2), third layer 3 blocks upwards with 8x5 size,
+as example. depends if it works to pack that many graphics in 1024 chars.
+Rendering isn't time critical and would work fast enough. would be very cool
+result and we can use converter and generator to pack all graphics into 64k.
+Problem is as with most graphics, just converting doesn't help much, one
+needs rather some direct drawing, or rework the converted graphics with hand
+pixel drawing. And this means many graphics need to be drawn just to test
+wether the idea would give convincing results. It is a great idea and will
+certainly work but how good the graphics will be is uncertain. The question
+is also if the screens would differ enough from each other to make the game
+playable. E.g. if player walks through a forest, many screens could look the
+same.

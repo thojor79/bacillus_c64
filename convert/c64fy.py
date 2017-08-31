@@ -547,6 +547,8 @@ quiet = False
 tilex = 2
 tiley = 2
 usedatalabels = True
+appendzeros = True
+reducechars = True
 if len(sys.argv) < 2:
 	print('Usage: ', sys.argv[0], ' [Options] INPUTFILENAME')
 	print('INPUTFILENAME is a picture. Without any further arguments it is converted')
@@ -564,6 +566,8 @@ if len(sys.argv) < 2:
 	print('-maxuv F\t\tMax value if UV to be used in [0...0.5] range, higher values are clamped.')
 	print('-dynamicgreylimit N\tenable or disable dynamic grey limit for UV values.')
 	print('-datalabels\t\tUse label names before data, for char/sprite mode (default on).')
+	print('-reducechars N\t\tTurn char reducing on/off (default on)')
+	print('-appendzeros N\t\tWhen data labels are off fill up by appending zeros (default on)')
 	sys.exit(1)
 inputfilename = sys.argv[len(sys.argv) - 1]
 inputbasefilename = inputfilename[0:inputfilename.rfind('.')]
@@ -618,6 +622,10 @@ if len(sys.argv) > 2:
 			dynamic_uv_grey_limit = int(p1) != 0
 		elif p0 == '-datalabels':
 			usedatalabels = int(p1) != 0
+		elif p0 == '-reducechars':
+			reducechars = int(p1) != 0
+		elif p0 == '-appendzeros':
+			appendzeros = int(p1) != 0
 		else:
 			print('Illegal parameters.')
 			sys.exit(0)
@@ -793,16 +801,17 @@ for y in range(0, img_h//8):
 			# check in existing blocks if there is already one with same byte coding
 			blockfound = False
 			charnumber = len(codeblocks)
-			for i in range(0, len(codeblocks)):
-				# it is always sufficient to check wether the encoded bytes are the same!
-				# Either individual colors differ then (no problem) or differ (reuse char!)
-				# so do NOT compare bbd[0] but bbd[1]
-				if bbd[1] == codeblocks[i]:
-					blockfound = True
-					charnumber = i
-					#print('imageblock',len(imageblocks),' uses existing codeblock',i)
-					numreusedchars += 1
-					break
+			if reducechars:
+				for i in range(0, len(codeblocks)):
+					# it is always sufficient to check wether the encoded bytes are the same!
+					# Either individual colors differ then (no problem) or differ (reuse char!)
+					# so do NOT compare bbd[0] but bbd[1]
+					if bbd[1] == codeblocks[i]:
+						blockfound = True
+						charnumber = i
+						#print('imageblock',len(imageblocks),' uses existing codeblock',i)
+						numreusedchars += 1
+						break
 			if not blockfound:
 				codeblocks += [bbd[1]]
 			charnumbers += [charnumber]
@@ -1028,7 +1037,7 @@ if charmode:
 	charsetbytes = []
 	for b in codeblocks:
 		charsetbytes += b
-	if not usedatalabels:
+	if not usedatalabels and appendzeros:
 		# we need to fill up the space with zeros so data is correctly sized!
 		restsize = (256 - firstchar) * 8 - len(charsetbytes)
 		charsetbytes += [0] * restsize
