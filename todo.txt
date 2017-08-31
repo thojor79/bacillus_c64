@@ -4,7 +4,9 @@ ToDo - in categories
 BUGS
 ====
 
-sometimes enemies are killed that fall from above, instead of killing player
+sometimes enemies are killed that fall from above, instead of killing
+player, maybe when player moves also downwards
+
 
 VISUAL GLITCHES
 ===============
@@ -17,9 +19,12 @@ black then
 GAMEPLAY EXTENSIONS
 ===================
 
-animate trap tiles
+animate trap tiles, 4-8 phases per tile, precomputed frames?
+fire should rather flicker, moving up/down like with traps
+wouldn't work
 
 change levels to make use of traps
+
 
 GENERAL FEATURES
 ================
@@ -68,6 +73,11 @@ INFO
 
 in interrupts don't save Y register if we don't change it - only in
 scoreline irq, and not really critical there
+
+traps are checked directly for player pos, so player can jump on a platform
+where traps are on and is not killed as long as he is far enough to
+left/right from the trap. Thats kind of a bug, but it doesnt matter for most
+game situations, so we dont care.
 
 NOTE that changing charset after display of level tile data would be good,
 so tiles could use all 256 chars, optimally use last charset and last 20

@@ -249,13 +249,16 @@ joy2_not_up
 handle_special_tiles_below_player
 	; as first check the tile player is in if it is a trap.
 	; in that case kill player.
-	+copy8 TEMPADR2, actor_xh
+	; check 2 pixels above player pos so player can't walk
+	; sidewards into trap
+	+copy8 handle_special_tiles_below_player_adr0+1, actor_xh
+	lda actor_y	; carrybit doesn't matter for precision here
+	adc #<(-2*PIXELTOTILE)
 	lda actor_yh
-	clc
-        adc #>LEVEL_DATA
-        sta TEMPADR2+1
-	ldy #0
-	lda (TEMPADR2),y
+	adc #>(-2*PIXELTOTILE + LEVEL_DATA)
+	sta handle_special_tiles_below_player_adr0+2
+handle_special_tiles_below_player_adr0
+	lda LEVEL_DATA
 	and #$FE	; last bit doesn't matter for comparison
 	cmp #TRAP_TILE_INDEX
 	bne +		; no trap, normal check
