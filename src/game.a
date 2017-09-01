@@ -483,7 +483,17 @@ check_level4
 	jmp nextlevel
 
 checkhighscore
-	; fixme later
+	jsr check_highscore
+	cpx #10
+	bcc +
+	jmp startmainscreen
++	; player has reached a highscore!
+	; show screen or special line to enter name!
+	; easier with kernal, but blending that in is difficult, so try
+	; without kernal, with simple keyboard position reading
+	; set TEMPADR0 to text address... fixme
+	+set16im TEMPADR0, textnewhighscore
+	jsr enter_highscore
 	jmp startmainscreen
 
 prepare_world_1
@@ -855,3 +865,6 @@ level3_chardata
 
 level3_trapdata
 !src "data/candy_trap_tiles_chardata.a"
+
+textnewhighscore	; fixme for testing
+!scr "A new highscore!@"

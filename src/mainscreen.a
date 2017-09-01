@@ -295,7 +295,7 @@ check_highscore
 	beq +	; check next bcd part
 	bcc ++	; score is less, check next number
 	rts	; score is higher, done
-+	lda score+2
++	lda score
 	cmp halloffame_scores+2,y
 	beq ++	; score is less or equal, check next number
 	bcc ++
@@ -476,16 +476,16 @@ halloffame_names
 !for COUNT, 0, 9 { !scr "Thorsten Jordan@" }
 halloffame_scores
 ;!for count, 0, 9 { !scr "000000@" }
-!byte $10,$00,$00
-!byte $09,$00,$00
-!byte $08,$00,$00
-!byte $07,$00,$00
-!byte $06,$00,$00
-!byte $05,$00,$00
-!byte $04,$00,$00
-!byte $03,$00,$00
-!byte $02,$00,$00
-!byte $01,$00,$00
+!byte $00,$10,$00
+!byte $00,$09,$00
+!byte $00,$08,$00
+!byte $00,$07,$00
+!byte $00,$06,$00
+!byte $00,$05,$00
+!byte $00,$04,$00
+!byte $00,$03,$00
+!byte $00,$02,$00
+!byte $00,$01,$00
 halloffame_colors
 !byte 1,15,15,12,12,12,11,11,11,11
 
