@@ -4,9 +4,7 @@ ToDo - in categories
 BUGS
 ====
 
-sometimes enemies are killed that fall from above, instead of killing
-player, maybe when player moves also downwards. We need to check also if
-player is above monster when he is moving down.
+-
 
 
 VISUAL GLITCHES
@@ -15,9 +13,6 @@ VISUAL GLITCHES
 blend_in: sprites delay raster irq most probably and give visual glitch, but
 not critical. maybe just disable scorepanel by setting fgcol to all
 black then
-
-animated fire could be better, yellow part could also vary, but not
-important.
 
 
 GAMEPLAY EXTENSIONS

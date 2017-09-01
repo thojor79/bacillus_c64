@@ -839,14 +839,17 @@ check_other_actor_collision
 	; Another try is to add vx/vy to position difference (maybe twice) before comparison.
 	; Last possibility would be to kill when y pos difference is >= limit (and vy > 0).
 	; This would be simplest solution.
-	; y pos diff is still in TEMPADR1.
+	; y pos diff is still in TEMPADR1, it means enemy_y-player_y.
 	lda actor_vy
-	; If vy is negative or zero, player is killed
+	; If vy is negative or zero, player is killed (actor moves side or up)
 	bmi killplayer
 	beq killplayer
-	lda TEMPADR1+1
-	bne killenemy	; difference is > 16 pixels
-	lda TEMPADR1
+	; ok so actor moves downwards, check y diff
+	lda TEMPADR1+1	; y pos diff > 0 is when actor is above enemy
+	beq +		; yh equal, check yl
+	bpl killenemy	; not 0 and positive -> kill enemy
+	bmi killplayer	; otherwise negative -> kill player (use bmi not jmp, always taken here)
++	lda TEMPADR1	; diff is 0, so check lower byte
 	cmp #$80
 	bcs killenemy	; difference is >= 8 pixels
 killplayer
