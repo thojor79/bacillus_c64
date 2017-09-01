@@ -131,6 +131,8 @@ mainscreen
 	jsr printtext
 
 ; this eats much space for code but is easier
+; rather store in multiples of 4,16,4 and print bcd numbers!
+; have count in x register then.
 !for COUNT, 0, 9 {
 	+copy8 TEMP0, halloffame_colors+COUNT
 	+set16im TEMPADR0, halloffame_nrs+COUNT*3
@@ -141,11 +143,12 @@ mainscreen
 	ldx #11
 	ldy #8+COUNT
 	jsr printtext
-	+set16im TEMPADR0, halloffame_scores+COUNT*7
-	ldx #27
+	+set16im TEMPADR0, halloffame_scores+COUNT*3
+	ldx #28
 	ldy #8+COUNT
-	jsr printtext
+	jsr printnumber
 }
+
 	; wait for joystick key press and release
 	; meanwhile handle level selector cheat
 	+set8im TEMP1, 1	; default start level
@@ -225,6 +228,163 @@ printtext
 	iny
 	bne -	; avoid wrap, so max 256 chars to draw
 +	rts
+
+; ------------------------- bcd 6 digit drawing
+; Input	TEMPADR0	address of bcd number
+;	TEMP0		color of text
+; 	Y		row to draw
+;	X		column to draw
+; Uses	TEMP0, TEMPADR1, TEMPADR2
+printnumber
+	stx TEMPADR2
+	; prepare target address and colorram address
+	lda scroffmul40tableL, y
+	clc
+	adc TEMPADR2
+	sta TEMPADR1
+	lda scroffmul40tableH, y
+	adc #0
+	sta TEMPADR1+1
+	lda coloffmul40tableL, y
+	clc
+	adc TEMPADR2
+	sta TEMPADR2
+	lda coloffmul40tableH, y
+	adc #0
+	sta TEMPADR2+1
+	; read 3 numbers and push to stack
+	ldy #0
+-	lda (TEMPADR0),y
+	lsr
+	lsr
+	lsr
+	lsr
+	pha
+	lda (TEMPADR0),y
+	pha
+	iny
+	cpy #3
+	bne -
+	; now read 6 values from stack and draw to screen
+	ldy #5
+-	pla
+	and #$0F
+	clc
+	adc #$30
+	sta (TEMPADR1),y
+	lda TEMP0
+	sta (TEMPADR2),y
+	dey
+	bpl -
+	rts
+
+; ------------------------- check highscore place
+; Output	X place in highscore 0-10
+; Uses	A,X,Y
+; Note! D-flag is not needed
+check_highscore
+	ldx #0
+	ldy #0
+-	lda score+2
+	cmp halloffame_scores,y
+	beq +	; check next bcd part
+	bcc ++	; score is less, check next number
+	rts	; score is higher, done
++	lda score+1
+	cmp halloffame_scores+1,y
+	beq +	; check next bcd part
+	bcc ++	; score is less, check next number
+	rts	; score is higher, done
++	lda score+2
+	cmp halloffame_scores+2,y
+	beq ++	; score is less or equal, check next number
+	bcc ++
+	rts	; score is higher, done
+++	; for current place, score is lower, check next or abort
+	inx
+	iny
+	iny
+	iny
+	cpx #10
+	bne -
+	rts
+
+; -------------------- enter high score
+; Input	X place to set it to
+; Input	TEMPADR0 Text to enter (16 bytes, last is zero)
+; Uses	A,X,Y,TEMP1,TEMP0
+enter_highscore
+	cpx #10
+	bcs ++	; not in highscore
+	; shift all names and scores below x down
+	; need to work from end of list.
+	; for a given number transfer data from entry E to E+1
+	stx TEMP1	; save
+	ldx #8
+-	cpx TEMP1
+	bmi +		; all copies done
+	jsr copy_highscore_entry
+	dex
+	bpl -		; stop at first entry
++	; now write score and text to entry
+	; multiply x with 16
+	lda TEMP1
+	asl
+	asl
+	asl
+	asl
+	tax
+	ldy #0
+-	lda (TEMPADR0),y
+	sta halloffame_names,x
+	inx
+	iny
+	cpy #15
+	bne -
+	; write score, as first multiply x with 3
+	lda TEMP1
+	asl	; now carry clear
+	adc TEMP1
+	tax
+	lda score
+	sta halloffame_scores+2,x
+	lda score+1
+	sta halloffame_scores+1,x
+	lda score+2
+	sta halloffame_scores,x
+++	rts
+
+; ------------------- copy entry to next
+; Input	X entry number 0...8
+; Uses	A, TEMP0
+copy_highscore_entry
+	stx TEMP0
+	; compute x*16
+	txa
+	asl
+	asl
+	asl
+	asl
+	tax
+	; transfer name
+	ldy #16
+-	lda halloffame_names,x
+	sta halloffame_names+16,x
+	inx
+	dey
+	bne -
+	lda TEMP0
+	asl	; now carry bit is cleared
+	adc TEMP0	; X*3 in A
+	tax
+	ldy #3
+-	lda halloffame_scores,x
+	sta halloffame_scores+3,x
+	inx
+	dey
+	bne -
+	ldx TEMP0	; restore X!
+	rts
 
 ; -------------------------------------- foreground color as colorbar
 rasterirq_mainlogo
@@ -308,14 +468,24 @@ mainscreen_text2
 mainscreen_text3
 !scr "* HALL OF FAME *@"
 mainscreen_text4
-!scr "==========================@"
+!scr "===========================@"
 
 halloffame_nrs
 !scr "01@02@03@04@05@06@07@08@09@10@"
 halloffame_names
 !for COUNT, 0, 9 { !scr "Thorsten Jordan@" }
 halloffame_scores
-!for count, 0, 9 { !scr "000000@" }
+;!for count, 0, 9 { !scr "000000@" }
+!byte $10,$00,$00
+!byte $09,$00,$00
+!byte $08,$00,$00
+!byte $07,$00,$00
+!byte $06,$00,$00
+!byte $05,$00,$00
+!byte $04,$00,$00
+!byte $03,$00,$00
+!byte $02,$00,$00
+!byte $01,$00,$00
 halloffame_colors
 !byte 1,15,15,12,12,12,11,11,11,11
 

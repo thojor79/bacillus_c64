@@ -30,17 +30,8 @@ have different sprite colors for candy world! rather dark!
 implement blend out effect for level end - reverse reading of blend in,
 rather easy to do but low effect
 
-main screen: let sprites walk in from left/right below highscore until mid
-of screen, then back again, so show all sprites, like a demo.
-
-main screen: color cycling in text? e.g. color gradient horizontally that
-moves quick.
-
-main screen: high score only 9 places, score 6 chars, so text matches better
-width and there is space for sprites (3 lines needed)
-
-main screen: highscore handling
-needs also keyboard enter code.
+main screen: high score - function to enter player name in case of highscore
+is needed and check at end of game
 
 outtro: implement game complete screen, e.g. the bacillus logo or some food
 picture
@@ -98,6 +89,12 @@ It takes at least 147 raster lines (150 lines ~ 9000cyc with badlines, so
 
 Ideas for later
 ===============
+
+main screen: let sprites walk in from left/right below highscore until mid
+of screen, then back again, so show all sprites, like a demo.
+
+main screen: color cycling in text? e.g. color gradient horizontally that
+moves quick.
 
 Reorder trap animations and use them in forward order as originally
 intended.
