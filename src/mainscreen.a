@@ -22,6 +22,8 @@
 ; ***************************************************************************************
 
 mainscreen
+	; store x register with highscore number as TEMP5
+	stx TEMP5
 ; VIC memory area set up
 	+set8im VICMEMCTRL, VICSCREENBLOCKBITMAP*16+VICBITMAPBLOCK*8+1	; in bitmap mode bit 3 sets bitmap block, in charmode bits 1-3 charblock!
 
@@ -130,6 +132,48 @@ mainscreen
 	ldy #7
 	jsr printtext
 
+; now check here if we came back from a game and highscore was achieved.
+; highscore place is in TEMP5.
+	lda TEMP5
+	cmp #10
+	bcc +
+	jmp draw_halloffame
++	+set16im TEMPADR0, mainscreen_text5
+	+set8im TEMP0, 7
+	ldx #2
+	ldy #10
+	jsr printtext
+	+set16im TEMPADR0, mainscreen_text6
+	+set8im TEMP0, 7
+	ldx #3
+	ldy #13
+	jsr printtext
+	+set16im TEMPADR0, mainscreen_text7
+	+set8im TEMP0, 7
+	ldx #12
+	ldy #16
+	jsr printtext
+	+set16im TEMPADR0, SCREEN0+23*40+13
+	ldy #15
+	jsr enter_string_init
+-	jsr enter_string_loop
+	bcc -
+	; text is now given, insert it in highscore
+	+set8im $DC02, $00	; reset CIA Port A read only!
+	ldx TEMP5
+	+set16im TEMPADR0, SCREEN0+23*40+13
+	jsr enter_highscore
+	; afterwards clear space where highscore is shown
+	; and show it normally. Clear 7 lines of 40 characters,
+	; a bit more than 256 bytes, just clear two pages
+	ldx #0
+	lda #$20
+-	sta SCREEN0+17*40,x
+	sta SCREEN0+18*40,x
+	dex
+	bne -
+
+draw_halloffame
 ; this eats much space for code but is easier
 ; rather store in multiples of 4,16,4 and print bcd numbers!
 ; have count in x register then.
@@ -289,12 +333,12 @@ get_key_table	; 64 byte table for petscii values per key
 ; Uses	A
 enter_string_init
 	sty enter_string_length
-	lda #$00
+	lda #$20	; show space
 	dey
 -	sta (TEMPADR0),y
 	dey
 	bpl -
-	sta enter_string_pos
+	+set8im enter_string_pos, 0
 	rts
 enter_string_length
 !byte 0
@@ -312,7 +356,12 @@ enter_string_loop
 	bne +
 	; return pressed, string is complete when length > 0
 	lda enter_string_pos
-	cmp #1	; sets carry when >= 1
+	beq enter_string_loop_exit
+	; string complete, terminate with 0
+	ldy enter_string_pos
+	lda #$00
+	sta (TEMPADR0),y
+	sec
 -	rts
 +	cmp #$14
 	bne +
@@ -322,17 +371,18 @@ enter_string_loop
 	beq -	; do nothing
 	dec enter_string_pos
 	ldy enter_string_pos
-	lda #$00
+	lda #$20	; set space at end of string
 	sta (TEMPADR0),y
 	; carry is still clear
 	rts
 +	; any other key pressed, insert at end of buffer if space
 	ldy enter_string_pos
 	cpy enter_string_length
-	beq +
+	beq enter_string_loop_exit
 	sta (TEMPADR0),y
 	inc enter_string_pos
-+	clc
+enter_string_loop_exit
+	clc
 	rts
 
 ; ------------------------- text drawing
@@ -611,6 +661,12 @@ mainscreen_text3
 !scr "* HALL OF FAME *@"
 mainscreen_text4
 !scr "===========================@"
+mainscreen_text5
+!scr "Congratulations! You got a highscore!@"
+mainscreen_text6
+!scr "Enter your name and press return:@"
+mainscreen_text7
+!scr "[               ]@"
 
 halloffame_nrs
 !scr "01@02@03@04@05@06@07@08@09@10@"
