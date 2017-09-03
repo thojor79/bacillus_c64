@@ -157,7 +157,7 @@ mainscreen
 	and #$1F
 	cmp #$1F
 	bne -	; as long as any direction or fire is pressed, wait
---	; wait until direction or key is pressed and released
+--	; wait until direction or fire is pressed and released
 -	lda CIA1_DATAPORT_A
 	and #$1F
 	cmp #$1F
@@ -192,6 +192,148 @@ mainscreen
 
 levelselect_cheat_chain
 !byte $1E, $1D, $1B, $1E, $1D, $17, $17, $00
+
+; ------------------------ get a key press (petscii character)
+; Uses	A,X,Y
+; Output	Carry set-key press detected, A is petscii
+; Note! If you wan't to use the joystick later, you need to reset the data
+; port direction: 	+set8im $DC02, $00
+get_key
+	+set8im $DC02, $FF	; Port A read/write
+	+set8im $DC03, $00	; Port B read only
+	; keyboard is a matrix with port A in rows and port B in columns.
+	; so write to port A and see where in port B it arrives.
+	+set8im CIA1_DATAPORT_A, $00	; set signal to all lines of matrix
+	lda CIA1_DATAPORT_B
+	cmp #$FF		; not a single key pressed?
+	beq get_key_no_key_pressed
+	lda #$7F
+	sta get_key_mask+1
+	ldx #7
+	ldy #7
+get_key_mask	; shift a zero bit through all 8 bits
+	lda #0
+	sta CIA1_DATAPORT_A
+	lda CIA1_DATAPORT_B
+	cmp #$FF
+	bne get_key_mask2	; in that line a key was pressed
+	sec
+	ror get_key_mask+1
+	dex
+	bpl get_key_mask
+get_key_no_key_pressed
+	+set8im get_key_last_key, 0
+get_key_no_key_pressed2
+	clc
+	rts
+get_key_mask2	; check what bit of A is cleared
+	asl	; shift uppermost bit out
+	bcc get_key_pressed
+	dey
+	bpl get_key_mask2
+	; we may never arrive here, as one bit must be set
+	; nothing to do
+get_key_pressed
+	; we know that key X/Y is pressed.
+	; read from table and store in A, then return
+	tya
+	asl
+	asl
+	asl
+	stx get_key_mask+1	;slower than zeropage, but no side effects
+	ora get_key_mask+1
+	tax
+	lda get_key_table,x
+	; rather compare with last pressed key.
+	; if different, report it, else report no key
+	cmp get_key_last_key
+	beq get_key_no_key_pressed2
+	sta get_key_last_key
+	sec
+	rts
+get_key_last_key
+!byte $00
+get_key_table	; 64 byte table for petscii values per key
+; including space, a-z, 0-9, backspace and return
+; backspace = $14 (DEL), return = $0D
+!byte $14, $33, $35, $37, $39, $00, $00, $31
+!byte $0D, $57, $52, $59, $49, $50, $00, $00
+!byte $00, $41, $44, $47, $4a, $4c, $00, $00
+!byte $00, $34, $36, $38, $30, $00, $00, $32
+!byte $00, $5a, $43, $42, $4d, $00, $00, $20
+!byte $00, $53, $46, $48, $4b, $00, $00, $00
+!byte $00, $45, $54, $55, $4f, $00, $00, $51
+!byte $00, $00, $58, $56, $4e, $00, $00, $00
+; the following code generates the table
+;	sei
+;	ldx #00
+;	lda #$00
+;-	sta $0200,x
+;	dex
+;	bne -
+;	+set8im TEMP0,0
+;-	jsr get_key
+;	bcc -
+;	tay
+;	ldx TEMP0
+;	lda petscii,x
+;	sta $0200,y
+;	inc TEMP0
+;	jmp -
+;petscii
+;!scr " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@"
+
+; ------------------ enter string init
+; Input	TEMPADR0	Address of string buffer
+; Input	Y		Maximum string length (max 128)
+; Uses	A
+enter_string_init
+	sty enter_string_length
+	lda #$00
+	dey
+-	sta (TEMPADR0),y
+	dey
+	bpl -
+	sta enter_string_pos
+	rts
+enter_string_length
+!byte 0
+enter_string_pos
+!byte 0
+; ------------------ enter a string (call repeated until carry set)
+; Uses	A, X, Y
+; Output Carry Flag if string done
+enter_string_loop
+	jsr get_key
+	bcs +
+	rts
++	; handle key, as first handle return and delete
+	cmp #$0D
+	bne +
+	; return pressed, string is complete when length > 0
+	lda enter_string_pos
+	cmp #1	; sets carry when >= 1
+-	rts
++	cmp #$14
+	bne +
+	; delete pressed, if pos > 0 delete last char and decrease pos
+	clc
+	lda enter_string_pos
+	beq -	; do nothing
+	dec enter_string_pos
+	ldy enter_string_pos
+	lda #$00
+	sta (TEMPADR0),y
+	; carry is still clear
+	rts
++	; any other key pressed, insert at end of buffer if space
+	ldy enter_string_pos
+	cpy enter_string_length
+	beq +
+	sta (TEMPADR0),y
+	inc enter_string_pos
++	clc
+	rts
 
 ; ------------------------- text drawing
 ; Input	TEMPADR0	address of string

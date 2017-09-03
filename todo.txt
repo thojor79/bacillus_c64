@@ -20,23 +20,49 @@ GAMEPLAY EXTENSIONS
 
 some simple tune or at least sound effects would be cool,
 maybe one voice for effects, two for tune.
+effects like explosion/gun can easily be done for killing enemy or
+collecting boni
 
 
 GENERAL FEATURES
 ================
 
 have different sprite colors for candy world! rather dark!
+0,2,4,5,6,9,11. maybe 5 and 9 not, so 0,2,4,6,9,11.
+use random6 for this.
 
 implement blend out effect for level end - reverse reading of blend in,
 rather easy to do but low effect
 
 main screen: high score - function to enter player name in case of highscore
 is needed and check at end of game
+functionality to page in kernel would be needed for load/save as well,
+but for key input it would be enough to directly read it. does that work
+with irqs for cia disabled? rather clumsy to read it all alone.
+we can keep all gfx at last vic bank. we need to set valid irq vectors in
+$0314 and restore/clear zero page (maybe save it at start), research a bit,
+disk routines also need some zero page bits.
+irq sources must not enable more than raster...
+save zeropage to e.g. screen1, restore some things, blend kernal in,
+read string and render it, then undo everything (kernel off, restore
+zeropage)
+the code to read keyboard only reads the buffer - how it is filled?!
+maybe keyboard direct is easier. load save example from bofh code!
+load/save works with irq disabled, switching it on/off isn't difficult, but
+key reading seems to need interrupts. rather read directly, using
+a-z,A-Z,0-9,space.
 
 outtro: implement game complete screen, e.g. the bacillus logo or some food
-picture
+picture, maybe reuse intro logo.
 
 outtro: with sprite scroller like turrican end
+for example write two lines of text in one sprite with 5 empty lines in
+between, and 5 lines vertical space between sprites, so enough time to set
+them up. 8 sprites horizontally give 192 pixels, nearly 2/3 of screen,
+enough. We can easily change colors per line then. two lines and two spaces
+are 26 lines, i.e. 8 sprites vertically give 208 lines. Best would be 9, so
+we can move 26 lines and fill the sprite data with wrap around buffer, e.g.
+8 vertical sprites, total 8x8x64 bytes=4k.
 
 
 MORE DATA
@@ -89,6 +115,11 @@ It takes at least 147 raster lines (150 lines ~ 9000cyc with badlines, so
 
 Ideas for later
 ===============
+
+Many checks like collisions between player and enemy doesn't need to be done
+every frame with 50fps, every 2nd or 4th frame is ok. For more than 7
+enemies with sprite multiplexer this will be necessary as time is not enough
+to do it every frame.
 
 main screen: let sprites walk in from left/right below highscore until mid
 of screen, then back again, so show all sprites, like a demo.
@@ -157,7 +188,9 @@ Ideas for other games / projects
 ================================
 
 8-way scrolling and sprite multiplexer would be cool, that way one can
-create a Turrican like game.
+create a Turrican like game. Also shots as characters are needed then, do
+the shots check if an enemy is over them or does every enemy check all
+characters below it?
 
 However randomly or procedurally generated content would be cool. Like a RPG
 game with huge world map (256x256 maybe) so that the C64 can generate the
@@ -245,4 +278,15 @@ wether the idea would give convincing results. It is a great idea and will
 certainly work but how good the graphics will be is uncertain. The question
 is also if the screens would differ enough from each other to make the game
 playable. E.g. if player walks through a forest, many screens could look the
-same.
+same. Maybe don't store full trees but vertical layers of leaves, a set of
+trunks etc. and combine it. Pine trees can have various vertical layers of
+needle leaves.
+
+SID Composing
+=============
+
+as first collect instruments from other tunes, this seems difficult to write
+own instruments.
+understand/learn what filter and pulse tables are.
+maybe easier to get some notes and write them, free composing is very
+difficult, music sounds ok, but rather mechanical.
