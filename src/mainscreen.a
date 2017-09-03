@@ -226,7 +226,7 @@ draw_halloffame
 	bcc +
 	cpx #8
 	bcs +
-	+addx 256-4
+	+addx 256-4	; trashes accu!
 	stx TEMP1
 	; set dummy raster irq and return
 +	sei

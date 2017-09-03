@@ -21,36 +21,25 @@ GAMEPLAY EXTENSIONS
 some simple tune or at least sound effects would be cool,
 maybe one voice for effects, two for tune.
 effects like explosion/gun can easily be done for killing enemy or
-collecting boni
+collecting boni. however playing sfx needs some code of a sidplayer
+that is run every frame and this is not simple. maybe it is sufficient to
+set up an instrument and play it for a certain amount of time, maybe it
+needs more work. a music player then needs to keep one channel free.
 
 
 GENERAL FEATURES
 ================
 
-have different sprite colors for candy world! rather dark!
-0,2,4,5,6,9,11. maybe 5 and 9 not, so 0,2,4,6,9,11.
-use random6 for this.
-
 implement blend out effect for level end - reverse reading of blend in,
 rather easy to do but low effect
 
-main screen: high score - function to enter player name in case of highscore
-is needed and check at end of game
-functionality to page in kernel would be needed for load/save as well,
-but for key input it would be enough to directly read it. does that work
-with irqs for cia disabled? rather clumsy to read it all alone.
-we can keep all gfx at last vic bank. we need to set valid irq vectors in
-$0314 and restore/clear zero page (maybe save it at start), research a bit,
-disk routines also need some zero page bits.
-irq sources must not enable more than raster...
-save zeropage to e.g. screen1, restore some things, blend kernal in,
-read string and render it, then undo everything (kernel off, restore
-zeropage)
-the code to read keyboard only reads the buffer - how it is filled?!
-maybe keyboard direct is easier. load save example from bofh code!
-load/save works with irq disabled, switching it on/off isn't difficult, but
-key reading seems to need interrupts. rather read directly, using
-a-z,A-Z,0-9,space.
+main screen: high score - load at game start from disk and write it after a
+new highscore in main screen. blend in kernal and use simple load/save
+routines, see bofh source code for an example. can work with irq disabled,
+so we don't need to set up much, only need to save something in zeropage or
+clear afterwards.
+disk routines also need some zero page bits. research what or how zeropage
+is changed by using the routines.
 
 outtro: implement game complete screen, e.g. the bacillus logo or some food
 picture, maybe reuse intro logo.

@@ -522,7 +522,31 @@ prepare_world_2
 	+set16im TEMPADR0, level1_sprites_rle
         +set16im TEMPADR1, VICSPRITES_GAME
         jsr rle_decode
-	;fixme set new dark colors for sprites!
+	; set new dark colors for sprites!
+	; 4 sprites per enemy from #4 on, 16 pieces, every 64 byte.
+	ldx #63
+-	+set8im TEMPADR0, $FF
+	txa
+	lsr
+	ror TEMPADR0
+	lsr
+	ror TEMPADR0
+	sta TEMP0	; save for later
+	clc
+	adc #>(VICSPRITES_GAME+256)
+	sta TEMPADR0+1
+	lda TEMP0
+	and #3
+	tay
+	lda world_2_spritecolors,y
+	sta TEMP0
+	ldy #0
+	lda (TEMPADR0),y
+	and #$80	; keep MC bit
+	ora TEMP0
+	sta (TEMPADR0),y
+	dex
+	bpl -
 	; level specific colors
 	+copy8 VICFGCOL, level3_fixcolors
 	sta rasterbar_colors + 7	; store also for rasterirq, is level specific
@@ -531,6 +555,8 @@ prepare_world_2
 	+set8im VICSPRITECOMMONCOLOR0, 0
 	+set8im VICSPRITECOMMONCOLOR1, 1
 	rts
+world_2_spritecolors
+!byte 0,2,6,11
 
 ; --------------------- function library ----------------------
 
