@@ -1,0 +1,95 @@
+; ------------------------- text drawing
+; Input	TEMPADR0	address of string
+;	TEMP0		color of text
+; 	Y		row to draw
+;	X		column to draw
+; Uses	TEMP0, TEMPADR1, TEMPADR2
+; fixme giving row/col to text which needs to use tables to compute address
+; is stupid, let acme compute address and give it in TEMPADR1!
+printtext
+	stx TEMPADR2
+	; prepare target address and colorram address
+	lda scroffmul40tableL, y
+	clc
+	adc TEMPADR2
+	sta TEMPADR1
+	lda scroffmul40tableH, y
+	adc #0
+	sta TEMPADR1+1
+	lda coloffmul40tableL, y
+	clc
+	adc TEMPADR2
+	sta TEMPADR2
+	lda coloffmul40tableH, y
+	adc #0
+	sta TEMPADR2+1
+	; load color
+	ldx TEMP0
+	; use indirect indexed adressing to copy data
+	ldy #0
+-	lda (TEMPADR0),y
+	beq +
+	sta (TEMPADR1),y
+	txa
+	sta (TEMPADR2),y	; write also color
+	iny
+	bne -	; avoid wrap, so max 256 chars to draw
++	rts
+
+; ------------------------- bcd 6 digit drawing
+; Input	TEMPADR0	address of bcd number
+;	TEMP0		color of text
+; 	Y		row to draw
+;	X		column to draw
+; Uses	TEMP0, TEMPADR1, TEMPADR2
+printnumber
+	stx TEMPADR2
+	; prepare target address and colorram address
+	lda scroffmul40tableL, y
+	clc
+	adc TEMPADR2
+	sta TEMPADR1
+	lda scroffmul40tableH, y
+	adc #0
+	sta TEMPADR1+1
+	lda coloffmul40tableL, y
+	clc
+	adc TEMPADR2
+	sta TEMPADR2
+	lda coloffmul40tableH, y
+	adc #0
+	sta TEMPADR2+1
+	; read 3 numbers and push to stack
+	ldy #0
+-	lda (TEMPADR0),y
+	lsr
+	lsr
+	lsr
+	lsr
+	pha
+	lda (TEMPADR0),y
+	pha
+	iny
+	cpy #3
+	bne -
+	; now read 6 values from stack and draw to screen
+	ldy #5
+-	pla
+	and #$0F
+	clc
+	adc #$30
+	sta (TEMPADR1),y
+	lda TEMP0
+	sta (TEMPADR2),y
+	dey
+	bpl -
+	rts
+
+scroffmul40tableL	; screen line plus 7 mul 40
+!for COUNT, 0, 17 { !byte <(SCREEN0+(7+COUNT)*40) }
+scroffmul40tableH	; screen line plus 7 mul 40
+!for COUNT, 0, 17 { !byte >(SCREEN0+(7+COUNT)*40) }
+coloffmul40tableL	; screen line plus 7 mul 40
+!for COUNT, 0, 17 { !byte <(COLORRAM+(7+COUNT)*40) }
+coloffmul40tableH	; screen line plus 7 mul 40
+!for COUNT, 0, 17 { !byte >(COLORRAM+(7+COUNT)*40) }

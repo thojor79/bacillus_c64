@@ -128,7 +128,7 @@
 
 ; add immediate 8bit value to 16bit memory
 !macro add16im8 .dest, .val {
-	lda #<.val
+	lda #.val
 	clc
 	adc .dest
 	sta .dest
