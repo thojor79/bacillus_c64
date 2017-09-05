@@ -106,10 +106,20 @@ mainscreen
 	cli
 
 ; draw main screen
+	+set16im TEMPADR0, mainscreen_text8
+	+set8im TEMP0, 7
+	ldx #4
+	ldy #1
+	jsr printtext
+	+set16im TEMPADR0, mainscreen_text9
+	+set8im TEMP0, 7
+	ldx #0
+	ldy #2
+	jsr printtext
 	+set16im TEMPADR0, mainscreen_text0
 	+set8im TEMP0, 3
 	ldx #5
-	ldy #1
+	ldy #0
 	jsr printtext
 	+set16im TEMPADR0, mainscreen_text1
 	+set8im TEMP0, 14
@@ -667,6 +677,12 @@ mainscreen_text6
 !scr "Enter your name and press return:@"
 mainscreen_text7
 !scr "[               ]@"
+mainscreen_text8
+!scr "Game license: GNU copyleft (GPL)@"
+mainscreen_text9
+!scr "https://github.com/thojor79/bacillus"
+!byte 100
+!scr "c64@"
 
 halloffame_nrs
 !scr "01@02@03@04@05@06@07@08@09@10@"
