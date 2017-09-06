@@ -106,40 +106,65 @@ mainscreen
 	cli
 
 ; draw main screen
+	; clear lines 7...24 with $20 and set color per line
+	ldx #0
+	+set16im TEMPADR0, SCREEN0+7*40-1
+	+set16im TEMPADR1, COLORRAM+7*40-1
+---	ldy #40
+--	lda mainscreen_color_indices,x
+	asl
+	asl
+	clc
+	adc mainscreen_color_indices,x
+	asl
+	asl
+	sta TEMP1
+	stx TEMP0
+	tya
+	adc TEMP0	; shift by line, max value 40+17=57
+	adc TEMP0	; shift twice by line, so max 74
+	; limit accu to 0..19
+-	cmp #20
+	bcc +
+	sec
+	sbc #20
+	jmp -
++	clc
+	adc TEMP1
+	tax
+	lda mainscreen_color_gradients,x
+	ldx TEMP0
+	sta (TEMPADR1),y
+	lda #$20
+	sta (TEMPADR0),y
+	dey
+	bne --
+	+add16im8 TEMPADR0, 40
+	+add16im8 TEMPADR1, 40
+	inx
+	cpx #18
+	bne ---
+
+	+set16im TEMPADR0, mainscreen_text0
+	+set16im TEMPADR1, SCREEN0+7*40+5
+	jsr printtext
 	+set16im TEMPADR0, mainscreen_text8
-	+set8im TEMP0, 7
-	ldx #4
-	ldy #1
+	+set16im TEMPADR1, SCREEN0+8*40+4
 	jsr printtext
 	+set16im TEMPADR0, mainscreen_text9
-	+set8im TEMP0, 7
-	ldx #0
-	ldy #2
-	jsr printtext
-	+set16im TEMPADR0, mainscreen_text0
-	+set8im TEMP0, 3
-	ldx #5
-	ldy #0
+	+set16im TEMPADR1, SCREEN0+9*40+0
 	jsr printtext
 	+set16im TEMPADR0, mainscreen_text1
-	+set8im TEMP0, 14
-	ldx #8
-	ldy #3
+	+set16im TEMPADR1, SCREEN0+10*40+8
 	jsr printtext
 	+set16im TEMPADR0, mainscreen_text2
-	+set8im TEMP0, 4
-	ldx #10
-	ldy #4
+	+set16im TEMPADR1, SCREEN0+11*40+10
 	jsr printtext
 	+set16im TEMPADR0, mainscreen_text3
-	+set8im TEMP0, 10
-	ldx #12
-	ldy #6
+	+set16im TEMPADR1, SCREEN0+13*40+12
 	jsr printtext
 	+set16im TEMPADR0, mainscreen_text4
-	+set8im TEMP0, 10
-	ldx #7
-	ldy #7
+	+set16im TEMPADR1, SCREEN0+14*40+7
 	jsr printtext
 
 ; now check here if we came back from a game and highscore was achieved.
@@ -149,21 +174,15 @@ mainscreen
 	bcc +
 	jmp draw_halloffame
 +	+set16im TEMPADR0, mainscreen_text5
-	+set8im TEMP0, 7
-	ldx #2
-	ldy #10
+	+set16im TEMPADR1, SCREEN0+17*40+2
 	jsr printtext
 	+set16im TEMPADR0, mainscreen_text6
-	+set8im TEMP0, 7
-	ldx #3
-	ldy #13
+	+set16im TEMPADR1, SCREEN0+20*40+3
 	jsr printtext
 	+set16im TEMPADR0, mainscreen_text7
-	+set8im TEMP0, 7
-	ldx #12
-	ldy #16
+	+set16im TEMPADR1, SCREEN0+23*40+12
 	jsr printtext
-	+set16im TEMPADR0, SCREEN0+23*40+13
+	+set16im TEMPADR2, SCREEN0+23*40+13
 	ldy #15
 	jsr enter_string_init
 -	jsr enter_string_loop
@@ -184,40 +203,69 @@ mainscreen
 	bne -
 
 draw_halloffame
-; this eats much space for code but is easier
-; rather store in multiples of 4,16,4 and print bcd numbers!
-; have count in x register then.
-!for COUNT, 0, 9 {
-	+copy8 TEMP0, halloffame_colors+COUNT
-	+set16im TEMPADR0, halloffame_nrs+COUNT*3
-	ldx #7
-	ldy #8+COUNT
+	+set8im $0200, $30
+	+set8im $0202, 0
+	sta TEMP1
+	+set16im TEMPADR1, SCREEN0+15*40+7
+-	lda TEMP1
+	sec
+	adc #$30
+	sta $0201
+	ldx TEMP1
+	cpx #9
+	bne +
+	+set8im $0200, $31
+	+set8im $0201, $30
++	+set16im TEMPADR0, $0200
 	jsr printtext
-	+set16im TEMPADR0, halloffame_names+COUNT*16
-	ldx #11
-	ldy #8+COUNT
+	lda TEMP1
+	asl
+	asl
+	sta TEMP2
+	asl
+	asl
+	adc #<halloffame_names
+	sta TEMPADR0
+	ldy #>halloffame_names
+	bcc +
+	iny
++	sty TEMPADR0+1
+	+add16im8 TEMPADR1, 4
 	jsr printtext
-	+set16im TEMPADR0, halloffame_scores+COUNT*3
-	ldx #28
-	ldy #8+COUNT
+	lda TEMP2
+	clc
+	adc #<halloffame_scores
+	sta TEMPADR0
+	ldy #>halloffame_scores
+	bcc +
+	iny
++	sty TEMPADR0+1
+	+add16im8 TEMPADR1, 17
 	jsr printnumber
-}
+	+add16im8 TEMPADR1, 19
+	inx
+	stx TEMP1
+	cpx #10
+	bne -
 
 	; wait for joystick key press and release
 	; meanwhile handle level selector cheat
 	+set8im TEMP1, 1	; default start level
 	ldx #0
--	lda CIA1_DATAPORT_A
+-	jsr mainscreen_cycle_colors
+	lda CIA1_DATAPORT_A
 	and #$1F
 	cmp #$1F
 	bne -	; as long as any direction or fire is pressed, wait
 --	; wait until direction or fire is pressed and released
--	lda CIA1_DATAPORT_A
+-	jsr mainscreen_cycle_colors
+	lda CIA1_DATAPORT_A
 	and #$1F
 	cmp #$1F
 	beq -	; as long as no direction nor fire pressed, wait
 	sta TEMP0	; store pressed dir/fire
--	lda CIA1_DATAPORT_A
+-	jsr mainscreen_cycle_colors
+	lda CIA1_DATAPORT_A
 	and #$1F
 	cmp #$1F
 	bne -	; as long as any direction or fire is pressed, wait
@@ -246,6 +294,44 @@ draw_halloffame
 
 levelselect_cheat_chain
 !byte $1E, $1D, $1B, $1E, $1D, $17, $17, $00
+
+; ----------------------- cycle colors in color ram horizontally for effects
+; Note! must save x-register and must not use TEMP0/TEMP!
+; Uses	A,Y,TEMPADR0,TEMPADR1,TEMP2,TEMP3
+mainscreen_cycle_colors
+	stx TEMP3
+	lda mainscreen_cycle_colors_stop_adr+1
+	bne +
+	lda #10
+	bne ++
++	lda #0
+++	sta mainscreen_cycle_colors_stop_adr+1
+	; wait until raster line is at bottom of foreground screen
+-	lda VICRASTER
+	cmp #251	; end of visible screen
+	bcc -
+	; rotate color ram values left for lower 18 lines
+	+set16im TEMPADR0, COLORRAM+7*40+1
+	+set16im TEMPADR1, COLORRAM+7*40
+	ldx #18
+--	ldy #0
+	lda (TEMPADR1),y
+	sta TEMP2
+-	lda (TEMPADR0),y
+	sta (TEMPADR1),y
+	iny
+	cpy #39
+	bne -
+	lda TEMP2
+	sta (TEMPADR1),y
+	+add16im8 TEMPADR0, 40
+	+add16im8 TEMPADR1, 40
+	dex
+mainscreen_cycle_colors_stop_adr
+	cpx #10
+	bne --
+	ldx TEMP3
+	rts
 
 ; ------------------------ get a key press (petscii character)
 ; Uses	A,X,Y
@@ -338,14 +424,14 @@ get_key_table	; 64 byte table for petscii values per key
 ;!scr " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@"
 
 ; ------------------ enter string init
-; Input	TEMPADR0	Address of string buffer
+; Input	TEMPADR2	Address of string buffer
 ; Input	Y		Maximum string length (max 128)
 ; Uses	A
 enter_string_init
 	sty enter_string_length
 	lda #$20	; show space
 	dey
--	sta (TEMPADR0),y
+-	sta (TEMPADR2),y
 	dey
 	bpl -
 	+set8im enter_string_pos, 0
@@ -358,6 +444,7 @@ enter_string_pos
 ; Uses	A, X, Y
 ; Output Carry Flag if string done
 enter_string_loop
+	jsr mainscreen_cycle_colors
 	jsr get_key
 	bcs +
 	rts
@@ -370,7 +457,7 @@ enter_string_loop
 	; string complete, terminate with 0
 	ldy enter_string_pos
 	lda #$00
-	sta (TEMPADR0),y
+	sta (TEMPADR2),y
 	sec
 -	rts
 +	cmp #$14
@@ -382,14 +469,14 @@ enter_string_loop
 	dec enter_string_pos
 	ldy enter_string_pos
 	lda #$20	; set space at end of string
-	sta (TEMPADR0),y
+	sta (TEMPADR2),y
 	; carry is still clear
 	rts
 +	; any other key pressed, insert at end of buffer if space
 	ldy enter_string_pos
 	cpy enter_string_length
 	beq enter_string_loop_exit
-	sta (TEMPADR0),y
+	sta (TEMPADR2),y
 	inc enter_string_pos
 enter_string_loop_exit
 	clc
@@ -397,63 +484,23 @@ enter_string_loop_exit
 
 ; ------------------------- text drawing
 ; Input	TEMPADR0	address of string
-;	TEMP0		color of text
-; 	Y		row to draw
-;	X		column to draw
-; Uses	TEMP0, TEMPADR1, TEMPADR2
+;	TEMPADR1	address to write it to
+; Uses	A,Y
 printtext
-	stx TEMPADR2
-	; prepare target address and colorram address
-	lda scroffmul40tableL, y
-	clc
-	adc TEMPADR2
-	sta TEMPADR1
-	lda scroffmul40tableH, y
-	adc #0
-	sta TEMPADR1+1
-	lda coloffmul40tableL, y
-	clc
-	adc TEMPADR2
-	sta TEMPADR2
-	lda coloffmul40tableH, y
-	adc #0
-	sta TEMPADR2+1
-	; load color
-	ldx TEMP0
 	; use indirect indexed adressing to copy data
 	ldy #0
 -	lda (TEMPADR0),y
 	beq +
 	sta (TEMPADR1),y
-	txa
-	sta (TEMPADR2),y	; write also color
 	iny
 	bne -	; avoid wrap, so max 256 chars to draw
 +	rts
 
 ; ------------------------- bcd 6 digit drawing
 ; Input	TEMPADR0	address of bcd number
-;	TEMP0		color of text
-; 	Y		row to draw
-;	X		column to draw
-; Uses	TEMP0, TEMPADR1, TEMPADR2
+;	TEMPADR1	address to write it to
+; Uses	A,Y,Stack
 printnumber
-	stx TEMPADR2
-	; prepare target address and colorram address
-	lda scroffmul40tableL, y
-	clc
-	adc TEMPADR2
-	sta TEMPADR1
-	lda scroffmul40tableH, y
-	adc #0
-	sta TEMPADR1+1
-	lda coloffmul40tableL, y
-	clc
-	adc TEMPADR2
-	sta TEMPADR2
-	lda coloffmul40tableH, y
-	adc #0
-	sta TEMPADR2+1
 	; read 3 numbers and push to stack
 	ldy #0
 -	lda (TEMPADR0),y
@@ -474,8 +521,6 @@ printnumber
 	clc
 	adc #$30
 	sta (TEMPADR1),y
-	lda TEMP0
-	sta (TEMPADR2),y
 	dey
 	bpl -
 	rts
@@ -504,6 +549,7 @@ check_highscore
 	rts	; score is higher, done
 ++	; for current place, score is lower, check next or abort
 	inx
+	iny
 	iny
 	iny
 	iny
@@ -545,8 +591,8 @@ enter_highscore
 	bne -
 	; write score, as first multiply x with 3
 	lda TEMP1
-	asl	; now carry clear
-	adc TEMP1
+	asl
+	asl
 	tax
 	lda score
 	sta halloffame_scores+2,x
@@ -581,7 +627,7 @@ copy_highscore_entry
 	tax
 	ldy #3
 -	lda halloffame_scores,x
-	sta halloffame_scores+3,x
+	sta halloffame_scores+4,x
 	inx
 	dey
 	bne -
@@ -650,15 +696,6 @@ mainlogo_colors	; 48 colors to be looped
 ;!byte  5, 8, 8, 8, 7, 7, 1, 7
 ;!byte  7, 8, 8, 8,11,11,11,11
 
-scroffmul40tableL	; screen line plus 7 mul 40
-!for COUNT, 0, 17 { !byte <(SCREEN0+(7+COUNT)*40) }
-scroffmul40tableH	; screen line plus 7 mul 40
-!for COUNT, 0, 17 { !byte >(SCREEN0+(7+COUNT)*40) }
-coloffmul40tableL	; screen line plus 7 mul 40
-!for COUNT, 0, 17 { !byte <(COLORRAM+(7+COUNT)*40) }
-coloffmul40tableH	; screen line plus 7 mul 40
-!for COUNT, 0, 17 { !byte >(COLORRAM+(7+COUNT)*40) }
-
 !src "data/mainlogo_rle.a"
 
 mainscreen_text0	; @ is translated to 0x00, terminator char.
@@ -683,25 +720,34 @@ mainscreen_text9
 !scr "https://github.com/thojor79/bacillus"
 !byte 100
 !scr "c64@"
+; main colors per line. we need rather a table of color gradients,
+; and per line an index in the table.
+mainscreen_color_indices
+!byte 0,1,1,2,2,2,3,3,4,5,5,6,6,6,7,7,7,7
+mainscreen_color_gradients	; 8x8 bytes
+!byte  3,13,13, 1,13,13, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3
+!byte  5,13,13, 1,13,13, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5
+!byte  4,14,14, 1,14,14, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4
+!byte 10,15,15, 1,15,15,10,10,10,10,10,10,10,10,10,10,10,10,10,10
+!byte  7, 1, 1, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7
+!byte 15,13,13, 1,13,13,15,15,15,15,15,15,15,15,15,15,15,15,15,15
+!byte 12,15,15, 1,15,15,12,12,12,12,12,12,12,12,12,12,12,12,12,12
+!byte 11,12,12,15,12,12,11,11,11,11,11,11,11,11,11,11,11,11,11,11
 
-halloffame_nrs
-!scr "01@02@03@04@05@06@07@08@09@10@"
+; all data for hall of fame. 10*16+10*4 = 160+40 = 200 bytes.
 halloffame_names
 !for COUNT, 0, 9 { !scr "Thorsten Jordan@" }
 halloffame_scores
-;!for count, 0, 9 { !scr "000000@" }
-!byte $00,$10,$00
-!byte $00,$09,$00
-!byte $00,$08,$00
-!byte $00,$07,$00
-!byte $00,$06,$00
-!byte $00,$05,$00
-!byte $00,$04,$00
-!byte $00,$03,$00
-!byte $00,$02,$00
-!byte $00,$01,$00
-halloffame_colors
-!byte 1,15,15,12,12,12,11,11,11,11
+!byte $00,$10,$00,$00
+!byte $00,$09,$00,$00
+!byte $00,$08,$00,$00
+!byte $00,$07,$00,$00
+!byte $00,$06,$00,$00
+!byte $00,$05,$00,$00
+!byte $00,$04,$00,$00
+!byte $00,$03,$00,$00
+!byte $00,$02,$00,$00
+!byte $00,$01,$00,$00
 
 cbmchartocopy
 !byte 32, 48,49,50,51,52,53,54,55,56,57, 67,68,69,70,73,76,79,82,83,86,58
