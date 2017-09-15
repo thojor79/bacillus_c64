@@ -4,7 +4,7 @@
 
 # specify data files explicitly
 
-bacillus.prg : src/game.a src/macros.a src/actor.a src/intro.a src/rasterirq.a src/mainscreen.a src/blendin.a src/level.a src/scrolling.a data/textcharset_sprdata.a data/introscreen_rle.a data/mainlogo_rle.a data/cheese_alltiles_chardata.a data/level*sprites_rle.a data/cheese_level*_rle.a
+bacillus.prg : src/game.a src/macros.a src/actor.a src/intro.a src/rasterirq.a src/mainscreen.a src/blendin.a src/level.a src/scrolling.a data/textcharset_sprdata.a data/introscreen_rle.a data/mainlogo_rle.a data/cheese_alltiles_chardata.a data/level*sprites_rle.a data/cheese_level*_rle.a data/candy_alltiles_chardata.a data/green_alltiles_chardata.a
 	acme src/game.a
 	
 bacillus.all : bacillus.prg
@@ -22,7 +22,7 @@ test : testsrc/*.a
 	acme testsrc/bitmapview_rle.a
 	acme testsrc/codetest.a
 
-data : gfx/textcharset.png gfx/introscreen.png gfx/mainlogo.png gfx/cheese_alltiles.png gfx/candy_alltiles.png
+data : gfx/textcharset.png gfx/introscreen.png gfx/mainlogo.png
 	cd gfx && ../convert/c64fy.py -hires 1 -sprite 0 -quiet 1 -color 1 textcharset.png && mv textcharset_sprdata.a ../data && cd ..
 	cd gfx && ../convert/c64fy.py -quiet 1 introscreen.png && mv introscreen_bmpdata_rle.a ../data/introscreen_rle.a && cd ..
 	cd gfx && ../convert/c64fy.py -quiet 1 -color 1 mainlogo.png && mv mainlogo_bmpdata_rle.a ../data/mainlogo_rle.a && cd ..
@@ -34,8 +34,10 @@ leveldata : gfx/cheese_level1.png gfx/cheese_level2.png gfx/*alltiles.png
 	cd gfx && ../convert/indexpng_to_data.py candy_level1.png && mv candy_level1_rle.a ../data && rm candy_level1_raw.a && cd ..
 	cd gfx && ../convert/c64fy.py -quiet 1 -charset 234 -tilewidth 2 -tileheight 2 -color 9 -color 8 -color 7 -datalabels 0 cheese_alltiles.png && mv cheese_alltiles_chardata.a ../data/ && mv cheese_alltiles_fixcolors.a ../data/ && mv cheese_alltiles_tiledata.a ../data/ && cd ..
 	cd gfx && ../convert/c64fy.py -quiet 1 -charset 234 -tilewidth 2 -tileheight 2 -color 14 -color 15 -color 9 -datalabels 0 candy_alltiles.png && mv candy_alltiles_chardata.a ../data/ && mv candy_alltiles_fixcolors.a ../data/ && mv candy_alltiles_tiledata.a ../data/ && cd ..
+	cd gfx && ../convert/c64fy.py -quiet 1 -charset 234 -tilewidth 2 -tileheight 2 -color 0 -color 13 -color 9 -datalabels 0 green_alltiles.png && mv green_alltiles_chardata.a ../data/ && mv green_alltiles_fixcolors.a ../data/ && mv green_alltiles_tiledata.a ../data/ && cd ..
 	cd gfx && ../convert/c64fy.py -quiet 1 -charset 64 -tilewidth 2 -tileheight 2 -color 9 -color 8 -color 7 -datalabels 0 -appendzeros 0 -reducechars 0 cheese_trap_tiles.png && mv cheese_trap_tiles_chardata.a ../data/ && rm cheese_trap_tiles_fixcolors.a && rm cheese_trap_tiles_tiledata.a && cd ..
 	cd gfx && ../convert/c64fy.py -quiet 1 -charset 64 -tilewidth 2 -tileheight 2 -color 14 -color 15 -color 9 -datalabels 0 -appendzeros 0 -reducechars 0 candy_trap_tiles.png && mv candy_trap_tiles_chardata.a ../data/ && rm candy_trap_tiles_fixcolors.a && rm candy_trap_tiles_tiledata.a && cd ..
+	cd gfx && ../convert/c64fy.py -quiet 1 -charset 64 -tilewidth 2 -tileheight 2 -color 0 -color 13 -color 9 -datalabels 0 -appendzeros 0 -reducechars 0 green_trap_tiles.png && mv green_trap_tiles_chardata.a ../data/ && rm green_trap_tiles_fixcolors.a && rm green_trap_tiles_tiledata.a && cd ..
 	rm -f gfx/*_c64.png gfx/*.a
 
 spritedata : gfx/*sprite*

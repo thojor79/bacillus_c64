@@ -4,7 +4,17 @@ ToDo - in categories
 BUGS
 ====
 
--
+If the background tiles are not hires/lowcolor but multicolor they flicker
+while scrolling and scrolling seems to be slower some times
+the slowdown seems to happen when many enemies are on screen.
+the animated characters and the enemy computation takes too much raster
+time. it would be sufficient to compute actor movement every 2nd frame and
+linearily interpolate in between and/or compute char animations in various
+frames. e.g. take 2k of free sprite space and compute new charset there
+interleaved over many frames then switch charset...
+
+Green tiles are somehow broken, the number of characters used seems wrong,
+so the number of chars with animation don't match.
 
 
 VISUAL GLITCHES
@@ -57,18 +67,13 @@ we can move 26 lines and fill the sprite data with wrap around buffer, e.g.
 MORE DATA
 =========
 
-implement data for more levels! maybe same tileset and just other level
-first, later new tilesets for other worlds/levels
-one level with large room only enterable by right walk, closed by vapor tile
-More tilesets: candy world / salad world etc.!
-candy: bg color 14, fg colors light grey or white and red or dark grey,
-individual colors for tiles then all simple colors like red, green, blue,
-yellow, purple etc.
-candy needs different enemy sprite colors, so set them later (rather dark
-colors)
-green world, colors light green, green, bright red or orange?
-lower individual colors: red, magenta, yellow, maybe mix yellow and light
-green for lemon
+finish green world tile sets: bubbling brown pool as trap, only use it in
+lowest row then.
+paint tree with brown/green/light green as obstacle B and only use it in
+second lowest row.
+Green vines as spiral / twisted as obstacle A.
+Green/brown islands with roots at bottom or just green as islands.
+Roots with some green as ceiling.
 
 
 
@@ -104,6 +109,8 @@ It takes at least 147 raster lines (150 lines ~ 9000cyc with badlines, so
 
 Ideas for later
 ===============
+
+Many illegal opcodes of the C64 are very handy. Use them more in the code.
 
 Many checks like collisions between player and enemy doesn't need to be done
 every frame with 50fps, every 2nd or 4th frame is ok. For more than 7
