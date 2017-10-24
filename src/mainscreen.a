@@ -278,6 +278,12 @@ draw_halloffame
 	; wrong cheat, reset chain
 	ldx #$FF
 +	inx
+	txa
+	sec
+	sbc #5
+	bpl +
+	lda #0
++	sta VICBGCOL
 	jmp --
 +++	; now if x >= 5, x - 4 is start level
 	cpx #5
@@ -286,6 +292,7 @@ draw_halloffame
 	bcs +
 	+addx 256-4	; trashes accu!
 	stx TEMP1
+	+set8im VICBGCOL, 0
 	; set dummy raster irq and return
 +	sei
 	+set16im $FFFE, rasterirq_noop
