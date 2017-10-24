@@ -100,9 +100,10 @@ run_level
 	+set8im VICSPRITEENABLE, $FF
 
 ; --------------------------------------- main loop of a level
+;DEBUG_TIMING = 1
 mainloop
 	; for debugging of time (re)set BG color
-;	+set8im VICBGCOL, 0
+!ifdef DEBUG_TIMING { +set8im VICBGCOL, 0 }
 	; wait until raster line is at bottom of foreground screen
 -	lda VICRASTER
 	cmp #251	; end of visible screen
@@ -114,33 +115,41 @@ mainloop
 	; when scrolling and all 8 actors are active we still have ~40
 	; raster lines left at least (mostly much more). This means roughly
 	; 85% of CPU time are used at most.
-;	+set8im VICBGCOL, 13
 	; first handle animation of characters, not so critical, but fast, must be done before color ram copy!
+!ifdef DEBUG_TIMING { +set8im VICBGCOL, 1 }
 	jsr compute_char_animations
 	; write actor positions to sprite data, rather critical, do this before color ram copy! it is very fast.
+!ifdef DEBUG_TIMING { inc VICBGCOL }
 	jsr update_actors
 	; check if scrolling must be handled and do the scrolling! very critical with color ram copy!
 	; note! this sets renderframebuffer_adrmsb.
-	jsr handle_scrolling
+!ifdef DEBUG_TIMING { inc VICBGCOL }
+	jsr handle_scrolling	; this part takes most time
 	;
 	; not so time critical tasks to be done every frame
 	;
+!ifdef DEBUG_TIMING { inc VICBGCOL }
 	jsr check_actor_collisions
 	; Read joystick positions and handle input
 	jsr check_joy2_state
 	; Actor 0 is player and has special movement
 	jsr player_control_joy2
 	; Handle all actor movements, walk/jump/fall/kill
-	jsr handle_actor_movement
+!ifdef DEBUG_TIMING { inc VICBGCOL }
+	jsr handle_actor_movement	; this is expensive with 8 actors on screen
 	; handle killed enemies or player
 	jsr handle_dead_actors
 	; change actor shapes
+!ifdef DEBUG_TIMING { inc VICBGCOL }
 	jsr compute_actor_animations
 	; handle ground vaporizing below actor and traps
+!ifdef DEBUG_TIMING { inc VICBGCOL }
 	jsr handle_special_tiles_below_player
 	; handle the AI for actor movement
+!ifdef DEBUG_TIMING { inc VICBGCOL }
 	jsr handle_actor_behaviour
 	; increment frame counter
+!ifdef DEBUG_TIMING { inc VICBGCOL }
 	inc framecounter
 	; cycle raster bar colors
 	jsr cycle_score_panel_colors
