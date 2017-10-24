@@ -450,7 +450,7 @@ check_level2
 	beq prepare_level2
 	jmp check_level3
 prepare_level2
-	jsr prepare_world_1
+	jsr prepare_world_3
 	; load data for level 2
 	; tiles and sprites are the same!
 	; RLE decode level tile data and generate tile numbers from tile category indices
@@ -491,35 +491,35 @@ checkhighscore
 
 prepare_world_1
 	; level tile data and tile indices, stored
-	+memcopy_pages LEVEL_TILE_DATA, level1_tiledata, 2	; 0.5k = 2 pages
+	+memcopy_pages LEVEL_TILE_DATA, world1_tiledata, 2	; 0.5k = 2 pages
 	; level charset
-	+memcopy_pages VICCHARSET, level1_chardata, 7	; 2k-1p = 7 pages = 224 chars = 56 tiles minimum
-	+memcopy_bytes VICCHARSET+224*8, level1_chardata+224*8, 10*8	; copy chars 224...233
-	+memcopy_pages char_animation_data+$200, level1_trapdata, 2
+	+memcopy_pages VICCHARSET, world1_chardata, 7	; 2k-1p = 7 pages = 224 chars = 56 tiles minimum
+	+memcopy_bytes VICCHARSET+224*8, world1_chardata+224*8, 10*8	; copy chars 224...233
+	+memcopy_pages char_animation_data+$200, world1_trapdata, 2
 	jsr prepare_char_animations
 	; level sprites - note! write at most 31 pages (7.75k), don't overwrite last page because of IRQ vectors
-	+set16im TEMPADR0, level1_sprites_rle
+	+set16im TEMPADR0, world1_sprites_rle
         +set16im TEMPADR1, VICSPRITES_GAME
         jsr rle_decode
 	; level specific colors
-	+copy8 VICFGCOL, level1_fixcolors
+	+copy8 VICFGCOL, world1_fixcolors
 	sta rasterbar_colors + 7	; store also for rasterirq, is level specific
-	+copy8 VICFGCOL+1, level1_fixcolors+1
-	+copy8 VICFGCOL+2, level1_fixcolors+2
+	+copy8 VICFGCOL+1, world1_fixcolors+1
+	+copy8 VICFGCOL+2, world1_fixcolors+2
 	+set8im VICSPRITECOMMONCOLOR0, 0
 	+set8im VICSPRITECOMMONCOLOR1, 1
 	rts
 
 prepare_world_2
 	; level tile data and tile indices, stored
-	+memcopy_pages LEVEL_TILE_DATA, level3_tiledata, 2	; 0.5k = 2 pages
+	+memcopy_pages LEVEL_TILE_DATA, world2_tiledata, 2	; 0.5k = 2 pages
 	; level charset
-	+memcopy_pages VICCHARSET, level3_chardata, 7	; 2k-1p = 7 pages = 224 chars = 56 tiles minimum
-	+memcopy_bytes VICCHARSET+224*8, level3_chardata+224*8, 10*8	; copy chars 224...233
-	+memcopy_pages char_animation_data+$200, level3_trapdata, 2
+	+memcopy_pages VICCHARSET, world2_chardata, 7	; 2k-1p = 7 pages = 224 chars = 56 tiles minimum
+	+memcopy_bytes VICCHARSET+224*8, world2_chardata+224*8, 10*8	; copy chars 224...233
+	+memcopy_pages char_animation_data+$200, world2_trapdata, 2
 	jsr prepare_char_animations
 	; level sprites - note! write at most 31 pages (7.75k), don't overwrite last page because of IRQ vectors
-	+set16im TEMPADR0, level1_sprites_rle
+	+set16im TEMPADR0, world1_sprites_rle
         +set16im TEMPADR1, VICSPRITES_GAME
         jsr rle_decode
 	; set new dark colors for sprites!
@@ -548,15 +548,36 @@ prepare_world_2
 	dex
 	bpl -
 	; level specific colors
-	+copy8 VICFGCOL, level3_fixcolors
+	+copy8 VICFGCOL, world2_fixcolors
 	sta rasterbar_colors + 7	; store also for rasterirq, is level specific
-	+copy8 VICFGCOL+1, level3_fixcolors+1
-	+copy8 VICFGCOL+2, level3_fixcolors+2
+	+copy8 VICFGCOL+1, world2_fixcolors+1
+	+copy8 VICFGCOL+2, world2_fixcolors+2
 	+set8im VICSPRITECOMMONCOLOR0, 0
 	+set8im VICSPRITECOMMONCOLOR1, 1
 	rts
 world_2_spritecolors
 !byte 0,2,6,11
+
+prepare_world_3
+	; level tile data and tile indices, stored
+	+memcopy_pages LEVEL_TILE_DATA, world3_tiledata, 2	; 0.5k = 2 pages
+	; level charset
+	+memcopy_pages VICCHARSET, world3_chardata, 7	; 2k-1p = 7 pages = 224 chars = 56 tiles minimum
+	+memcopy_bytes VICCHARSET+224*8, world3_chardata+224*8, 10*8	; copy chars 224...233
+	+memcopy_pages char_animation_data+$200, world3_trapdata, 2
+	jsr prepare_char_animations
+	; level sprites - note! write at most 31 pages (7.75k), don't overwrite last page because of IRQ vectors
+	+set16im TEMPADR0, world1_sprites_rle
+        +set16im TEMPADR1, VICSPRITES_GAME
+        jsr rle_decode
+	; level specific colors
+	+copy8 VICFGCOL, world3_fixcolors
+	sta rasterbar_colors + 7	; store also for rasterirq, is level specific
+	+copy8 VICFGCOL+1, world3_fixcolors+1
+	+copy8 VICFGCOL+2, world3_fixcolors+2
+	+set8im VICSPRITECOMMONCOLOR0, 0
+	+set8im VICSPRITECOMMONCOLOR1, 1
+	rts
 
 ; --------------------- function library ----------------------
 
@@ -825,62 +846,66 @@ chardata_columnshift_values
 ; Text sprites (at max 64 sprites)
 !src "data/textcharset_sprdata.a"
 
-; -------------------------- data for levels ------------------------------
+; -------------------------- data for worlds ------------------------------
 
-; ----------------- LEVEL 1
-
-level1_fixcolors
+world1_fixcolors
 !src "data/cheese_alltiles_fixcolors.a"
 
-; sprite data for level 1 packed as RLE.
+world2_fixcolors
+!src "data/candy_alltiles_fixcolors.a"
+
+world3_fixcolors
+!src "data/green_alltiles_fixcolors.a"
+
+; sprite data for world 1 packed as RLE.
 ; note: contains also player and player die frames (because enemies are the
 ; same for all levels anyway atm)
-level1_sprites_rle
+world1_sprites_rle
 !src "data/level1_sprites_rle.a"
 
 ; pack level data from png as rle and store it.
 ; unpack directly to $B400 and replace every category number by real tile
 ; level gfx is paletted png to have indices directly.
 
-; The data for a level (256 tiles horizontally, 12 tiles vertically, hence 3072 bytes).
-level1_data_rle
-!src "data/cheese_level1_rle.a"
-
 ; data for tiles first
 !align 255, 0
-level1_tiledata
+world1_tiledata
 !src "data/cheese_alltiles_tiledata.a"
+
+world2_tiledata
+!src "data/candy_alltiles_tiledata.a"
+
+world3_tiledata
+!src "data/green_alltiles_tiledata.a"
 
 ; be careful - blocks with one color are coded as multicolor, gives problems with background tiles!
 !align 255,0
-level1_chardata
+world1_chardata
 !src "data/cheese_alltiles_chardata.a"
 
-level1_trapdata
+world2_chardata
+!src "data/candy_alltiles_chardata.a"
+
+world3_chardata
+!src "data/green_alltiles_chardata.a"
+
+world1_trapdata
 !src "data/cheese_trap_tiles_chardata.a"
 
-; ----------------- LEVEL 2
+world2_trapdata
+!src "data/candy_trap_tiles_chardata.a"
+
+world3_trapdata
+!src "data/green_trap_tiles_chardata.a"
+
+
+; -------------------------- data for levels ------------------------------
+
+level1_data_rle
+!src "data/cheese_level1_rle.a"
 
 level2_data_rle
 !src "data/cheese_level2_rle.a"
 
-; ----------------- LEVEL 3
-
-level3_fixcolors
-!src "data/candy_alltiles_fixcolors.a"
-
-; level3_spritecolors ; fixme define!
-
 level3_data_rle
 !src "data/candy_level1_rle.a"
-
-!align 255, 0
-level3_tiledata
-!src "data/candy_alltiles_tiledata.a"
-
-!align 255,0
-level3_chardata
-!src "data/candy_alltiles_chardata.a"
-
-level3_trapdata
-!src "data/candy_trap_tiles_chardata.a"
