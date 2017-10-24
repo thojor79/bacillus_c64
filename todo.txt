@@ -12,9 +12,14 @@ time. it would be sufficient to compute actor movement every 2nd frame and
 linearily interpolate in between and/or compute char animations in various
 frames. e.g. take 2k of free sprite space and compute new charset there
 interleaved over many frames then switch charset...
+with sound it would be even slower.
 
 Green tiles are somehow broken, the number of characters used seems wrong,
 so the number of chars with animation don't match.
+maybe trap animation tiles use not the same chars as usual
+trap tiles are #12 and #13, chars 2e,2f,32,33.
+but green tile data as well. maybe tiledata converter reuses chars...
+no. weird.
 
 
 VISUAL GLITCHES
@@ -277,6 +282,45 @@ playable. E.g. if player walks through a forest, many screens could look the
 same. Maybe don't store full trees but vertical layers of leaves, a set of
 trunks etc. and combine it. Pine trees can have various vertical layers of
 needle leaves.
+
+Rendering: store rectangular images of block size (multiples of 4x8 pixels,
+so 8 bytes per block plus 2 bytes color).
+Only render to full blocks, so positioning x/y only at multiple of 4/8
+pixels. Image has one neutral color optionally. So either copy blocks fully
+or mask them out and blend them in:
+a bitmap byte has 4 pixels with 2 bit each. To generate the mask for the
+byte do:
+a = byte & 10101010
+b = byte & 01010101
+m = (a >> 1) | (b << 1) | byte
+so mask has 1 bits where image data is.
+screen-byte & ~m | (byte & m)
+to compute blending in.
+But only if the 3 colors of the image block already exist in screen block.
+If not, count screen block colors and buffer colors, as first convert screen
+block to 4*8 bytes with a color index per byte. Then copy image block with
+masking to the scratch buffer. As best place the 32 byte scratch buffer in
+zero page. Then count for all 16 colors that are not background color how
+often they are used. The 3 most used colors will be the new block colors.
+Replace other colors by one of the 3 new with least error. Have a 16x16
+error matrix table in memory. Error is 0...255. Replace every color by least
+bad alternative. Then convert scratch buffer back to screen block.
+What will it cost? For every pixel there are surly ~20 cycles for
+conversion, copy from and to screen and from image takes 60 cycles per
+pixel, counting error and checking and replacing color say 20 more cycles
+per pixel, so 80*32=2560 cycles per block. As a very rough guess. That would
+take 50 raster lines per block. That would be 2.6ms per block. For full
+screen with large area of 20x10 blocks that would be 500ms or 0.5seconds to
+fill the screen but that would rather be fast - if we don't have overdraw.
+However we certainly have factor 2 to 3 with overdraw so 1.0-1.5 seconds to
+render a screen, what would be still good.
+Advantage: every operation is rather simple.
+The idea can be tested with a simple python program first! so if the screens
+don't look good we can stop it, otherwise implement the concept.
+We would need many graphics of tree trunks and leaves etc.
+Overdraw could be much larger. Preparing images in gimp would be rather
+easy. Rendering brick walls could be simple by placing repeatable pattern in
+multiple of blocks.
 
 SID Composing
 =============
