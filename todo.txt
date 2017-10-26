@@ -48,14 +48,6 @@ GENERAL FEATURES
 implement blend out effect for level end - reverse reading of blend in,
 rather easy to do but low effect
 
-main screen: high score - load at game start from disk and write it after a
-new highscore in main screen. blend in kernal and use simple load/save
-routines, see bofh source code for an example. can work with irq disabled,
-so we don't need to set up much, only need to save something in zeropage or
-clear afterwards.
-disk routines also need some zero page bits. research what or how zeropage
-is changed by using the routines.
-
 outtro: implement game complete screen, e.g. the bacillus logo or some food
 picture, maybe reuse intro logo.
 
@@ -67,6 +59,9 @@ enough. We can easily change colors per line then. two lines and two spaces
 are 26 lines, i.e. 8 sprites vertically give 208 lines. Best would be 9, so
 we can move 26 lines and fill the sprite data with wrap around buffer, e.g.
 8 vertical sprites, total 8x8x64 bytes=4k.
+
+Maybe change background color in intro screen per line for an effect or use
+tech tech to wobble image. Maybe also for outtro text.
 
 
 MORE DATA
@@ -100,6 +95,8 @@ are), so only 168 bytes are lost for sprite data. However changing the
 VICMEMCTRL register in time (needs a bad line) doesn't work stable and
 blend_in sprites further complicates it, so sacrifice 20 characters of tile
 charset for now.
+With later games we can use a bigger score panel and more raster lines for
+transition so we can do that more easily.
 
 Maybe animated boni tiles in hires with white border and white logo like
 rotating molecule or jumping water drop, better than what we have now.
@@ -139,9 +136,6 @@ implement more actor behaviors
 Behaviour: follow player, flying pattern, flying homing
 maybe use only 8 enemies with 1 bit to control behaviour - would reduce
 sprite data as well - but also ok to use 16 as it is now
-
-load/save highscores to disk. own disk routines or better blend in kernal
-code for this.
 
 secret passages or rooms in levels - not for this game
 
@@ -192,6 +186,10 @@ Ideas for other games / projects
 create a Turrican like game. Also shots as characters are needed then, do
 the shots check if an enemy is over them or does every enemy check all
 characters below it?
+
+Ultimate coding would be 8way scrolling 50fps maybe with some background
+parallax scrolling and also sprite multiplexer (24 sprites or so) and maybe
+sound playing. Only possible with interleaved AI/physics.
 
 However randomly or procedurally generated content would be cool. Like a RPG
 game with huge world map (256x256 maybe) so that the C64 can generate the

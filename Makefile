@@ -4,7 +4,7 @@
 
 # specify data files explicitly
 
-bacillus.prg : src/game.a src/macros.a src/actor.a src/intro.a src/rasterirq.a src/mainscreen.a src/blendin.a src/level.a src/scrolling.a data/textcharset_sprdata.a data/introscreen_rle.a data/mainlogo_rle.a data/cheese_alltiles_chardata.a data/level*sprites_rle.a data/cheese_level*_rle.a data/candy_alltiles_chardata.a data/green_alltiles_chardata.a
+bacillus.prg : src/game.a src/macros.a src/actor.a src/diskio.a src/intro.a src/rasterirq.a src/mainscreen.a src/blendin.a src/level.a src/scrolling.a data/textcharset_sprdata.a data/introscreen_rle.a data/mainlogo_rle.a data/cheese_alltiles_chardata.a data/level*sprites_rle.a data/cheese_level*_rle.a data/candy_alltiles_chardata.a data/green_alltiles_chardata.a
 	acme src/game.a
 	
 bacillus.all : bacillus.prg

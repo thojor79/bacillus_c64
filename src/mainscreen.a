@@ -192,6 +192,8 @@ mainscreen
 	ldx TEMP5
 	+set16im TEMPADR0, SCREEN0+23*40+13
 	jsr enter_highscore
+	; Now save new highscore to disk!
+	jsr save_highscore
 	; afterwards clear space where highscore is shown
 	; and show it normally. Clear 7 lines of 40 characters,
 	; a bit more than 256 bytes, just clear two pages

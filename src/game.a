@@ -232,6 +232,7 @@ VICCTRL2 = $D016
 VICMEMCTRL = $D018
 VICCTRL1 = $D011
 VICRASTER = $D012
+VICIRQMASK = $D01A
 TILEWIDTH = 2
 TILEHEIGHT = 2
 TILEWIDTHINPIXELS = TILEWIDTH*8
@@ -245,6 +246,7 @@ PIXELTOPOS = 16
 PIXELTOTILE = 16
 CIA1_DATAPORT_A = $DC00
 CIA1_DATAPORT_B = $DC01
+CIA1_ICR = $DC0D
 CIA2_DATAPORT_A = $DD00
 SCROLL_RIGHT = 1
 SCROLL_LEFT = 2
@@ -357,6 +359,8 @@ char_animation_data = $0200	; space for 512 bytes + 1024 bytes
 
 main
 ; ---------------------------- Initialization
+	jsr load_highscore		; as first load high score data.
+
 ; disable interrupts
 	sei
 
@@ -379,11 +383,11 @@ main
 	+set16im $FFFE, rasterirq_noop	; set to address that does nothing
 	+set8im VICRASTER, 0
 	+set8im VICCTRL1, $1B	; clear 9th bit of raster line selector, set mc mode
-	+set8im $D01A, $01	; Set only raster as source for IRQ of VIC
+	+set8im VICIRQMASK, $01	; Set only raster as source for IRQ of VIC (default $F0)
 	lda #$7F		; disable timer IRQs
-	sta $DC0D
-	lda $DC0D
-	asl $D019	; Acknowledge possible pending raster irq
+	sta CIA1_ICR
+	lda CIA1_ICR		; ack CIA irq
+	asl $D019		; Acknowledge possible pending raster irq
 
 ; Initialize data below I/O area (text sprites)
 	; address 1 = $30: all RAM
@@ -818,6 +822,9 @@ prepare_char_animations_next_limit_limit_value
 
 ; Intro
 !src "src/intro.a"
+
+; Highscore disk io
+!src "src/diskio.a"
 
 ; handling of main screen
 !src "src/mainscreen.a"

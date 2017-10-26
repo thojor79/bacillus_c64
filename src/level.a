@@ -464,7 +464,7 @@ rasterirq_scoreline
 ; We disabled all IRQ sources, so we only have raster IRQs here!
 ;	lda $D019		; check if IRQ was from raster line
 ;	bmi dorasterirq		; Bit 7 set: raster IRQ was interrupt reason
-;	lda $DC0D		; ACK other irq
+;	lda CIA1_ICR		; ACK other irq
 ;	cli			; enable IRQs
 ;	jmp $EA31		; jump to system IRQ handler
 ; Note that if we would disable kernal rom as well, system would directly jump

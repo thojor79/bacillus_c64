@@ -31,7 +31,7 @@ Technical facts:
 * score accounting
 * intro
 * main screen
-* 3 levels in 2 worlds
+* 3 levels in 3 worlds
 * special tiles that vaporize
 * special boni like invulnerability and 1-up
 * dying animation
@@ -39,13 +39,12 @@ Technical facts:
 * cheat in main menu to select level
 * two different actor behaviours
 * traps
+* high scores loaded from and saved to disk
 
 Planned:
 * Outtro
-* Highscore handling in mainscreen
 * More levels (planned 6)
-* More level graphics
-* More enemies
+* Some more gfx gimmicks
 * Music/Sfx
 
 ![ScreenShot](screenshots/level1.jpg)

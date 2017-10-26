@@ -1,0 +1,119 @@
+; Bacillus_c64
+; Copyright (C) 2016-2017  Thorsten Jordan.
+; 
+; This program is free software; you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation; either version 2 of the License, or
+; (at your option) any later version.
+; 
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+; ***************************************************************************************
+;
+; all code related to disk io (used for load/save of high score)
+;
+; ***************************************************************************************
+
+kernal_set_filename = $FFBD
+kernal_load = $FFD5
+kernal_open = $FFC0
+kernal_close = $FFC3
+kernal_save = $FFD8
+kernal_set_file_parameter = $FFBA
+LOGICAL_FILE_NR = 255
+HIGHSCORE_MEM_ADR = halloffame_names ; address
+HIGHSCORE_DATA_SIZE = 200 ; size, must be < 256.
+
+; logical file number : any from 1...255
+; device number 8 = first floppy
+; secondary address 0 = read, 1 = write, 15 = command/status
+
+set_highscore_filename
+	lda #12						; length of filename
+	ldx #<(highscore_filename + 3)	; address as Y/X
+	ldy #>(highscore_filename + 3)
+	jmp kernal_set_filename
+
+; save highscore data to disk
+save_highscore
+	sei				; do not allow IRQs, the IRQ vectors are not valid with active kernal!
+	+set8im $01, $36		; blend in Kernal and I/O, all else RAM
+	+set8im VICSPRITEENABLE, $0	; disable all sprites
+	+set16im $031A, $F34A		; set vector to open routine!
+	+set16im $031C, $F291		; set vector to close routine!
+	+set16im $028F, $EB48		; set vector for key request!
+	+set16im $0332, $F5ED		; set vector for save routine!
+	+set8im $DC02, $FF		; set CIA1 dataport to R/W!
+	+set8im VICIRQMASK, 0		; no sources for VIC IRQ
+	sta $02A1			; RS-232 NMI status clear!
+	; mute SID voices
+	;sta $D404
+	;sta $D404+7
+	;sta $D404+14
+	sta $9D				; disable Kernal messages
+	lda #LOGICAL_FILE_NR
+	ldy #$0F			; secondary number is 15 - needed for scratch
+	ldx last_used_device		; we need to scratch first before save or save fails (overwrite protect)
+	jsr kernal_set_file_parameter	; set logical file parameters.
+	lda #15				; length of filename, 3 chars prefix and 12 filename!
+	ldx #<highscore_filename
+	ldy #>highscore_filename
+	jsr kernal_set_filename
+	jsr kernal_open			; open/close needed to scratch file
+	lda #LOGICAL_FILE_NR		; Flag for close
+	jsr kernal_close
+	lda #LOGICAL_FILE_NR		; do we really need to set it again?!
+	ldy #$00			; secondary number is 0
+	ldx last_used_device
+	jsr kernal_set_file_parameter
+	jsr set_highscore_filename
+	+set16im TEMPADR0, HIGHSCORE_MEM_ADR
+	ldx #<(HIGHSCORE_MEM_ADR + HIGHSCORE_DATA_SIZE)
+	ldy #>(HIGHSCORE_MEM_ADR + HIGHSCORE_DATA_SIZE)
+	lda #TEMPADR0			; address of pointer in zero page
+	jsr kernal_save
+	; carry bit flags error. We ignore it here.
+	+set8im $01, $35		; blend in I/O else all RAM
+	+set8im VICIRQMASK, $01		; only raster IRQs as source
+	cli				; turn IRQs back on again! we can save without IRQs!
+	rts
+
+; load highscore data from disk
+; we don't need to prepare kernel disk io here. remember last used device here! use that or 8 for further operations!
+load_highscore
+	lda #LOGICAL_FILE_NR
+	ldy #$00			; load to defined address
+	ldx $BA				; look up last used device
+	cpx #$08			; keep if >= 8, otherwise use 8
+	bpl +
+	ldx #$08			; use first disk drive otherwise
++	stx last_used_device
+	jsr kernal_set_file_parameter	; use lfn,8,0
+	jsr set_highscore_filename
+	lda #$00			; load/verify flag: load
+	ldx #<HIGHSCORE_MEM_ADR
+	ldy #>HIGHSCORE_MEM_ADR
+	jsr kernal_load
+	; if carry bit is set, an error occured
+	; bcc +
+	; A contains error, $5=device not present, $4=file not found,
+	; $1d=load error, $0 = break/runstop pressed
+	; for now we ignore errors.
+	; +
+	rts
+
+last_used_device
+!byte 0
+
+diskio_mem_state
+!byte 0
+	
+highscore_filename
+!scr "S0:BACILLUS HSC"
