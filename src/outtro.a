@@ -1,0 +1,114 @@
+; Bacillus_c64
+; Copyright (C) 2016-2017  Thorsten Jordan.
+; 
+; This program is free software; you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation; either version 2 of the License, or
+; (at your option) any later version.
+; 
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+; ***************************************************************************************
+;
+;    outtro screen/scroller
+;
+; ***************************************************************************************
+
+VICBITMAPBLOCK_O = 0
+VICBITMAP_O = VICBANK*$4000+VICBITMAPBLOCK_O*$2000
+VICSCREENBLOCKBITMAP_O = 10
+VICBITMAPCHARDATA_O = VICBANK*$4000+VICSCREENBLOCKBITMAP_O*$0400
+; we have 16k and need 8k for bitmap, 1k for screen, 1k is blocked for color-ram,
+; and 4.5k are needed for the text scroller sprites. Beside that we have the 4k
+; range of I/O. However, bitmap, color and screen data are constant while displaying
+; the outtro, only sprite data changes periodically.
+; We need to store the font (2k) also.
+; So divide memory 8k | 2k | 1k | 4.5k
+; So store bitmap at $C000-$DFFF, screen at $E800 and sprites at $EC00.
+; Sprite data is $EC00-$FE00.
+
+show_outtro
+; set background color and turn off display
+	+set8im VICCTRL1, 0
+	+set8im VICBGCOL, 0
+	+copy8 VICFGCOL, introscreen_backgroundcolor
+
+; copy data to destination
+	sei			; we need to blend out I/O area and color RAM first
+	+set8im $01, $30	; set all RAM
+	+set16im TEMPADR0, introscreen_bitmapdata_rle
+	+set16im TEMPADR1, VICBITMAP_O
+	jsr rle_decode
+	+set8im $01, $31	; blend in char ROM
+	+memcopy_pages $E000, $D000, 8	; 8 pages, read character set
+	+set8im $01, $35	; blend in I/O and color RAM again, all RAM else
+	cli
+	+set16im TEMPADR0, introscreen_chardata_rle
+	+set16im TEMPADR1, VICBITMAPCHARDATA_O
+	jsr rle_decode
+	+set16im TEMPADR0, introscreen_colordata_rle
+	+set16im TEMPADR1, COLORRAM
+	jsr rle_decode
+
+; turn on display and set video mode and memory area
+	+set8im VICMEMCTRL, VICSCREENBLOCKBITMAP_O*16+VICBITMAPBLOCK_O*8    ; in bitmap mode bit 3 sets bitmap block
+	+set8im VICCTRL1, $3B
+	+set8im VICCTRL2, $18
+
+; initially clear all sprite data (4*4+2=18 pages)
+	ldx #0
+	txa
+-
+!for COUNT, 0, 17 {
+	sta $EC00+COUNT*$100,x
+}
+	dex
+	bne -
+
+; set up outtro raster irq (sprite multiplexer)
+
+; show all scroll text
+	+set8im TEMP0, 0	; line counter
+
+	jmp *
+
+; 24 characters per line, N lines
+outtro_text
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "012345678901234567890123"
+!scr "@"	; end marker
+
