@@ -46,7 +46,7 @@ show_outtro
 	+set16im TEMPADR0, introscreen_bitmapdata_rle
 	+set16im TEMPADR1, VICBITMAP_O
 	jsr rle_decode
-	+set8im $01, $31	; blend in char ROM
+	+set8im 1, $31	; blend in char ROM
 	+memcopy_pages $E000, $D000, 8	; 8 pages, read character set
 	+set8im $01, $35	; blend in I/O and color RAM again, all RAM else
 	cli
@@ -72,12 +72,103 @@ show_outtro
 	dex
 	bne -
 
+; set up sprite X coords, colors and visibility (X=88+N*24, 88,112,136,160,184,208,232,256 -> highbits $80
+	ldx #1
+!for COUNT, 0, 7 {
+	+set8im $D000+COUNT*2, <(88+COUNT*24)	; 320 pixel with 24 base offset, 192 width, rest 128, half 64, +24 = 88
+	stx $D027+COUNT
+}
+	+set8im $D010, $80
+	+set8im VICSPRITEENABLE, $FF
+
 ; set up outtro raster irq (sprite multiplexer)
+	sei
+	+set16im $FFFE, rasterirq_outtro_text
+	+set8im VICRASTER, OUTTRO_RL0-3
+	cli
+
+; fixme copy charset to sprite data for testing!
+	+memcopy_pages $EC00, $E000, 8	; 8 pages, read character set
+	+memcopy_pages $F400, $E000, 8	; 8 pages, read character set
 
 ; show all scroll text
-	+set8im TEMP0, 0	; line counter
+	+set8im TEMP5, OUTTRO_RL0	; sprite y coord
+	lda #0
+	sta TEMP3			; additional scroll register (0...25, shifts upwards)
+	lda #OUTTRO_FIRST_SPRITE_PTR
+	sta TEMP2			; sprite pointer current row
+	sta TEMP4			; sprite pointer first row
 
 	jmp *
+
+; generate a new line of sprites by copying char set data according to text values
+outtro_gen_new_sprite_line
+	; fixme
+	rts
+
+; sprite coordinates are 51+26*N, where N=0...8, the start coordinate can be
+; shifted 25 lines upwards for scrolling.
+; so raster lines are: 51, 77, 103, 129, 155, 181, 207, 233, 259.
+; so overflow for last sprite. But sprites >= 251 can't be seen either.
+; so it doesn't matter or we can stop when Y is >= 251 or carry bit set after add.
+; TEMP5 holds the current sprite start line (raster line + 3)
+; TEMP4 sprite pointer for first visible row
+; TEMP3 the additional scroll register
+; TEMP2 sprite pointer for first sprite in current row
+OUTTRO_RL0 = 51
+OUTTRO_FIRST_SPRITE_PTR = 11*16	; 176, +0...71
+
+; the raster irq that shows the texts
+rasterirq_outtro_text
+	pha
+	txa
+	pha
+	tya
+	pha
+	; Raster IRQ is triggered 2-3 lines above so we can set y coordinates first.
+	lda TEMP5
+!for COUNT, 0, 7 {
+	sta $D001+COUNT*2
+}
+	; load first sprite pointer
+	ldx TEMP2
+	; store it and the next 7 as base+0...7
+!for COUNT, 0, 6 {
+	stx VICBITMAPCHARDATA_O+$3F8+COUNT
+	inx
+}
+	stx VICBITMAPCHARDATA_O+$3F8+7
+	; increase sprite line and raster irq registers
+	lda TEMP5
+	clc
+	adc #26
+	bcs ++
+	cmp #251
+	bcs ++
+	sta TEMP5
+	sec
+	sbc #3
+	sta VICRASTER	; trigger next raster
+	lda TEMP2	; switch to next sprite row
+	clc
+	adc #8
+	cmp #(OUTTRO_FIRST_SPRITE_PTR + 72)		; handle wrap at sprite pos 72.
+	bcc +
+	lda #OUTTRO_FIRST_SPRITE_PTR
++	sta TEMP2
+	jmp rasterirq_ack_and_end
+++	; last line of sprites reached, reset all values
+	; raster line, coordinates, sprite pointers
+	lda #OUTTRO_RL0
+	sec
+	sbc TEMP3
+	sta TEMP5
+	sec
+	sbc #3
+	sta VICRASTER
+	+copy8 TEMP2, TEMP4
+	jmp rasterirq_ack_and_end
+
 
 ; 24 characters per line, N lines
 outtro_text

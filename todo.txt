@@ -4,15 +4,13 @@ ToDo - in categories
 BUGS
 ====
 
-If the background tiles are not hires/lowcolor but multicolor they flicker
-while scrolling and scrolling seems to be slower some times
-the slowdown seems to happen when many enemies are on screen.
-the animated characters and the enemy computation takes too much raster
-time. it would be sufficient to compute actor movement every 2nd frame and
-linearily interpolate in between and/or compute char animations in various
-frames. e.g. take 2k of free sprite space and compute new charset there
-interleaved over many frames then switch charset...
-with sound it would be even slower.
+Raster time is not enough for all tasks, if there are many enemies on
+screen. We could distribute work over frames or start copying the color ram
+earlier to solve the problem. The latter would be the easiest solution.
+Alternativly interpolate linearily every 2nd frame.
+The animated characters and the enemy computation takes too much raster
+time. Alternativly we could compute new charset over various frames and
+switch to it when it is done.
 
 Green tiles are somehow broken, the number of characters used seems wrong,
 so the number of chars with animation don't match.
@@ -79,6 +77,10 @@ Roots with some green as ceiling.
 
 INFO
 ====
+
+Background tiles with parallax scrolling need to be hires. If they would be
+multicolor, the scroll code would rotate bits, not bit pairs, so colors
+would oscillate.
 
 in interrupts don't save Y register if we don't change it - only in
 scoreline irq, and not really critical there
