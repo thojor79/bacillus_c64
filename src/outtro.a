@@ -88,7 +88,7 @@ show_outtro
 	cli
 
 ; fixme copy charset to sprite data for testing!
-	+memcopy_pages $EC00, $E000, 8	; 8 pages, read character set
+;	+memcopy_pages $EC00, $E000, 8	; 8 pages, read character set
 	+memcopy_pages $F400, $E000, 8	; 8 pages, read character set
 
 ; show all scroll text
@@ -98,12 +98,68 @@ show_outtro
 	lda #OUTTRO_FIRST_SPRITE_PTR
 	sta TEMP2			; sprite pointer current row
 	sta TEMP4			; sprite pointer first row
+	sta TEMP1			; text line counter
+	+set16im TEMPADR0, outtro_text	; source count
 
+; some flickering at first display...
+	; every 3 frame scroll up
+	; stop on fire button
+	; stop scroll when last line reached
+	jsr outtro_gen_new_sprite_line
 	jmp *
+
+; offset of sprite data address for every character of 24 in 8 sprites
+outtro_offset_table_lo
+!for COUNT, 0, 8 {
+!byte <(COUNT*64+0), <(COUNT*64+1), <(COUNT*64+2)
+}
+outtro_offset_table_hi
+!for COUNT, 0, 8 {
+!byte >(COUNT*64+0), >(COUNT*64+1), >(COUNT*64+2)
+}
 
 ; generate a new line of sprites by copying char set data according to text values
 outtro_gen_new_sprite_line
-	; fixme
+	; because 3 characters make up one sprite, we somehow need to handle 3 characters
+	; for start address.
+	; for (u8 i = 0; i < 24; ++i)
+	;   srcadr = charadr + *(textadr + i) * 8;
+	;   dstadr = spritebaseadr + *(offsettable + i)
+	;   for (u8 j = 0; j < 8; ++j)
+	;     *dstadr = *srcadr;
+	;     dstadr += 3
+	;     srcadr += 1
+	+set8im TEMP0, 0		; char counter 0...24
+outtro_gen_new_sprite_line_next_char
+	ldy TEMP0	
+	+set8im TEMPADR1+1, $E0/8	; prepare srcadr high byte
+	lda (TEMPADR0),y		; load next char
+	asl
+	rol TEMPADR1+1
+	asl
+	rol TEMPADR1+1
+	asl
+	rol TEMPADR1+1
+	sta TEMPADR1			; srcadr done
+	lda outtro_offset_table_hi,y
+	clc
+	adc #$EC			; fixme dstadr changes by sprite line!
+	sta outtro_adr2+2
+	lda outtro_offset_table_lo,y
+	sta outtro_adr2+1		; dstadr done
+	ldx #0				; line of char data
+	ldy #0
+-	lda (TEMPADR1),y		; load source
+outtro_adr2
+	sta $BEEF			; store data
+	+add16im8 outtro_adr2+1, 3
+	iny
+	cpy #8
+	bne -
+	inc TEMP0
+	lda #24
+	cmp TEMP0
+	bne outtro_gen_new_sprite_line_next_char
 	rts
 
 ; sprite coordinates are 51+26*N, where N=0...8, the start coordinate can be
@@ -126,31 +182,27 @@ rasterirq_outtro_text
 	tya
 	pha
 	; Raster IRQ is triggered 2-3 lines above so we can set y coordinates first.
-	lda TEMP5
+	lda TEMP5		; load sprite Y
 !for COUNT, 0, 7 {
-	sta $D001+COUNT*2
+	sta $D001+COUNT*2	; store for all sprites
 }
-	; load first sprite pointer
-	ldx TEMP2
-	; store it and the next 7 as base+0...7
+	; set sprite pointers
+	ldx TEMP2		; load pointer for sprite 0
 !for COUNT, 0, 6 {
-	stx VICBITMAPCHARDATA_O+$3F8+COUNT
+	stx VICBITMAPCHARDATA_O+$3F8+COUNT	; store it and the next 7 as base+0...7
 	inx
 }
 	stx VICBITMAPCHARDATA_O+$3F8+7
-	; increase sprite line and raster irq registers
+	; increase sprite Y coord, sprite line and raster irq registers
 	lda TEMP5
 	clc
-	adc #26
-	bcs ++
-	cmp #251
-	bcs ++
+	adc #31		; add 26+5 (fewer commands with trick!)
+	bcs ++		; sprite Y >= 251 (Y+5 >= 256) ? stop display
+	sbc #4		; carry is clear, subtract -1-4 to have +26
 	sta TEMP5
-	sec
-	sbc #3
+	sbc #2		; carry is always clear, sub 3 (-1-2)
 	sta VICRASTER	; trigger next raster
-	lda TEMP2	; switch to next sprite row
-	clc
+	lda TEMP2	; switch to next sprite row, carry still clear
 	adc #8
 	cmp #(OUTTRO_FIRST_SPRITE_PTR + 72)		; handle wrap at sprite pos 72.
 	bcc +
