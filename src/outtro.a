@@ -25,6 +25,20 @@ VICBITMAPBLOCK_O = 0
 VICBITMAP_O = VICBANK*$4000+VICBITMAPBLOCK_O*$2000
 VICSCREENBLOCKBITMAP_O = 10
 VICBITMAPCHARDATA_O = VICBANK*$4000+VICSCREENBLOCKBITMAP_O*$0400
+OUTTRO_TEXT_POINTER = temp_data_begin + 0	; starts at outtro_text
+OUTTRO_SCROLL_LINE = temp_data_begin + 2	; 0...23
+OUTTRO_SPRITE_POINTER_FIRST_ROW = temp_data_begin + 3	; sprite pointer for first displayed row of sprites
+OUTTRO_SPRITE_DATA_ADR = temp_data_begin + 4		; where generated sprite data is stored
+OUTTRO_IRQ_SPRITE_POINTER = temp_data_begin + 6		; sprite pointer for current row of sprites in raster irq
+OUTTRO_IRQ_SPRITE_START_LINE = temp_data_begin + 7	; sprite Y coord for current row of sprites in raster irq
+
+; sprite coordinates are 51+26*N, where N=0...8, the start coordinate can be
+; shifted 25 lines upwards for scrolling.
+; so raster lines are: 51, 77, 103, 129, 155, 181, 207, 233, 259.
+; so overflow for last sprite. But sprites >= 251 can't be seen either.
+; so it doesn't matter or we can stop when Y is >= 251 or carry bit set after add.
+OUTTRO_RL0 = 51
+OUTTRO_FIRST_SPRITE_PTR = 11*16	; 176, +0...71, 11*16*64+$C000 = $2C00+$C000 = $EC00
 ; we have 16k and need 8k for bitmap, 1k for screen, 1k is blocked for color-ram,
 ; and 4.5k are needed for the text scroller sprites. Beside that we have the 4k
 ; range of I/O. However, bitmap, color and screen data are constant while displaying
@@ -47,7 +61,7 @@ show_outtro
 	+set16im TEMPADR1, VICBITMAP_O
 	jsr rle_decode
 	+set8im 1, $31	; blend in char ROM
-	+memcopy_pages $E000, $D000, 8	; 8 pages, read character set
+	+memcopy_pages $E000, $D800, 8	; 8 pages, read character set
 	+set8im $01, $35	; blend in I/O and color RAM again, all RAM else
 	cli
 	+set16im TEMPADR0, introscreen_chardata_rle
@@ -84,6 +98,13 @@ show_outtro
 ; set up outtro raster irq (sprite multiplexer)
 	sei
 	+set16im $FFFE, rasterirq_outtro_text
+	+set8im framecounter, 0
+	sta OUTTRO_SCROLL_LINE
+	+set16im OUTTRO_TEXT_POINTER, outtro_text
+	+set16im OUTTRO_SPRITE_DATA_ADR, $C000+(OUTTRO_FIRST_SPRITE_PTR+8*8)*64	; $FC00
+	+set8im OUTTRO_IRQ_SPRITE_START_LINE, OUTTRO_RL0
+	+set8im OUTTRO_IRQ_SPRITE_POINTER, OUTTRO_FIRST_SPRITE_PTR
+	sta OUTTRO_SPRITE_POINTER_FIRST_ROW
 	+set8im VICRASTER, OUTTRO_RL0-3
 	cli
 
@@ -91,39 +112,69 @@ show_outtro
 ;	+memcopy_pages $EC00, $E000, 8	; 8 pages, read character set
 	+memcopy_pages $F400, $E000, 8	; 8 pages, read character set
 
-; show all scroll text
-	+set8im TEMP5, OUTTRO_RL0	; sprite y coord
-	lda #0
-	sta TEMP3			; additional scroll register (0...25, shifts upwards)
-	lda #OUTTRO_FIRST_SPRITE_PTR
-	sta TEMP2			; sprite pointer current row
-	sta TEMP4			; sprite pointer first row
-	sta TEMP1			; text line counter
-	+set16im TEMPADR0, outtro_text	; source count
-
 ; some flickering at first display...
+; fixme code display loop!
 	; every 3 frame scroll up
 	; stop on fire button
 	; stop scroll when last line reached
 	jsr outtro_gen_new_sprite_line
-	jmp *
+
+	; wait for framecounter & 3 to become zero
+--	lda framecounter
+	and #3
+	bne --
+-	lda framecounter
+	and #3
+	beq -
+	inc OUTTRO_SCROLL_LINE	; scroll up one line
+	lda #24
+	cmp OUTTRO_SCROLL_LINE
+	bne --		; not yet next sprite row reached
+	+set8im OUTTRO_SCROLL_LINE, 0
+	; switch to next text and sprite line, generate data
+	+add16im8 OUTTRO_TEXT_POINTER, 48
+	lda OUTTRO_SPRITE_DATA_ADR+1
+	clc
+	adc #2
+	cmp #>($C000+(OUTTRO_FIRST_SPRITE_PTR+9*8)*64)
+	bne +
+	lda #>($C000+(OUTTRO_FIRST_SPRITE_PTR+8*8)*64)
++	sta OUTTRO_SPRITE_DATA_ADR+1
+	lda OUTTRO_SPRITE_POINTER_FIRST_ROW
+	clc
+	adc #8
+	cmp #(OUTTRO_FIRST_SPRITE_PTR + 72)		; handle wrap at sprite pos 72.
+	bcc +
+	lda #OUTTRO_FIRST_SPRITE_PTR
++	sta OUTTRO_SPRITE_POINTER_FIRST_ROW
+	; now generate data for sprites
+	jsr outtro_gen_new_sprite_line
+	; fixme test for joy 2 button!
+	jmp --
 
 ; offset of sprite data address for every character of 24 in 8 sprites
 outtro_offset_table_lo
-!for COUNT, 0, 8 {
+!for COUNT, 0, 7 {
 !byte <(COUNT*64+0), <(COUNT*64+1), <(COUNT*64+2)
 }
+!for COUNT, 0, 7 {
+!byte <(COUNT*64+0+39), <(COUNT*64+1+39), <(COUNT*64+2+39)
+}
 outtro_offset_table_hi
-!for COUNT, 0, 8 {
+!for COUNT, 0, 7 {
 !byte >(COUNT*64+0), >(COUNT*64+1), >(COUNT*64+2)
+}
+!for COUNT, 0, 7 {
+!byte >(COUNT*64+0+39), >(COUNT*64+1+39), >(COUNT*64+2+39)
 }
 
 ; generate a new line of sprites by copying char set data according to text values
 outtro_gen_new_sprite_line
 	; because 3 characters make up one sprite, we somehow need to handle 3 characters
 	; for start address.
-	; for (u8 i = 0; i < 24; ++i)
+	; for (u8 i = 0; i < 48; ++i)
 	;   srcadr = charadr + *(textadr + i) * 8;
+	;   spritebaseadr = $C000+(OUTTRO_SPRITE_POINTER_FIRST_ROW+8*8)*64=$D000+OUTTRO_SPRITE_POINTER_FIRST_ROW*64
 	;   dstadr = spritebaseadr + *(offsettable + i)
 	;   for (u8 j = 0; j < 8; ++j)
 	;     *dstadr = *srcadr;
@@ -133,20 +184,24 @@ outtro_gen_new_sprite_line
 outtro_gen_new_sprite_line_next_char
 	ldy TEMP0	
 	+set8im TEMPADR1+1, $E0/8	; prepare srcadr high byte
-	lda (TEMPADR0),y		; load next char
-	asl
+	lda (OUTTRO_TEXT_POINTER),y	; load next char
+	; better prepare read address and add 48 in every call...
+	asl				; char num * 8 + base address
 	rol TEMPADR1+1
 	asl
 	rol TEMPADR1+1
 	asl
 	rol TEMPADR1+1
 	sta TEMPADR1			; srcadr done
-	lda outtro_offset_table_hi,y
+	lda #0
+	sta outtro_adr2+1
+	lda OUTTRO_SPRITE_DATA_ADR
 	clc
-	adc #$EC			; fixme dstadr changes by sprite line!
-	sta outtro_adr2+2
-	lda outtro_offset_table_lo,y
-	sta outtro_adr2+1		; dstadr done
+	adc outtro_offset_table_lo,y
+	sta outtro_adr2+1
+	lda OUTTRO_SPRITE_DATA_ADR+1
+	adc outtro_offset_table_hi,y
+	sta outtro_adr2+2		; dstadr done
 	ldx #0				; line of char data
 	ldy #0
 -	lda (TEMPADR1),y		; load source
@@ -157,22 +212,10 @@ outtro_adr2
 	cpy #8
 	bne -
 	inc TEMP0
-	lda #24
+	lda #48
 	cmp TEMP0
 	bne outtro_gen_new_sprite_line_next_char
 	rts
-
-; sprite coordinates are 51+26*N, where N=0...8, the start coordinate can be
-; shifted 25 lines upwards for scrolling.
-; so raster lines are: 51, 77, 103, 129, 155, 181, 207, 233, 259.
-; so overflow for last sprite. But sprites >= 251 can't be seen either.
-; so it doesn't matter or we can stop when Y is >= 251 or carry bit set after add.
-; TEMP5 holds the current sprite start line (raster line + 3)
-; TEMP4 sprite pointer for first visible row
-; TEMP3 the additional scroll register
-; TEMP2 sprite pointer for first sprite in current row
-OUTTRO_RL0 = 51
-OUTTRO_FIRST_SPRITE_PTR = 11*16	; 176, +0...71
 
 ; the raster irq that shows the texts
 rasterirq_outtro_text
@@ -182,60 +225,59 @@ rasterirq_outtro_text
 	tya
 	pha
 	; Raster IRQ is triggered 2-3 lines above so we can set y coordinates first.
-	lda TEMP5		; load sprite Y
+	lda OUTTRO_IRQ_SPRITE_START_LINE		; load sprite Y
 !for COUNT, 0, 7 {
 	sta $D001+COUNT*2	; store for all sprites
 }
 	; set sprite pointers
-	ldx TEMP2		; load pointer for sprite 0
+	ldx OUTTRO_IRQ_SPRITE_POINTER		; load pointer for sprite 0
 !for COUNT, 0, 6 {
 	stx VICBITMAPCHARDATA_O+$3F8+COUNT	; store it and the next 7 as base+0...7
 	inx
 }
 	stx VICBITMAPCHARDATA_O+$3F8+7
 	; increase sprite Y coord, sprite line and raster irq registers
-	lda TEMP5
+	lda OUTTRO_IRQ_SPRITE_START_LINE
 	clc
 	adc #31		; add 26+5 (fewer commands with trick!)
 	bcs ++		; sprite Y >= 251 (Y+5 >= 256) ? stop display
 	sbc #4		; carry is clear, subtract -1-4 to have +26
-	sta TEMP5
+	sta OUTTRO_IRQ_SPRITE_START_LINE
 	sbc #2		; carry is always clear, sub 3 (-1-2)
 	sta VICRASTER	; trigger next raster
-	lda TEMP2	; switch to next sprite row, carry still clear
+	lda OUTTRO_IRQ_SPRITE_POINTER	; switch to next sprite row, carry still clear
 	adc #8
 	cmp #(OUTTRO_FIRST_SPRITE_PTR + 72)		; handle wrap at sprite pos 72.
 	bcc +
 	lda #OUTTRO_FIRST_SPRITE_PTR
-+	sta TEMP2
++	sta OUTTRO_IRQ_SPRITE_POINTER
 	jmp rasterirq_ack_and_end
 ++	; last line of sprites reached, reset all values
 	; raster line, coordinates, sprite pointers
 	lda #OUTTRO_RL0
-	sec
-	sbc TEMP3
-	sta TEMP5
+	sbc OUTTRO_SCROLL_LINE	; carry is still set!
+	sta OUTTRO_IRQ_SPRITE_START_LINE
 	sec
 	sbc #3
 	sta VICRASTER
-	+copy8 TEMP2, TEMP4
+	+copy8 OUTTRO_IRQ_SPRITE_POINTER, OUTTRO_SPRITE_POINTER_FIRST_ROW
+	inc framecounter
 	jmp rasterirq_ack_and_end
-
 
 ; 24 characters per line, N lines
 outtro_text
-!scr "012345678901234567890123"
-!scr "012345678901234567890123"
-!scr "012345678901234567890123"
-!scr "012345678901234567890123"
-!scr "012345678901234567890123"
-!scr "012345678901234567890123"
-!scr "012345678901234567890123"
-!scr "012345678901234567890123"
-!scr "012345678901234567890123"
-!scr "012345678901234567890123"
-!scr "012345678901234567890123"
-!scr "012345678901234567890123"
+!scr "This is the first test !"
+!scr "of the 72 sprite scrollr"
+!scr "that was coded for the !"
+!scr "new bacillus for C64 gam"
+!scr "made in 2017 by Thorsten"
+!scr "Jordan with help of the "
+!scr "great Debian linux systm"
+!scr "Greetings go to all C64 "
+!scr "maniacs and coders! Well"
+!scr "it is great to see that "
+!scr "the scene is still alive"
+!scr "for an 35 year old machi"
 !scr "012345678901234567890123"
 !scr "012345678901234567890123"
 !scr "012345678901234567890123"
