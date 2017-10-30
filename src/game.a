@@ -41,7 +41,8 @@
 ; 0000 - 01FF  0.5k  Zeropage (free from 0002-00FF) and Stack.
 ; 0200 - 03FF  0.5k  Mostly free except some kernal stuff (now free with disabled kernal)
 ; 0400 - 0800    1k  Screen at start, later free
-; 0800 - BFFF   46k  Program/Data (can basic be overwritten at load?)
+; 0800 - B1FF 42.5k  Program/Data (can basic be overwritten at load - yes)
+; B200 - BFFF  3.5k  level data (see below)
 ; C000 - C3FF    1k  Screen 0 (RAM) - changes frequently, so needs RAM
 ; C400 - C7FF    1k  Screen 1 (RAM) - dito
 ; C800 - CFFF    2k  Charset (RAM) - changes because of animated characters, so needs RAM
@@ -823,9 +824,6 @@ prepare_char_animations_next_limit_limit_value
 ; Intro
 !src "src/intro.a"
 
-; Outtro
-!src "src/outtro.a"
-
 ; Highscore disk io
 !src "src/diskio.a"
 
@@ -843,6 +841,9 @@ prepare_char_animations_next_limit_limit_value
 
 ; handling of scrolling
 !src "src/scrolling.a"
+
+; Outtro
+!src "src/outtro.a"
 
 ; ===========================================================================
 ; All the *** DATA ***
@@ -919,3 +920,4 @@ level2_data_rle
 
 level3_data_rle
 !src "data/candy_level1_rle.a"
+

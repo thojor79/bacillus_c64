@@ -100,6 +100,7 @@ show_outtro
 }
 	+set8im $D010, $80
 	+set8im VICSPRITEENABLE, $FF
+	+set8im $D01C, 0			; Multicolor off for all sprites
 
 ; set up outtro raster irq (sprite multiplexer)
 	sei
