@@ -40,9 +40,9 @@ Technical facts:
 * two different actor behaviours
 * traps
 * high scores loaded from and saved to disk
+* Outtro
 
 Planned:
-* Outtro
 * More levels (planned 6)
 * Some more gfx gimmicks
 * Music/Sfx
@@ -52,3 +52,4 @@ Planned:
 ![ScreenShot](screenshots/mainmenu.jpg)
 ![ScreenShot](screenshots/dyinganimation.jpg)
 ![ScreenShot](screenshots/candyworld.jpg)
+![ScreenShot](screenshots/outtro.jpg)

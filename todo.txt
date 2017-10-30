@@ -46,18 +46,6 @@ GENERAL FEATURES
 implement blend out effect for level end - reverse reading of blend in,
 rather easy to do but low effect
 
-outtro: implement game complete screen, e.g. the bacillus logo or some food
-picture, maybe reuse intro logo.
-
-outtro: with sprite scroller like turrican end
-for example write two lines of text in one sprite with 5 empty lines in
-between, and 5 lines vertical space between sprites, so enough time to set
-them up. 8 sprites horizontally give 192 pixels, nearly 2/3 of screen,
-enough. We can easily change colors per line then. two lines and two spaces
-are 26 lines, i.e. 8 sprites vertically give 208 lines. Best would be 9, so
-we can move 26 lines and fill the sprite data with wrap around buffer, e.g.
-8 vertical sprites, total 8x8x64 bytes=4k.
-
 Maybe change background color in intro screen per line for an effect or use
 tech tech to wobble image. Maybe also for outtro text.
 

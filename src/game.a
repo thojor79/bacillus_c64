@@ -478,7 +478,7 @@ prepare_level3
 	jmp ++
 check_level4
 	; no level number matches, so last level completed
-	; jsr outtro fixme
+	jsr show_outtro
 	jmp checkhighscore
 ++	; run this level
 	jsr run_level
@@ -822,6 +822,9 @@ prepare_char_animations_next_limit_limit_value
 
 ; Intro
 !src "src/intro.a"
+
+; Outtro
+!src "src/outtro.a"
 
 ; Highscore disk io
 !src "src/diskio.a"
