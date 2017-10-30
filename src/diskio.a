@@ -48,6 +48,11 @@ save_highscore
 	+set8im VICSPRITEENABLE, $0	; disable all sprites
 	+set16im $031A, $F34A		; set vector to open routine!
 	+set16im $031C, $F291		; set vector to close routine!
+	+set16im $031E, $F20E		; set vector to chkin routine
+	+set16im $0320, $F250		; set vector to chkout routine
+	+set16im $0322, $F333		; set vector to clrch
+	+set16im $0324, $F157		; set vector to BASIN
+	+set16im $0326, $F1CA		; set vector to BSOUT
 	+set16im $028F, $EB48		; set vector for key request!
 	+set16im $0332, $F5ED		; set vector for save routine!
 	+set8im $DC02, $FF		; set CIA1 dataport to R/W!
@@ -102,12 +107,22 @@ load_highscore
 	ldy #>HIGHSCORE_MEM_ADR
 	jsr kernal_load
 	; if carry bit is set, an error occured
-	; bcc +
+	bcc +
 	; A contains error, $5=device not present, $4=file not found,
 	; $1d=load error, $0 = break/runstop pressed
-	; for now we ignore errors.
-	; +
-	rts
+	; we reset the floppy on error and ignore errors
+	lda #LOGICAL_FILE_NR
+	ldy #15
+	ldx last_used_device
+	jsr kernal_set_file_parameter	; use lfn,8,15
+	lda #1				; length of filename
+	ldx #<(init_filename)	; address as Y/X
+	ldy #>(init_filename)
+	jsr kernal_set_filename
+	jsr kernal_open
+	lda #LOGICAL_FILE_NR		; Flag for close
+	jsr kernal_close
++	rts
 
 last_used_device
 !byte 0
@@ -117,3 +132,6 @@ diskio_mem_state
 	
 highscore_filename
 !scr "S0:BACILLUS HSC"
+
+init_filename
+!scr "I"

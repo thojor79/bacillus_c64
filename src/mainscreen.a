@@ -253,6 +253,7 @@ draw_halloffame
 	; wait for joystick key press and release
 	; meanwhile handle level selector cheat
 	+set8im TEMP1, 1	; default start level
+	+set8im $DC02, 0	; set data direction to read for joy input
 	ldx #0
 -	jsr mainscreen_cycle_colors
 	lda CIA1_DATAPORT_A
@@ -480,6 +481,9 @@ enter_string_loop
 	lda #$20	; set space at end of string
 	sta (TEMPADR2),y
 	; carry is still clear
+	rts
++	cmp #$00	; avoid @ character
+	bne +
 	rts
 +	; any other key pressed, insert at end of buffer if space
 	ldy enter_string_pos
