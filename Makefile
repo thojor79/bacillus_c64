@@ -4,7 +4,7 @@
 
 # specify data files explicitly
 
-bacillus.prg : src/game.a src/macros.a src/actor.a src/diskio.a src/intro.a src/outtro.a src/rasterirq.a src/mainscreen.a src/blendin.a src/level.a src/scrolling.a data/textcharset_sprdata.a data/introscreen_rle.a data/mainlogo_rle.a data/cheese_alltiles_chardata.a data/level*sprites_rle.a data/cheese_level*_rle.a data/candy_alltiles_chardata.a data/green_alltiles_chardata.a
+bacillus.prg : src/game.a src/macros.a src/actor.a src/diskio.a src/intro.a src/outtro.a src/rasterirq.a src/mainscreen.a src/blendin.a src/level.a src/scrolling.a data/textcharset_sprdata.a data/introscreen_rle.a data/mainlogo_rle.a data/cheese_alltiles_chardata.a data/level*sprites_rle.a data/cheese_level*_rle.a data/candy_alltiles_chardata.a data/green_alltiles_chardata.a data/outtro_rle.a
 	acme src/game.a
 	
 bacillus.all : bacillus.prg
@@ -22,10 +22,11 @@ test : testsrc/*.a
 	acme testsrc/bitmapview_rle.a
 	acme testsrc/codetest.a
 
-data : gfx/textcharset.png gfx/introscreen.png gfx/mainlogo.png
+data : gfx/textcharset.png gfx/introscreen.png gfx/mainlogo.png gfx/outtro.png
 	cd gfx && ../convert/c64fy.py -hires 1 -sprite 0 -quiet 1 -color 1 textcharset.png && mv textcharset_sprdata.a ../data && cd ..
 	cd gfx && ../convert/c64fy.py -quiet 1 introscreen.png && mv introscreen_bmpdata_rle.a ../data/introscreen_rle.a && cd ..
 	cd gfx && ../convert/c64fy.py -quiet 1 -color 1 mainlogo.png && mv mainlogo_bmpdata_rle.a ../data/mainlogo_rle.a && cd ..
+	cd gfx && ../convert/c64fy.py -quiet 1 outtro.png && mv outtro_bmpdata_rle.a ../data/outtro_rle.a && cd ..
 	rm -f gfx/*_c64.png gfx/*.a
 
 leveldata : gfx/cheese_level1.png gfx/cheese_level2.png gfx/*alltiles.png

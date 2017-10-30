@@ -4,6 +4,7 @@ ToDo - in categories
 BUGS
 ====
 
+Note
 Memory limit for program to load is max addres $B1FF.
 So it can go from $0801 to $B1FF ~ 42.5kb or 171.3 blocks.
 If prg is larger, parts of it are overwritten while
@@ -11,10 +12,18 @@ unpacking level data. If rle code is broken, CPU jams.
 Possible alternative: place intro screen at end, it
 can be overwritten later and use different graphics
 for background of outtro! like a cake repeated!
+Introscreen has 8135 bytes. If we place this at end,
+size limit would be $b200-$0801+8135 = 51654 bytes (+2 for prg)
+if we place intro at end and use different image for outtro.
+Even some more would work because we can overwrite code and
+tables of the intro!
 
 Floppy blinks now - because hiscore loading failes.
 on error reset drive!
 or check if file is there?!
+
+After entry of highscore main screen breaks, maybe because 0-char was
+entered-avoid entering of 0-char (@).
 
 Raster time is not enough for all tasks, if there are many enemies on
 screen. We could distribute work over frames or start copying the color ram

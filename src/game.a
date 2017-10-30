@@ -409,6 +409,7 @@ main
 
 ; -------------------------------------- begin of loading/intro/game --------------------------------------
 
+	;jsr show_outtro	; for testing only
 	jsr show_intro
 
 ; Main screen of the game with highscore display
@@ -821,9 +822,6 @@ prepare_char_animations_next_limit_limit_value
 ; Raster IRQ
 !src "src/rasterirq.a"
 
-; Intro
-!src "src/intro.a"
-
 ; Highscore disk io
 !src "src/diskio.a"
 
@@ -920,4 +918,9 @@ level2_data_rle
 
 level3_data_rle
 !src "data/candy_level1_rle.a"
+
+; --------------------------- include intro as last, its data is overwritten --------
+
+; Intro
+!src "src/intro.a"
 

@@ -58,24 +58,115 @@ show_outtro
 ; set background color and turn off display
 	+set8im VICCTRL1, 0
 	+set8im VICBGCOL, 0
-	+copy8 VICFGCOL, introscreen_backgroundcolor
+	+copy8 VICFGCOL, outtro_backgroundcolor
 
 ; copy data to destination
 	sei			; we need to blend out I/O area and color RAM first
 	+set8im $01, $30	; set all RAM
-	+set16im TEMPADR0, introscreen_bitmapdata_rle
+	+set16im TEMPADR0, outtro_bitmapdata_rle
 	+set16im TEMPADR1, OUTTRO_BITMAP_ADR
 	jsr rle_decode
+	+set16im TEMPADR0, outtro_chardata_rle
+	+set16im TEMPADR1, OUTTRO_SCREEN_ADR
+	jsr rle_decode
+	+set16im TEMPADR0, outtro_colordata_rle
+	+set16im TEMPADR1, COLORRAM
+	+set8im $01, $35	; blend in COLORRAM
+	jsr rle_decode
+	+set8im $01, $30	; set all RAM
+
+; now replicate the image in the top left corner (sized 40x64 MC pixels, so 10x8 blocks),
+; copy it 4 times horizontally and 3 time vertically, screen and color ram as well.
+; So 12 versions of it.
+; so there are 80 bytes to be copied to 3 other (or 11 other) places, same for screen and color.
+; This takes a bit of code as well.
+; For screen this are 10 bytes, same for color.
+; rather use tables than to hardcode all copy commands!
+; but this are very complex commands/tables!
+; or duplicate ONE line and then just triple the data with memcpy calls.
+; one row of 80 (10) bytes per X register, 4 targets and 8 lines, seems fair
+	ldx #80
+-
+!for LINES, 0, 7 {
+	lda OUTTRO_BITMAP_ADR+LINES*320-1,x
+!for COUNTX, 1, 3 {
+	sta OUTTRO_BITMAP_ADR+LINES*320+80*COUNTX-1,x
+}
+}
+	dex
+	bne -
+	ldx #10
+-
+!for LINES, 0, 7 {
+	lda OUTTRO_SCREEN_ADR+LINES*40-1,x
+!for COUNTX, 1, 3 {
+	sta OUTTRO_SCREEN_ADR+LINES*40+10*COUNTX-1,x
+}
+}
+	dex
+	bne -
+	+set8im $01, $35	; blend in COLORRAM
+	ldx #10
+-
+!for LINES, 0, 7 {
+	lda COLORRAM+LINES*40-1,x
+!for COUNTX, 1, 3 {
+	sta COLORRAM+LINES*40+10*COUNTX-1,x
+}
+}
+	dex
+	bne -
+	+set8im $01, $30	; set all RAM
++	; copy first row of images to two more rows
+	+set8im outtro_prep_adr0+2, >OUTTRO_BITMAP_ADR
+	+set8im outtro_prep_adr1+2, >(OUTTRO_BITMAP_ADR+320*8)
+	+set8im outtro_prep_adr2+2, >(OUTTRO_BITMAP_ADR+320*16)
+	ldy #10 ; x is now 0
+outtro_prep_adr0
+	lda OUTTRO_BITMAP_ADR,x
+outtro_prep_adr1
+	sta OUTTRO_BITMAP_ADR+320*8,x
+outtro_prep_adr2
+	sta OUTTRO_BITMAP_ADR+320*16,x;fixme somehow doesnt work-write colorram overwrites bitmap
+	dex
+	bne outtro_prep_adr0
+	; count up addresses
+	inc outtro_prep_adr0+2
+	inc outtro_prep_adr1+2
+	inc outtro_prep_adr2+2
+	dey
+	bne outtro_prep_adr0
+	; same for char and color data - copy 320 bytes to two destinations
+	; x is 0 here
+-	lda OUTTRO_SCREEN_ADR,x
+	sta OUTTRO_SCREEN_ADR+320,x
+	sta OUTTRO_SCREEN_ADR+320*2,x
+	dex
+	bne -
+	ldx #64
+-	lda OUTTRO_SCREEN_ADR+255,x
+	sta OUTTRO_SCREEN_ADR+320+255,x
+	sta OUTTRO_SCREEN_ADR+320*2+255,x
+	dex
+	bne -
+	+set8im $01, $35	; blend in COLORRAM
+-	lda COLORRAM,x
+	sta COLORRAM+320,x
+	sta COLORRAM+320*2,x
+	dex
+	bne -
+	ldx #64
+-	lda COLORRAM+255,x
+	sta COLORRAM+320+255,x
+	sta COLORRAM+320*2+255,x
+	dex
+	bne -
+
+; all data set up, continue
 	+set8im 1, $31	; blend in char ROM
 	+memcopy_pages $E000, $D800, 8	; 8 pages, read character set
 	+set8im $01, $35	; blend in I/O and color RAM again, all RAM else
 	cli
-	+set16im TEMPADR0, introscreen_chardata_rle
-	+set16im TEMPADR1, OUTTRO_SCREEN_ADR
-	jsr rle_decode
-	+set16im TEMPADR0, introscreen_colordata_rle
-	+set16im TEMPADR1, COLORRAM
-	jsr rle_decode
 
 ; turn on display and set video mode and memory area
 	+set8im VICMEMCTRL, OUTTRO_VICMEMCTRL    ; in bitmap mode bit 3 sets bitmap block
@@ -146,7 +237,12 @@ outtro_stopscroll
 -	lda CIA1_DATAPORT_A			; if joy2 fire is pressed, return
 	and #$10
 	bne -
-++	rts
+++	+set8im VICSPRITEENABLE, 0		; disable all sprites
+	; restore irq
+	sei
+	+set16im $FFFE, rasterirq_noop
+	cli
+	rts
 
 ; offset of sprite data address for every character of 24 in 8 sprites
 outtro_offset_table_lo
@@ -317,7 +413,7 @@ outtro_text
 !scr "tools nowadays like ACME"
 !scr " VICE, X1541 and so on, "
 !scr "  that make developer's "
-!scr "  life so much easer.   "
+!scr "  life so much easier.  "
 !scr "Greetings to all the C64"
 !scr "maniacs out there.  Nice"
 !scr "to see that the scene is"
@@ -388,4 +484,6 @@ outtro_text
 !scr "                        "
 !scr "                        "
 !scr "@"	; end marker - number of lines must be even!
+
+!src "data/outtro_rle.a"
 
