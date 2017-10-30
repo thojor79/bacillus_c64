@@ -4,6 +4,11 @@ ToDo - in categories
 BUGS
 ====
 
+If we skip 2 levels with cheat, CPU jams.
+After finishing first level, all is broken and intro restarts.
+Is the game binary too big now?
+or is there some bug?
+
 Raster time is not enough for all tasks, if there are many enemies on
 screen. We could distribute work over frames or start copying the color ram
 earlier to solve the problem. The latter would be the easiest solution.
