@@ -33,15 +33,18 @@ OUTTRO_SCREEN_ADR = $E800
 OUTTRO_SPRITES_START_ADR = $EC00
 OUTTRO_SPRITES_END_ADR = $FE00
 OUTTRO_TEXT_ADR = temp_data_begin + 0	; starts at outtro_text
-OUTTRO_SCROLL_LINE = temp_data_begin + 2	; 0...23
+OUTTRO_SCROLL_LINE = temp_data_begin + 2	; 0...25
 OUTTRO_SPRITE_POINTER_FIRST_ROW = temp_data_begin + 3	; sprite pointer for first displayed row of sprites
 OUTTRO_SPRITE_DATA_ADR = temp_data_begin + 4		; where generated sprite data is stored (for line that needs to be generated)
 OUTTRO_IRQ_SPRITE_POINTER = temp_data_begin + 6		; sprite pointer for current row of sprites in raster irq
 OUTTRO_IRQ_SPRITE_START_LINE = temp_data_begin + 7	; sprite Y coord for current row of sprites in raster irq
+OUTTRO_IRQ_SCROLL_FLAG = temp_data_begin + 8		; number of text rows to generate, < 0 to stop
 
-; fixme: scroll stop does not work, fire button check missing
-; fixme let sprite colors blink in grey?
-; fixme scrolling has some bumps, doesn't scroll evenly!
+; Note scroll logic is in IRQ to it is frame accurate.
+; IRQ counts the number of sprite rows to generate up,
+; main code waits and counts it down. So scrolling is always smooth,
+; even if text generation takes more than one frame (which can happen,
+; as text generator is costly!)
 
 ; sprite coordinates are 51+26*N, where N=0...8, the start coordinate can be
 ; shifted 25 lines upwards for scrolling.
@@ -109,24 +112,20 @@ show_outtro
 	+set8im OUTTRO_IRQ_SPRITE_POINTER, OUTTRO_FIRST_SPRITE_PTR
 	sta OUTTRO_SPRITE_POINTER_FIRST_ROW
 	+set8im VICRASTER, OUTTRO_RL0-3
+	+set8im OUTTRO_IRQ_SCROLL_FLAG, 0
 	cli
 
 ; generate last row of sprites first
 	jsr outtro_gen_new_sprite_line
 
-	; wait for framecounter & 3 to become zero (scroll up every 4th frame)
---	lda framecounter
-	and #3
-	bne --
--	lda framecounter
-	and #3
-	beq -
-	inc OUTTRO_SCROLL_LINE	; scroll up one line
-	lda #24
-	cmp OUTTRO_SCROLL_LINE
-	bne --		; not yet next sprite row reached
+	; wait for scroll flag to be > 1
+--	lda CIA1_DATAPORT_A			; if joy2 fire is pressed, return
+	and #$10
+	beq ++
+	lda OUTTRO_IRQ_SCROLL_FLAG
+	beq --
 	; handle next row of sprites!
-	+set8im OUTTRO_SCROLL_LINE, 0		; reset scroll registers
+	dec OUTTRO_IRQ_SCROLL_FLAG
 	+add16im8 OUTTRO_TEXT_ADR, 48		; advance text source pointer
 	ldy #0
 	lda (OUTTRO_TEXT_ADR),y
@@ -138,20 +137,15 @@ show_outtro
 	bne +
 	lda #>OUTTRO_SPRITES_START_ADR
 +	sta OUTTRO_SPRITE_DATA_ADR+1
-	lda OUTTRO_SPRITE_POINTER_FIRST_ROW	; advance sprite pointer for display to next row
-	clc
-	adc #8
-	cmp #(OUTTRO_FIRST_SPRITE_PTR + 72)	; handle wrap at sprite pos 72.
-	bcc +
-	lda #OUTTRO_FIRST_SPRITE_PTR
-+	sta OUTTRO_SPRITE_POINTER_FIRST_ROW
 	jsr outtro_gen_new_sprite_line		; generate sprite data for new row
-	; fixme test for joy 2 button!
 	jmp --
 outtro_stopscroll
+	+set8im OUTTRO_IRQ_SCROLL_FLAG, $FF
 	; wait for keypress, then return
-	jmp *	; fixme
-	rts
+-	lda CIA1_DATAPORT_A			; if joy2 fire is pressed, return
+	and #$10
+	bne -
+++	rts
 
 ; offset of sprite data address for every character of 24 in 8 sprites
 outtro_offset_table_lo
@@ -170,6 +164,7 @@ outtro_offset_table_hi
 }
 
 ; generate a new line of sprites by copying char set data according to text values
+; note that this takes most time of a full frame!
 outtro_gen_new_sprite_line
 	; because 3 characters make up one sprite, we somehow need to handle 3 characters
 	; for start address.
@@ -184,9 +179,8 @@ outtro_gen_new_sprite_line
 	+set8im TEMP0, 0		; char counter 0...24
 outtro_gen_new_sprite_line_next_char
 	ldy TEMP0	
-	+set8im TEMPADR1+1, $E0/8	; prepare srcadr high byte
+	+set8im TEMPADR1+1, (>OUTTRO_CHARSET_ADR)/8	; prepare srcadr high byte
 	lda (OUTTRO_TEXT_ADR),y		; load next char
-	; better prepare read address and add 48 in every call...
 	asl				; char num * 8 + base address
 	rol TEMPADR1+1
 	asl
@@ -207,9 +201,9 @@ outtro_gen_new_sprite_line_next_char
 	ldy #0
 -	lda (TEMPADR1),y		; load source
 outtro_adr2
-	sta $BEEF			; store data
-	+add16im8 outtro_adr2+1, 3
-	iny
+	sta $BEEF,x			; store destination
+	iny				; source pointer ++
+	+addx 3
 	cpy #8
 	bne -
 	inc TEMP0
@@ -237,7 +231,7 @@ rasterirq_outtro_text
 	inx
 }
 	; increase sprite Y coord, sprite line and raster irq registers
-	lda OUTTRO_IRQ_SPRITE_START_LINE
+	; lda OUTTRO_IRQ_SPRITE_START_LINE ; still in Accu!
 	clc
 	adc #31					; add 26+5 (fewer commands with trick!)
 	bcs ++					; sprite Y >= 251 (Y+5 >= 256) ? stop display
@@ -252,47 +246,132 @@ rasterirq_outtro_text
 +	stx OUTTRO_IRQ_SPRITE_POINTER
 	jmp rasterirq_ack_and_end
 ++	; last line of sprites reached, reset all values
-	; raster line, coordinates, sprite pointers
+	; raster line, coordinates, sprite pointers.
+	; but as first check for scrolling
+	inc framecounter
+	lda framecounter
+	and #3
+	bne ++					; every 4th frame
+	; handle smooth scrolling here - so screen update doesn't block scrolling
+	lda OUTTRO_IRQ_SCROLL_FLAG
+	bmi ++					; no more scrolling
+	inc OUTTRO_SCROLL_LINE			; scroll up one line
+	lda #26
+	cmp OUTTRO_SCROLL_LINE
+	bne ++					; handle wrap
+	+set8im OUTTRO_SCROLL_LINE, 0		; reset scroll line
+	lda OUTTRO_SPRITE_POINTER_FIRST_ROW	; advance sprite pointer for display to next row
+	clc
+	adc #8
+	cmp #(OUTTRO_FIRST_SPRITE_PTR + 72)	; handle wrap at sprite pos 72.
+	bcc +
+	lda #OUTTRO_FIRST_SPRITE_PTR
++	sta OUTTRO_SPRITE_POINTER_FIRST_ROW
+	inc OUTTRO_IRQ_SCROLL_FLAG		; let generate next row!
+++	; set values for next irq to happen first in frame
 	lda #OUTTRO_RL0
-	sbc OUTTRO_SCROLL_LINE	; carry is still set!
-	sta OUTTRO_IRQ_SPRITE_START_LINE
 	sec
-	sbc #3
+	sbc OUTTRO_SCROLL_LINE
+	sta OUTTRO_IRQ_SPRITE_START_LINE
+	; carry is clear, so sub only 2 (-2-1 = -3)
+	sbc #2
 	sta VICRASTER
 	+copy8 OUTTRO_IRQ_SPRITE_POINTER, OUTTRO_SPRITE_POINTER_FIRST_ROW
-	inc framecounter
 	jmp rasterirq_ack_and_end
 
 ; 24 characters per line, N lines
 outtro_text
-!scr "This is the first test !"
-!scr "of the 72 sprite scrollr"
-!scr "that was coded for the !"
-!scr "new bacillus for C64 gam"
-!scr "made in 2017 by Thorsten"
-!scr "Jordan with help of the "
-!scr "great Debian linux systm"
-!scr "Greetings go to all C64 "
-!scr "maniacs and coders! Well"
-!scr "it is great to see that "
-!scr "the scene is still alive"
-!scr "for an 35 year old machi"
-!scr "Greetings go to Florian,"
-!scr "Lasse and Saul! ........"
-!scr "I got my C64 at the very"
-!scr "end of the 1980ties and "
-!scr "begun coding with the in"
-!scr "famous BASIC V2. Later  "
-!scr "on I started coding a .."
-!scr "few things in machine .."
-!scr "language or assembler. !"
-!scr "After doing some raster "
-!scr "irq tricks and basic ex-"
-!scr "pansion stuff I tried --"
-!scr "more complex things like"
-!scr "map rendering but my rou"
-!scr "tines were to slow. Then"
-!scr "I abandoned the C64 in ."
-!scr "012345678901234567890123"
-!scr "@"	; end marker
+!scr "***   WELL DONE !!!  ***"
+!scr "                        "
+!scr "  You escaped all evil  "
+!scr "defense cells and poison"
+!scr "and gathered enough food"
+!scr "     to breed a new     "
+!scr " generation of BACILLUS."
+!scr "                        "
+!scr "                        "
+!scr "Press fire to return to "
+!scr " main menu and let your "
+!scr "offspring gather enough "
+!scr " food for the next gen. "
+!scr "                        "
+!scr "                        "
+!scr "Or read about my own C64"
+!scr "story and the greetings!"
+!scr "                        "
+!scr "Thanks for all the great"
+!scr "tools nowadays like ACME"
+!scr " VICE, X1541 and so on, "
+!scr "  that make developer's "
+!scr "  life so much easer.   "
+!scr "Greetings to all the C64"
+!scr "maniacs out there.  Nice"
+!scr "to see that the scene is"
+!scr "still alive for a 35year"
+!scr "      old machine!      "
+!scr "Greetings to Lasse Oorni"
+!scr " Florian and Saul Cross."
+!scr "                        "
+!scr "I got my own C64 at the "
+!scr "very end of the 1980ties"
+!scr " and started to hack in "
+!scr " the infamous BASIC V2. "
+!scr "After few years I tried "
+!scr " to code some things in "
+!scr "6510 machine language or"
+!scr " assembler. Beside some "
+!scr "raster tricks and memcpy"
+!scr " tests I begun to code  "
+!scr "some map rendering algo "
+!scr "in assembler, but it was"
+!scr "to slow. I abandoned my "
+!scr "C64 in 1994 to switch to"
+!scr "a 486 PC. All the years "
+!scr "my devices where stored "
+!scr "away but were still func"
+!scr " tional.  After reading "
+!scr "something about the C64 "
+!scr "colors I wrote my first "
+!scr "image converter C64FY.py"
+!scr "just for curiosity. Then"
+!scr " I read something about "
+!scr "possible color mixing so"
+!scr "I had to code some lines"
+!scr " for testing. From then "
+!scr " on it took many small  "
+!scr " steps while the retro  "
+!scr "fever already had me to "
+!scr "try to implement all the"
+!scr "thing I every wanted to "
+!scr " do on a C64 when I was "
+!scr "15. So I coded parallax "
+!scr " smooth 50fps scrolling "
+!scr "and did everything that "
+!scr "was needed for a working"
+!scr " game and all that you  "
+!scr " have seen now. I hope  "
+!scr "that you have enjoyed it"
+!scr "and will keep this scene"
+!scr "  and machine alive!!!  "
+!scr "                        "
+!scr "                        "
+!scr "(C) Thorsten Jordan 2017"
+!scr "                        "
+!scr "                        "
+!scr "                        "
+!scr "                        "
+!scr "                        "
+!scr "                        "
+!scr "                        "
+!scr "                        "
+!scr "Now press fire to return"
+!scr "   to the main menu!    "
+!scr "                        "
+!scr "                        "
+!scr "                        "
+!scr "                        "
+!scr "                        "
+!scr "                        "
+!scr "                        "
+!scr "@"	; end marker - number of lines must be even!
 
