@@ -764,7 +764,7 @@ store_actor_to_level_data
 	asl
 	ora #$80		; set bit 7
 	ldy #0
-	ora (TEMPADR2),y	; read level data and combine with accu
+	ora (TEMPADR2),y	; read level data and combine with accu, fixme convert to 0-4 (normal/animated bg here)
 	sta (TEMPADR2),y	; store in level data
 	jmp disable_actor
 

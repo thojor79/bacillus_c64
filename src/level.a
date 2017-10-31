@@ -412,9 +412,9 @@ compute_char_animations_fga
 	; whole block takes ~7 raster lines every 4 frames.
 	; only for candy world, so check level
 	lda level_nr
-	and #$FE
-	cmp #$02
-	bne compute_char_animations_done	; only level 2 and 3
+	and #$FF				; fixme only world 2 (candy) so levels 3 and 4...
+	cmp #$03
+	bne compute_char_animations_done
 	; only every 4th frame
 	lda background_animation_phase
 	and #$03

@@ -4,14 +4,18 @@ ToDo - in categories
 BUGS
 ====
 
-It seems that enemies disappearing and stored to level data while in front
+Enemies disappearing and stored to level data while in front
 of a trap kill that information. Traps are replaced by animated background
-then. Could explain strange bug in level 1 where there is background,
-no level bug but data store bug. Background tile numbers for enemies are
-0-15 only, so not enough space for trap data... ?!
+then. Background tile numbers for enemies are 0-7 only, but special boni,
+exit sign and traps use numbers 0-13.
+1 bit is flag for stored enemies? 4 bit for enemy type and 3 bit for
+background? but we need 4 bit for background. we could take 4 bit for enemy
+type and have bit 6 or 7 to be 1, giving 12 enemies... or 12 background tiles
+and generate 0-3 by position.
+Or when enemy disappears above tile limit tile type to 0-7.
 
 Too long texts entered in highscore trash next entry?! isn't there a length
-limit on enter?
+limit on enter? or was this some other strange and rare bug?
 
 Raster time is not enough for all tasks, if there are many enemies on
 screen. We could distribute work over frames or start copying the color ram
@@ -21,12 +25,10 @@ The animated characters and the enemy computation takes too much raster
 time. Alternativly we could compute new charset over various frames and
 switch to it when it is done.
 
-Green tiles are somehow broken, the number of characters used seems wrong,
-so the number of chars with animation don't match.
-maybe trap animation tiles use not the same chars as usual
-trap tiles are #12 and #13, chars 2e,2f,32,33.
-but green tile data as well. maybe tiledata converter reuses chars...
-no. weird.
+Green world/level 2: Animated trap tile data uses char with full foreground color,
+this looks wrong. Converter seems to encode blocks that are full bg color as
+bits all set with an individual color. Need to fix that.
+
 
 
 VISUAL GLITCHES
@@ -35,8 +37,6 @@ VISUAL GLITCHES
 blend_in: sprites delay raster irq most probably and give visual glitch, but
 not critical. maybe just disable scorepanel by setting fgcol to all
 black then
-
-Level 1 has a wrong background tile near the end.
 
 
 GAMEPLAY EXTENSIONS
@@ -63,18 +63,6 @@ tech tech to wobble image. Maybe also for outtro text.
 Maybe show monster sprites in title screen at the sides.
 
 Implement 6 levels, 2 per world.
-
-
-MORE DATA
-=========
-
-finish green world tile sets: bubbling brown pool as trap, only use it in
-lowest row then.
-paint tree with brown/green/light green as obstacle B and only use it in
-second lowest row.
-Green vines as spiral / twisted as obstacle A.
-Green/brown islands with roots at bottom or just green as islands.
-Roots with some green as ceiling.
 
 
 
@@ -126,12 +114,6 @@ every frame with 50fps, every 2nd or 4th frame is ok. For more than 7
 enemies with sprite multiplexer this will be necessary as time is not enough
 to do it every frame.
 
-main screen: let sprites walk in from left/right below highscore until mid
-of screen, then back again, so show all sprites, like a demo.
-
-main screen: color cycling in text? e.g. color gradient horizontally that
-moves quick.
-
 Reorder trap animations and use them in forward order as originally
 intended.
 
@@ -174,9 +156,6 @@ position...
 music and sfx is important! play 1-3 sfx or play music in a level. play an
 existing SID file would be simplest solution, however we can't distribute it
 because of rights? or are they free?
-
-animate level tiles like vertically or horizontally rotating cheese rolls,
-maybe better in candy world (later)
 
 implement part of image converter with rle encoding (for logo in upper part
 of screen only!)

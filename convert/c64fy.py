@@ -918,6 +918,7 @@ if charmode and len(codeblocks) > numchars:
 	# try to measure and show time.
 	# try multithreading here.
 	# https://stackoverflow.com/questions/19322079/threading-in-python-for-each-item-in-list
+	print('Remaining number of blocks:',len(imageblocks),'-',numreusedchars,'=',len(imageblocks)-numreusedchars)
 	for ib_idx in range(0, len(imageblocks)):
 		errors = []
 		freecolor = colordata[ib_idx] & 7
