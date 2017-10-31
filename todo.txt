@@ -4,6 +4,15 @@ ToDo - in categories
 BUGS
 ====
 
+It seems that enemies disappearing and stored to level data while in front
+of a trap kill that information. Traps are replaced by animated background
+then. Could explain strange bug in level 1 where there is background,
+no level bug but data store bug. Background tile numbers for enemies are
+0-15 only, so not enough space for trap data... ?!
+
+Too long texts entered in highscore trash next entry?! isn't there a length
+limit on enter?
+
 Raster time is not enough for all tasks, if there are many enemies on
 screen. We could distribute work over frames or start copying the color ram
 earlier to solve the problem. The latter would be the easiest solution.

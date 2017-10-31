@@ -27,6 +27,7 @@ kernal_open = $FFC0
 kernal_close = $FFC3
 kernal_save = $FFD8
 kernal_set_file_parameter = $FFBA
+kernal_restore_vectors = $FD15
 LOGICAL_FILE_NR = 255
 HIGHSCORE_MEM_ADR = halloffame_names ; address
 HIGHSCORE_DATA_SIZE = 200 ; size, must be < 256.
@@ -46,15 +47,8 @@ save_highscore
 	sei				; do not allow IRQs, the IRQ vectors are not valid with active kernal!
 	+set8im $01, $36		; blend in Kernal and I/O, all else RAM
 	+set8im VICSPRITEENABLE, $0	; disable all sprites
-	+set16im $031A, $F34A		; set vector to open routine!
-	+set16im $031C, $F291		; set vector to close routine!
-	+set16im $031E, $F20E		; set vector to chkin routine
-	+set16im $0320, $F250		; set vector to chkout routine
-	+set16im $0322, $F333		; set vector to clrch
-	+set16im $0324, $F157		; set vector to BASIN
-	+set16im $0326, $F1CA		; set vector to BSOUT
+	jsr kernal_restore_vectors	; restore some basic vectors for I/o
 	+set16im $028F, $EB48		; set vector for key request!
-	+set16im $0332, $F5ED		; set vector for save routine!
 	+set8im $DC02, $FF		; set CIA1 dataport to R/W!
 	+set8im VICIRQMASK, 0		; no sources for VIC IRQ
 	sta $02A1			; RS-232 NMI status clear!
