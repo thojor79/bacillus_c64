@@ -14,9 +14,6 @@ type and have bit 6 or 7 to be 1, giving 12 enemies... or 12 background tiles
 and generate 0-3 by position.
 Or when enemy disappears above tile limit tile type to 0-7.
 
-Too long texts entered in highscore trash next entry?! isn't there a length
-limit on enter? or was this some other strange and rare bug?
-
 Raster time is not enough for all tasks, if there are many enemies on
 screen. We could distribute work over frames or start copying the color ram
 earlier to solve the problem. The latter would be the easiest solution.
@@ -24,11 +21,6 @@ Alternativly interpolate linearily every 2nd frame.
 The animated characters and the enemy computation takes too much raster
 time. Alternativly we could compute new charset over various frames and
 switch to it when it is done.
-
-Green world/level 2: Animated trap tile data uses char with full foreground color,
-this looks wrong. Converter seems to encode blocks that are full bg color as
-bits all set with an individual color. Need to fix that.
-
 
 
 VISUAL GLITCHES
@@ -55,7 +47,7 @@ GENERAL FEATURES
 ================
 
 implement blend out effect for level end - reverse reading of blend in,
-rather easy to do but low effect
+rather easy to do but time consuming and low effect
 
 Maybe change background color in intro screen per line for an effect or use
 tech tech to wobble image. Maybe also for outtro text.

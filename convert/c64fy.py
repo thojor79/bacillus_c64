@@ -406,7 +406,17 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode):
 	if hiresmode:
 		num_free_indices = 2 - len(fixed_indices_this_block)
 	if num_free_indices > 0:
-		fixed_indices_this_block += [0] * num_free_indices
+		# We can chose the remaining indices freely, it doesn't matter.
+		# However if we chose a color that is already fixed, rather new
+		# indices would be used, which is bad for reuse. So add only
+		# indices, that are NOT already used
+		for nfi in range(0, num_free_indices):
+			for ic in range(0, 16):
+				if ic not in fixed_indices_this_block:
+					fixed_indices_this_block += [ic]
+					break
+		# so do NOT:
+		#fixed_indices_this_block += [0] * num_free_indices
 	# For every pixel determine best two colors from available colors of this block.
 	# Compute segment in color-3-space between the two and determine closest position to segment for
 	# the given color. The segment parameter determines mixing factor.
