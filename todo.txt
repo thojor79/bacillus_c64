@@ -17,10 +17,10 @@ Or when enemy disappears above tile limit tile type to 0-7.
 Raster time is not enough for all tasks, if there are many enemies on
 screen. We could distribute work over frames or start copying the color ram
 earlier to solve the problem. The latter would be the easiest solution.
-Alternativly interpolate linearily every 2nd frame.
-The animated characters and the enemy computation takes too much raster
-time. Alternativly we could compute new charset over various frames and
-switch to it when it is done.
+handle_actor_movement costs 70 raster lines and could be computed every 2
+frames with linear interpolation in between.
+Color RAM copy could start earlier, shifting ~ 70 raster lines to the frame
+before which would solve the problem even better.
 
 
 VISUAL GLITCHES

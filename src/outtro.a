@@ -240,7 +240,11 @@ outtro_stopscroll
 ++	+set8im VICSPRITEENABLE, 0		; disable all sprites
 	; restore irq
 	sei
+	; restore text sprites
+	+set8im 1, $30          ; blend out I/O area - enable all RAM
+	+memcopy_pages VICSPRITES, textcharset_data, 16 ; 42 sprites -> 10.5k, we copy all 64.
 	+set16im $FFFE, rasterirq_noop
+	+set8im 1, $35		; blend in I/O, all else RAM.
 	cli
 	rts
 
