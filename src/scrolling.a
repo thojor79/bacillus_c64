@@ -67,6 +67,75 @@ handle_scrolling
 	rts
 +	jmp scroll_left
 
+; ----------------------- do the scrolling at half screen (for color ram copy!)
+; Uses	A and many others
+!ifdef HALF_SCREEN_SCROLLING {
+handle_scrolling_halfscreen
+	lda is_scroll_active
+	bne +
+	rts
++	cmp #SCROLL_RIGHT
+	beq +
+	jmp handle_scrolling_halfscreen_check_left
++	; handle scroll_right part with upper colorram copy!
+	; advance copy of screen_pos_x by scroll speed ($20) and check for scroll state
+	lda #$20
+	clc
+	adc screen_pos_x
+	and #$70
+	bne +
+	; copy first half of screen
+;	+set8im VICBGCOL, 13
+	+halfscreencopy COLORRAM, COLORRAM+1
+;	+set8im VICBGCOL, 0
+	rts
++	cmp #$60
+	beq +
+	rts
+	; Next frame has pixel position 6, copy front to back buffer
++	lda visibleframebuffer
+	beq +
+;	+set8im VICBGCOL, 14
+	+halfscreencopy SCREEN0, SCREEN1+1
+;	+set8im VICBGCOL, 0
+	rts
++
+;	+set8im VICBGCOL, 14
+	+halfscreencopy SCREEN1, SCREEN0+1
+;	+set8im VICBGCOL, 0
+-	rts
+handle_scrolling_halfscreen_check_left
+	cmp #SCROLL_LEFT
+	bne -
+	; handle scroll_left part
+	lda screen_pos_x
+	sec
+	sbc #$20
+	and #$70
+	cmp #$60
+	bne +
+	; first half of screen
+;	+set8im VICBGCOL, 13
+	+halfscreencopy_reversed COLORRAM+1, COLORRAM
+;	+set8im VICBGCOL, 0
+	rts
++	cmp #$00
+	beq +
+	rts
++	; Next frame has pixel position 1, copy front to back buffer
+	lda visibleframebuffer
+	beq +
+;	+set8im VICBGCOL, 14
+	+halfscreencopy SCREEN0+1, SCREEN1
+;	+set8im VICBGCOL, 0
+	rts
++
+;	+set8im VICBGCOL, 14
+	+halfscreencopy SCREEN1+1, SCREEN0
+;	+set8im VICBGCOL, 0
+	rts
+}
+
 ; ----------------------- Handle scrolling to the right in 1 pixel steps.
 scroll_right
 	; increment screen position by two pixels
@@ -133,7 +202,9 @@ scroll_right
 	bne +
 	jmp ++
 +
+!ifndef HALF_SCREEN_SCROLLING {
 	+halfscreencopy SCREEN0, SCREEN1+1
+}
 	+halfscreencopy SCREEN0+HALFSCREENOFFSET, SCREEN1+1+HALFSCREENOFFSET
 	+set8im renderframebuffer_adrmsb, >SCREEN0
 	; if we reach screen0 by scrolling right we can generate position that way
@@ -143,7 +214,9 @@ scroll_right
 	+set8im colorramshift_to_renderpos, $01
 	jmp generate_new_last_column
 ++
+!ifndef HALF_SCREEN_SCROLLING {
 	+halfscreencopy SCREEN1, SCREEN0+1
+}
 	+halfscreencopy SCREEN1+HALFSCREENOFFSET, SCREEN0+1+HALFSCREENOFFSET
 	+set8im renderframebuffer_adrmsb, >SCREEN1
 	; if we reach screen1 by scrolling right we can generate position that way
@@ -221,7 +294,9 @@ scroll_left
 	bne +
 	jmp ++
 +
+!ifndef HALF_SCREEN_SCROLLING {
 	+halfscreencopy SCREEN0+1, SCREEN1
+}
 	+halfscreencopy SCREEN0+1+HALFSCREENOFFSET, SCREEN1+HALFSCREENOFFSET
 	+set8im renderframebuffer_adrmsb, >SCREEN0
 	; if we reach screen0 by scrolling left we can generate position that way
@@ -230,7 +305,9 @@ scroll_left
 	+set8im colorramshift_to_renderpos, $FF
 	jmp generate_new_first_column
 ++
+!ifndef HALF_SCREEN_SCROLLING {
 	+halfscreencopy SCREEN1+1, SCREEN0
+}
 	+halfscreencopy SCREEN1+1+HALFSCREENOFFSET, SCREEN0+HALFSCREENOFFSET
 	+set8im renderframebuffer_adrmsb, >SCREEN1
 	; if we reach screen1 by scrolling left we can generate position that way
@@ -328,9 +405,10 @@ generate_new_first_column
 ; Later copy one badge (top half) when raster beam reaches lower half of previous
 ; frame, second badge when raster beam reaches end of previous frame.
 colorramscrollright
-;	+set8im VICBGCOL, 4	; to debug start of colorram copy
+!ifndef HALF_SCREEN_SCROLLING {
 	; first half of screen
 	+halfscreencopy COLORRAM, COLORRAM+1
+}
 	; fill in new values
 !for OFFSET, 0, HALFLINESYPERSCREEN-1 {
 	lda colorram_tempcolumn+OFFSET
@@ -345,15 +423,13 @@ colorramscrollright
 	sta COLORRAM+39+OFFSET*40
 }
 	+set8im colorramshift_to_renderpos, 0
-	;lda #$0E
-	;sta VICBGCOL
 	rts
 
 colorramscrollleft
-	;lda #$02
-	;sta VICBGCOL
+!ifndef HALF_SCREEN_SCROLLING {
 	; first half of screen
 	+halfscreencopy_reversed COLORRAM+1, COLORRAM
+}
 	; fill in new values
 !for OFFSET, 0, HALFLINESYPERSCREEN-1 {
 	lda colorram_tempcolumn+OFFSET
@@ -368,8 +444,6 @@ colorramscrollleft
 	sta COLORRAM+0+OFFSET*40
 }
 	+set8im colorramshift_to_renderpos, 0
-	;lda #$0E
-	;sta VICBGCOL
 	rts
 
 ; Given a horizontal position render tiles to given screen.

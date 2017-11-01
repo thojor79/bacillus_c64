@@ -101,13 +101,21 @@ run_level
 
 ; --------------------------------------- main loop of a level
 ;DEBUG_TIMING = 1
+;HALF_SCREEN_SCROLLING = 1
 mainloop
 	; for debugging of time (re)set BG color
 !ifdef DEBUG_TIMING { +set8im VICBGCOL, 0 }
+!ifdef HALF_SCREEN_SCROLLING {
+	; wait until raster line is at half of screen
+	lda #(50+TILEHEIGHTINPIXELS*TILESYPERSCREEN/2-1)
+-	cmp VICRASTER
+	bcs -
+	jsr handle_scrolling_halfscreen
+}
 	; wait until raster line is at bottom of foreground screen
--	lda VICRASTER
-	cmp #251	; end of visible screen
-	bcc -
+	lda #251-1	; end of visible screen, -1 for bcs
+-	cmp VICRASTER
+	bcs -
 	; for debugging of used raster time set BG color
 	; so far the game logic isn't that expensive, as long as there are
 	; no actors around, with actors it is a bit more, but scrolling
@@ -165,7 +173,13 @@ mainloop
 	; as long as actor_dead_anim_phase is not null, continue as well
 !ifdef DEBUG_TIMING { +set8im VICBGCOL, 0 }
 	lda actor_dead_anim_phase
+!ifdef DEBUG_TIMING {	; need to if/else because the bne might be to far away
+	beq +
+	jmp mainloop
++
+} else {
 	bne mainloop
+}
 	; handle game over
 	jmp game_over
 end_level
