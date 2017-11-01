@@ -14,19 +14,6 @@ type and have bit 6 or 7 to be 1, giving 12 enemies... or 12 background tiles
 and generate 0-3 by position.
 Or when enemy disappears above tile limit tile type to 0-7.
 
-Raster time is not enough for all tasks, if there are many enemies on
-screen. We could distribute work over frames or start copying the color ram
-earlier to solve the problem. The latter would be the easiest solution.
-handle_actor_movement costs 70 raster lines and could be computed every 2
-frames with linear interpolation in between.
-Color RAM copy could start earlier, shifting ~ 70 raster lines to the frame
-before which would solve the problem even better.
-We also need to distribute screenram copy to 2 frames or start it also
-earlier. Test implementation doesn't work too well, there are sometimes
-color shadows on screen (seems when there are many enemies, so raster time
-is short) and it still stutters a bit.
-So disabled for now.
-
 
 VISUAL GLITCHES
 ===============

@@ -73,6 +73,7 @@ handle_scrolling
 handle_scrolling_halfscreen
 	lda is_scroll_active
 	bne +
+	clc
 	rts
 +	cmp #SCROLL_RIGHT
 	beq +
@@ -85,54 +86,64 @@ handle_scrolling_halfscreen
 	and #$70
 	bne +
 	; copy first half of screen
-;	+set8im VICBGCOL, 13
+!ifdef DEBUG_TIMING { +set8im VICBGCOL, 13 }
 	+halfscreencopy COLORRAM, COLORRAM+1
-;	+set8im VICBGCOL, 0
+!ifdef DEBUG_TIMING { +set8im VICBGCOL, 0 }
+	sec
 	rts
 +	cmp #$60
 	beq +
+	clc
 	rts
 	; Next frame has pixel position 6, copy front to back buffer
 +	lda visibleframebuffer
 	beq +
-;	+set8im VICBGCOL, 14
+!ifdef DEBUG_TIMING { +set8im VICBGCOL, 14 }
 	+halfscreencopy SCREEN0, SCREEN1+1
-;	+set8im VICBGCOL, 0
+!ifdef DEBUG_TIMING { +set8im VICBGCOL, 0 }
+	sec
 	rts
 +
-;	+set8im VICBGCOL, 14
+!ifdef DEBUG_TIMING { +set8im VICBGCOL, 14 }
 	+halfscreencopy SCREEN1, SCREEN0+1
-;	+set8im VICBGCOL, 0
--	rts
+!ifdef DEBUG_TIMING { +set8im VICBGCOL, 0 }
+	sec
+	rts
 handle_scrolling_halfscreen_check_left
 	cmp #SCROLL_LEFT
-	bne -
+	beq +
+	clc
+	rts
 	; handle scroll_left part
-	lda screen_pos_x
++	lda screen_pos_x
 	sec
 	sbc #$20
 	and #$70
 	cmp #$60
 	bne +
 	; first half of screen
-;	+set8im VICBGCOL, 13
+!ifdef DEBUG_TIMING { +set8im VICBGCOL, 13 }
 	+halfscreencopy_reversed COLORRAM+1, COLORRAM
-;	+set8im VICBGCOL, 0
+!ifdef DEBUG_TIMING { +set8im VICBGCOL, 0 }
+	sec
 	rts
 +	cmp #$00
 	beq +
+	clc
 	rts
 +	; Next frame has pixel position 1, copy front to back buffer
 	lda visibleframebuffer
 	beq +
-;	+set8im VICBGCOL, 14
+!ifdef DEBUG_TIMING { +set8im VICBGCOL, 14 }
 	+halfscreencopy SCREEN0+1, SCREEN1
-;	+set8im VICBGCOL, 0
+!ifdef DEBUG_TIMING { +set8im VICBGCOL, 0 }
+	sec
 	rts
 +
-;	+set8im VICBGCOL, 14
+!ifdef DEBUG_TIMING { +set8im VICBGCOL, 14 }
 	+halfscreencopy SCREEN1+1, SCREEN0
-;	+set8im VICBGCOL, 0
+!ifdef DEBUG_TIMING { +set8im VICBGCOL, 0 }
+	sec
 	rts
 }
 

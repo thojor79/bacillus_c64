@@ -101,7 +101,7 @@ run_level
 
 ; --------------------------------------- main loop of a level
 ;DEBUG_TIMING = 1
-;HALF_SCREEN_SCROLLING = 1
+HALF_SCREEN_SCROLLING = 1
 mainloop
 	; for debugging of time (re)set BG color
 !ifdef DEBUG_TIMING { +set8im VICBGCOL, 0 }
@@ -111,11 +111,24 @@ mainloop
 -	cmp VICRASTER
 	bcs -
 	jsr handle_scrolling_halfscreen
-}
+	bcc +
+	; copying was done, check for raster line > 255.
+	; When copying starts too late, we could pass the range between 251
+	; and 255 and hence the check for >= 251 will fail and we would wait
+	; for a complete frame without use!
+	lda VICCTRL1
+	bmi ++	; bit 8 is set, so raster is >= 256, continue immediatly
+	; wait until raster line is at bottom of foreground screen
++	lda #251-1	; end of visible screen, -1 for bcs
+-	cmp VICRASTER
+	bcs -
+++
+} else {
 	; wait until raster line is at bottom of foreground screen
 	lda #251-1	; end of visible screen, -1 for bcs
 -	cmp VICRASTER
 	bcs -
+}
 	; for debugging of used raster time set BG color
 	; so far the game logic isn't that expensive, as long as there are
 	; no actors around, with actors it is a bit more, but scrolling
