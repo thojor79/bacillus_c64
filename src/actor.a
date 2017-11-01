@@ -756,6 +756,22 @@ store_actor_to_level_data
 	lda actor_yh,x
 	adc #(>LEVEL_DATA-1)	; handle -1 pixel and target adress at once
 	sta TEMPADR2+1
+	ldy #0
+	lda (TEMPADR2),y
+	cmp #8			; tile number too high?
+	bcc +			; if not just store actor
+	; replace tile number >= 8 (special boni, exit sign, trap) by
+	; background tile matching position
+	lda TEMPADR2
+	and #1
+	sta TEMP5
+	lda TEMPADR2+1
+	sec
+	sbc #(>LEVEL_DATA)	; get bit 0 of y pos
+	and #1
+	asl
+	ora TEMP5
++	sta TEMP5
 	lda actor_type,x
 	sec
 	sbc #1			; bring back to 0...15
@@ -763,8 +779,7 @@ store_actor_to_level_data
 	asl
 	asl
 	ora #$80		; set bit 7
-	ldy #0
-	ora (TEMPADR2),y	; read level data and combine with accu, fixme convert to 0-4 (normal/animated bg here)
+	ora TEMP5
 	sta (TEMPADR2),y	; store in level data
 	jmp disable_actor
 

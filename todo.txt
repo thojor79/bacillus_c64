@@ -4,16 +4,6 @@ ToDo - in categories
 BUGS
 ====
 
-Enemies disappearing and stored to level data while in front
-of a trap kill that information. Traps are replaced by animated background
-then. Background tile numbers for enemies are 0-7 only, but special boni,
-exit sign and traps use numbers 0-13.
-1 bit is flag for stored enemies? 4 bit for enemy type and 3 bit for
-background? but we need 4 bit for background. we could take 4 bit for enemy
-type and have bit 6 or 7 to be 1, giving 12 enemies... or 12 background tiles
-and generate 0-3 by position.
-Or when enemy disappears above tile limit tile type to 0-7.
-
 
 VISUAL GLITCHES
 ===============
