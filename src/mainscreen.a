@@ -672,10 +672,13 @@ rasterirq_mainlogo
 	inx
 	dey
 	bne -
-	; wait one more raster line, otherwise visual glitch appears
--	lda VICRASTER
-	cmp VICRASTER
+	; wait for line below logo and time switch with busy waiting
+	lda #104
+-	cmp VICRASTER
 	bcs -
+	ldx #10
+-	dex
+	bne -
 	; set up hires text mode
 	+set8im VICFGCOL, 0	; magenta as color
 	+set8im VICCTRL1, $1B	; char mode
