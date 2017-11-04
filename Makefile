@@ -24,8 +24,8 @@ test : testsrc/*.a
 
 data : gfx/textcharset.png gfx/introscreen.png gfx/mainlogo.png gfx/outtro.png
 	cd gfx && ../convert/c64fy.py -hires 1 -sprite 0 -quiet 1 -color 1 textcharset.png && mv textcharset_sprdata.a ../data && cd ..
-	cd gfx && ../convert/c64fy.py -quiet 1 introscreen.png && mv introscreen_bmpdata_rle.a ../data/introscreen_rle.a && cd ..
-	cd gfx && ../convert/c64fy.py -quiet 1 -color 1 mainlogo.png && mv mainlogo_bmpdata_rle.a ../data/mainlogo_rle.a && cd ..
+	cd gfx && ../convert/c64fy.py -quiet 1 -mixing 0 introscreen.png && mv introscreen_bmpdata_rle.a ../data/introscreen_rle.a && cd ..
+	cd gfx && ../convert/c64fy.py -quiet 1 -mixing 0 -color 1 mainlogo.png && mv mainlogo_bmpdata_rle.a ../data/mainlogo_rle.a && cd ..
 	cd gfx && ../convert/c64fy.py -quiet 1 outtro.png && mv outtro_bmpdata_rle.a ../data/outtro_rle.a && cd ..
 	rm -f gfx/*_c64.png gfx/*.a
 
