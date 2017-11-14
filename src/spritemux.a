@@ -102,14 +102,14 @@ MAX_SPRITE_Y = 250
 ; For 32 sprites this would take 184 bytes of zeropage which is (too) much.
 ; With 18 sprites it would take 86 bytes. So better use code manipulation technique.
 
-; fixme: something broken after rasterline setup code - irqs too early?!
-; seems the endmarker is not set when it should, sprites are set too early!
-
 ; fixme more than 18 sprites are not supported yet
 
 ; fixme test first static display, movement later
+; the movement directions are bad, doesn't work well
 
 ; fixme test timing!
+
+; fixme last sprite is not shown
 
 !if TESTING {
 TEMP0 = 2
@@ -439,13 +439,11 @@ sprite_mux_prepare_next_vsprite	; y is index in sortlist
 	sbc #4			; some rasterlines before, depends on nr of sprites per irq - not counted yet! fixme
 	sta sprite_irq_rasterline,x	; store rasterline for next irq
 	inc SPRITE_MUX_IRQNR
-	cpx #0			; don't create new irq when we are in first irq!
-	beq sprite_mux_prepare_same_irq	; if x was 0, we are in first irq
 	lda SPRITE_MUX_XHVAL		; prepare xhigh
 	sta sprite_irq_xhval,x
 	; set highest bit of last written color to flag end of irq!
 	ldx SPRITE_MUX_OFFSET
-	lda sprite_irq_setup_code+16-25,x	; fixme -25 ?
+	lda sprite_irq_setup_code+16-25,x
 	ora #$80
 	sta sprite_irq_setup_code+16-25,x
 	; fixme ! handle wrap around! when > 18 sprites.
