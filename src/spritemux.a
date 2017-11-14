@@ -26,9 +26,9 @@ NR_OF_SPRITE_IRQS = NR_OF_VIRTUAL_SPRITES - 8 + 1
 MIN_SPRITE_Y = 30
 MAX_SPRITE_Y = 250
 
-TESTING = 1
-DEBUG_TIMING = 1
-TEST_STATIC_POS = 1
+;TESTING = 1
+;DEBUG_TIMING = 1
+;TEST_STATIC_POS = 1
 
 ; A sprite multiplexer takes an arbitrary number of virtual sprites and maps
 ; it to the 8 hardware sprites. The number of virtual sprites doesn't need
