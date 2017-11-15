@@ -21,7 +21,7 @@
 ;
 ; ***************************************************************************************
 
-NR_OF_VIRTUAL_SPRITES = 12 ; 32	; first test, extreme amount - test fewer because of offset overflow!
+NR_OF_VIRTUAL_SPRITES = 32 ; rather test 24 or less sprites
 NR_OF_SPRITE_IRQS = NR_OF_VIRTUAL_SPRITES - 8 + 1
 MIN_SPRITE_Y = 30
 MAX_SPRITE_Y = 250
@@ -106,17 +106,16 @@ MAX_SPRITE_Y = 250
 ; fixme test first static display, movement later
 ; compare with Lasse's multiplexer multi2
 
-; fixme test timing! use various number of sprites and check how timing scales!
-
 ; fixme last sprite is not shown!! with 11 sprites it works, but not with 12+
 ; is xhigh the problem? seems not?
 ; end of irq is marked for sprite #16 but why?! (with 18 sprites)
 ; check where endflags are and what lines are used for irqs! 56, 65, 74 or so, is ok. 3 irqs, ok!
+; with 12-14 he only shows 11! With 15 he shows 14.
+; is last irq missing?!?!?!?
+; with 16 shown 14, with 17 shown 14, with 18 shown 17. 
+; seems last irq is not called!
 
 ; fixme number of rasterlines to trigger irq before sprite should be dynamic!
-
-; fixme
-; Unroll for 10 sprites so we can have up to 18 or 28, that is enough!
 
 !if TESTING {
 TEMP0 = 2
@@ -426,7 +425,6 @@ sprite_mux_set_first8_end
 ; append data to current irq
 ; while appending irq data update xhvalue
 ; when all is done, finish last irq
-; fixme reinit write to addresses in this code part! when > 18 vsprites!
 	; Note! TEMP0 has still xhigh state (D010) so keep it!
 	; y is offset in sprite_sort_order (if not used otherwise)
 	; prepare read addresses in IRQ code
@@ -472,24 +470,36 @@ sprite_mux_prepare_next_vsprite	; y is index in sortlist
 	sta sprite_irq_xhval,x
 	; set highest bit of last written color to flag end of irq!
 	ldx SPRITE_MUX_OFFSET		; here load target address offset!
+sprite_mux_prepare_adr0
 	lda sprite_irq_setup_code+16-25,x
 	ora #$80
+sprite_mux_prepare_adr1
 	sta sprite_irq_setup_code+16-25,x
 sprite_mux_prepare_same_irq
 	ldx sprite_sort_order-1,y	; -1 because y alreadly inc'd
 	sty SPRITE_MUX_SORT_INDEX	; save y
 	ldy SPRITE_MUX_OFFSET		; here load target address offset!
 	lda vsprite_xl,x
+sprite_mux_prepare_adr2
 	sta sprite_irq_setup_code+6,y	; store x value in irq code
 	lda vsprite_ptr,x
+sprite_mux_prepare_adr3
 	sta sprite_irq_setup_code+11,y	; store ptr value in irq code
 	lda vsprite_col,x
+sprite_mux_prepare_adr4
 	sta sprite_irq_setup_code+16,y	; store col value in irq code
 	; inc y by 25 (write to next irq code block) - when overflow inc highbyte of write-to address
 	tya
 	clc
-	adc #25				; can reach max 250, is checked below
-	sta SPRITE_MUX_OFFSET
+	adc #25				; can overflow after ~ 10 sprites
+	bcc +
+	; now increase the 5 addresses in their high bytes!
+	inc sprite_mux_prepare_adr0+2
+	inc sprite_mux_prepare_adr1+2
+	inc sprite_mux_prepare_adr2+2
+	inc sprite_mux_prepare_adr3+2
+	inc sprite_mux_prepare_adr4+2
++	sta SPRITE_MUX_OFFSET
 	ldy SPRITE_MUX_SLOTNR
 	lda SPRITE_MUX_XHVAL		; xhigh
 	and bit_nand_table,y		; slotnumber (NUM_VSPRITES-8 sized!)
@@ -504,15 +514,7 @@ sprite_mux_prepare_same_irq
 !if DEBUG_TIMING {
 	inc VICBGCOL
 }
-!if NR_OF_VIRTUAL_SPRITES > 18 {
-	lda #250			; 10*25 -> wrap around nears
-	cmp SPRITE_MUX_OFFSET
-	bne sprite_mux_prepare_next_vsprite
-	; prepare next 10 sprites
-	jmp * ; fixme - repeat codeblock from above
-} else {
 	jmp sprite_mux_prepare_next_vsprite
-}
 sprite_mux_irqs_prepared
 !if DEBUG_TIMING {
 	inc VICBGCOL
@@ -536,6 +538,20 @@ FIRST8_SIZE = (sprite_mux_set_first8_end-sprite_mux_set_first8)/8
 !for COUNT, 8, NR_OF_VIRTUAL_SPRITES-1 {
 	sta sprite_irq_setup_code+(COUNT-8)*25+14
 }
+	; restore the write addresses!
+	+set8im sprite_mux_prepare_adr0+2, >sprite_irq_setup_code+16-25
+	sta sprite_mux_prepare_adr1+2
+	lda #>(sprite_irq_setup_code+6)
+	sta sprite_mux_prepare_adr2+2
+;fixme we could spare two lda's here
+;!if >(sprite_irq_setup_code+11) != >(sprite_irq_setup_code+6) {
+	lda #>(sprite_irq_setup_code+11)
+;}
+	sta sprite_mux_prepare_adr3+2
+;!if >(sprite_irq_setup_code+16) != >(sprite_irq_setup_code+11) {
+	lda #>(sprite_irq_setup_code+16)
+;}
+	sta sprite_mux_prepare_adr4+2
 !if DEBUG_TIMING {
 	+set8im VICBGCOL,14
 }
