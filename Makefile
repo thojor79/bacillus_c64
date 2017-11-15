@@ -8,7 +8,7 @@ bacillus.prg : src/game.a src/macros.a src/actor.a src/diskio.a src/intro.a src/
 	acme src/game.a
 
 spritemux.prg : src/spritemux.a
-	acme -DTESTING=1 -DDEBUG_TIMING=1 -DTEST_STATIC_POS=1 src/spritemux.a
+	acme -DTESTING=1 -DDEBUG_TIMING=1 -DTEST_STATIC_POS=1 -DKERNAL_RAND_POS=0 src/spritemux.a
 	
 bacillus.all : bacillus.prg
 	c1541 -format diskname,id d64 bacillus.d64 -attach bacillus.d64 -write bacillus.prg bacillus
