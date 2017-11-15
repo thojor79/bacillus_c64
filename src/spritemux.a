@@ -108,6 +108,8 @@ MAX_SPRITE_Y = 250
 
 ; fixme number of rasterlines to trigger irq before sprite should be dynamic!
 
+; fixme randomly it runs amok
+
 ; note charset blends over sprite data
 
 !if TESTING {
