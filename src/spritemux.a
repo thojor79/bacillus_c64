@@ -21,7 +21,7 @@
 ;
 ; ***************************************************************************************
 
-NR_OF_VIRTUAL_SPRITES = 32 ; rather test 24 or less sprites
+NR_OF_VIRTUAL_SPRITES = 24 ; rather test 24 or less sprites, doesn't work with 38, with 8 don't work, max. 42
 NR_OF_SPRITE_IRQS = NR_OF_VIRTUAL_SPRITES - 8 + 1
 MIN_SPRITE_Y = 30
 MAX_SPRITE_Y = 250
@@ -106,16 +106,9 @@ MAX_SPRITE_Y = 250
 ; fixme test first static display, movement later
 ; compare with Lasse's multiplexer multi2
 
-; fixme last sprite is not shown!! with 11 sprites it works, but not with 12+
-; is xhigh the problem? seems not?
-; end of irq is marked for sprite #16 but why?! (with 18 sprites)
-; check where endflags are and what lines are used for irqs! 56, 65, 74 or so, is ok. 3 irqs, ok!
-; with 12-14 he only shows 11! With 15 he shows 14.
-; is last irq missing?!?!?!?
-; with 16 shown 14, with 17 shown 14, with 18 shown 17. 
-; seems last irq is not called!
-
 ; fixme number of rasterlines to trigger irq before sprite should be dynamic!
+
+; note charset blends over sprite data
 
 !if TESTING {
 TEMP0 = 2
@@ -237,7 +230,7 @@ vsprite_dy
 vsprite_y
 !for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
 	!if TESTING {
-		!byte 50 + 5*COUNT
+		!byte <(50 + 5*COUNT)
 ;		!byte 50+((COUNT * 37157) % 180)
 	} else {
 		!byte 0
@@ -295,11 +288,11 @@ bit_or_table
 sprite_sort_order = 63		; must be in zeropage because of stx xxx,y
 ; Note! The following data doesn't need to be in zeropage, but xhval/rasterline
 ; should be 32byte aligned so we only need to change the lower address byte.
-sprite_sorted_y = 96
+sprite_sorted_y = sprite_sort_order + NR_OF_VIRTUAL_SPRITES + 1
 ; $D010 values (xhigh) for all IRQs.
-sprite_irq_xhval = 128
+sprite_irq_xhval = sprite_sorted_y + NR_OF_VIRTUAL_SPRITES
 ; Rasterline values for all IRQs from second on with trailing zero
-sprite_irq_rasterline = 160
+sprite_irq_rasterline = sprite_irq_xhval + NR_OF_VIRTUAL_SPRITES
 
 
 
@@ -373,7 +366,7 @@ sprite_mux_sort_innerdone
 ; Note that we already start with Y=8 to avoid adding offset 8 later!
 ; Minus one because of iny before checking.
 ; Note that if all sprites are too low, this will completely run amok.
-; But that case does never happen in pratice.
+; But that case does never happen in practice.
 	ldy #8-1
 	lda #MIN_SPRITE_Y
 -	ldx sprite_sort_order-8+1,y
@@ -438,7 +431,9 @@ sprite_mux_set_first8_end
 	ldx sprite_sort_order,y	; load next virtual sprite index
 	lda vsprite_y,x		; load next virtual sprite y coord
 	sec
-	sbc #4
+	sbc #4	; fixme don't setup first irq if there are only 8 sprites!!! just setup VICRASTER from first sprite_irq_rasterline
+		; values AFTER all computations are done, and use 1 byte more for sprite_irq_rasterline!
+		; so read/write with offset then!
 	sta VICRASTER		; first raster irq to appear a few lines above 9th sprite
 	sta sprite_irq_rasterline-1	; overwrites last xhvalue but needed only in first loop, overwritten later
 sprite_mux_prepare_next_vsprite	; y is index in sortlist
@@ -522,7 +517,7 @@ sprite_mux_irqs_prepared
 	; set terminating 0 to sprite_irq_rasterline
 	ldx SPRITE_MUX_IRQNR
 	lda #0
-	sta sprite_irq_rasterline-1,x
+	sta sprite_irq_rasterline,x
 	; set xhigh value of last irq
 	lda SPRITE_MUX_XHVAL
 	sta sprite_irq_xhval,x
