@@ -122,7 +122,8 @@ for i in indices:
 	xsorted += [xcoords[i]]
 	psorted += [pointers[i]]
 	csorted += [colors[i]]
-#print(ysorted)
+print('Sorted Y coordinates:')
+print(ysorted)
 #print(xsorted)
 #print(psorted)
 #print(csorted)

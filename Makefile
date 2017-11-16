@@ -7,16 +7,17 @@
 bacillus.prg : src/game.a src/macros.a src/actor.a src/diskio.a src/intro.a src/outtro.a src/rasterirq.a src/mainscreen.a src/blendin.a src/level.a src/scrolling.a data/textcharset_sprdata.a data/introscreen_rle.a data/mainlogo_rle.a data/cheese_alltiles_chardata.a data/level*sprites_rle.a data/cheese_level*_rle.a data/candy_alltiles_chardata.a data/green_alltiles_chardata.a data/outtro_rle.a
 	acme src/game.a
 
-spritemux.prg : src/spritemux.a Makefile
+test/spritemux.prg : src/spritemux.a Makefile
 	acme -DTESTING=1 -DDEBUG_TIMING=1 -DTEST_STATIC_POS=0 -DKERNAL_RAND_POS=1 src/spritemux.a
+#	acme -DTESTING=1 -DDEBUG_TIMING=1 -DTEST_STATIC_POS=1 -DKERNAL_RAND_POS=0 src/spritemux.a
 	
 bacillus.all : bacillus.prg
 	c1541 -format diskname,id d64 bacillus.d64 -attach bacillus.d64 -write bacillus.prg bacillus
 	~/c64/exomizer/src/exomizer sfx sys bacillus.prg -o bacillus_x.prg
 	c1541 -format diskname,id d64 bacillus_x.d64 -attach bacillus_x.d64 -write bacillus_x.prg bacillus
 
-srun : spritemux.prg
-	x64 --autostart spritemux.prg
+srun : test/spritemux.prg
+	x64 --autostart test/spritemux.prg
 
 run : bacillus.prg
 	x64 --autostart bacillus.prg

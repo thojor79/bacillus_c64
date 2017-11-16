@@ -115,6 +115,14 @@ SPRITE_IRQ_TRIGGER_RASTER_BEFORE = 4
 ; Note distances between sprites must be > 21 or so to avoid artefacts
 ; with 24 it is better - we have that now
 
+; IRQs are triggered a bit too early what can be seen with static test.
+; Distance between end of sprite and next irq should not just be 24, but
+; more. Lasse uses even 12 additional lines. And it seems that he only
+; assigns the sprite to the same irq if it's y coordinate is less than 6
+; lines after current sprite y.
+; It seems IRQs are 6 lines too early even for first irq!!!
+; Let test program print out irq lines...
+
 !if TESTING {
 TEMP0 = 2
 TEMP1 = 3
@@ -133,7 +141,7 @@ VICIRQMASK = $D01A
 VICSPRITEENABLE = $D015
 CIA1_ICR = $DC0D
 
-!to "spritemux.prg", cbm
+!to "test/spritemux.prg", cbm
 
 !src "src/macros.a"
 
@@ -202,21 +210,11 @@ main_prep_pos_dxy
 	sta vsprite_xh,x
 	beq +
 	lda vsprite_xl,x
-!if 0 {
 	bpl +
 	; x overflow - subtract 384
 	dec vsprite_xh,x
 	lda vsprite_xl,x
-	sec
-	sbc #128
-} else {
-	cmp #64
-	bcc +
-	dec vsprite_xh,x
-	lda vsprite_xl,x
-	sec
-	sbc #64
-}
+	and #$7F	; same as -= 128
 	sta vsprite_xl,x
 +	lda vsprite_y,x
 	clc
@@ -606,8 +604,8 @@ sprite_mux_irq_prepare_next
 	sta VICRASTER			; prepare next raster irq
 	inc sprite_mux_irq_setxh+1	; increase read addresses for xhigh
 	inc sprite_mux_irq_prepare_next+1	; and rasterline
-;	sec				; check if we are late for next irq!
-;	sbc #2				; maybe 2 is enough - fixme try without - looks good!
+	sec				; check if we are late for next irq!
+	sbc #2				; seems even 1 is enough... without that some sprites are not rendered
 	cmp VICRASTER
 	; if C=0 we are too late for next irq, but do not start it BEFORE the
 	; stored raster line or it will be too early!
