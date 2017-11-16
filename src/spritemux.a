@@ -120,8 +120,15 @@ SPRITE_IRQ_TRIGGER_RASTER_BEFORE = 4
 ; more. Lasse uses even 12 additional lines. And it seems that he only
 ; assigns the sprite to the same irq if it's y coordinate is less than 6
 ; lines after current sprite y.
-; It seems IRQs are 6 lines too early even for first irq!!!
-; Let test program print out irq lines...
+; We fire IRQ 4 lines earlier, this is 5 lines above sprite (because sprite coordinate
+; 50 is at rasterline 51, so firing at 46 is 5 lines earlier).
+; And with many interrupts in a row (example has one every 3 rasterlines!)
+; One interrupt starts the next after it is done, irqs are even called earlier
+; and we have the graphical artifacts.
+; So we need IRQs as close as possible to sprite (dynamically depending on sprite
+; count per IRQ!) and we need to busy wait for correct rasterline before
+; calling next IRQ!
+
 
 !if TESTING {
 TEMP0 = 2
@@ -561,7 +568,6 @@ FIRST8_SIZE = (sprite_mux_set_first8_end-sprite_mux_set_first8)/8
 	sta sprite_irq_setup_code+(COUNT-8)*25+14
 }
 	; restore the write addresses!
-	+set8im SPRITE_MUX_COLADR+1, >sprite_irq_setup_code+16-25
 	lda #>(sprite_irq_setup_code+6)
 	sta sprite_mux_prepare_adr0+2
 ;fixme we could spare two lda's here
@@ -599,14 +605,16 @@ sprite_mux_irq_prepare_next
 	inc sprite_mux_irq_setxh+1	; increase read addresses for xhigh
 	inc sprite_mux_irq_prepare_next+1	; and rasterline
 	sec				; check if we are late for next irq!
-	sbc #2				; seems even 1 is enough... without that some sprites are not rendered
+	sbc #2				; 2 lines are enough, don't need 3
 	cmp VICRASTER
 	; if C=0 we are too late for next irq, but do not start it BEFORE the
 	; stored raster line or it will be too early!
-	; Do we need a bit of busy waiting here?
-	; current rasterline is after next irq - 2, maybe don't need to subtract 2
-	; here as irqs are fast and we have enough time (4 rasterlines)
-	bcc sprite_mux_irq_setxh	; call next irq directly
+	bcs sprite_mux_irq_done		; if carry set, VICRASTER <= next_rasterline - 2, so end IRQ
+	adc #3				; C=0, prepare check VICRASTER <= next_rasterline - 1, fixme should be #1 but #3 better
+					; because IRQs are still too early! (4-5 lines, need less!)
+-	cmp VICRASTER			; as long as we are in line before, do busy waiting
+	bcs -
+	jmp sprite_mux_irq_setxh	; then call next IRQ
 sprite_mux_irq_done
 	asl $D019			; ACK irq
 	pla				; restore accu
@@ -615,8 +623,26 @@ sprite_mux_irq_done
 }
 	rti
 
+; sprite_irq_setup_code curiosity: (fixme)
+; must be at some offset, if we use 8 nops here, CPU jams, with 9 or more it works.
+; Must be some page boundary problem!
+; First nop starts at $1492, setup code with 9 nops from 149b-1628.
+; offsets are 6,11,16. code size 398. +2 for bpl = 400, for 16 sprites -> 25
+; is it JMP/JSR problem? it happens with indirect JMP, but we dont have that here!
+	nop
+	nop
+	nop
+	nop
+
+	nop
+	nop
+	nop
+	nop
+
+	nop
+
 ; unrolled code that reads from zeropage and writes to the sprite registers.
-; relative offsets for addresses: y:1, x:6, p:11, c:16
+; relative offsets for addresses: (y:1 - read from ZP instead!), x:6, p:11, c:16
 ; absolute codeblock size: 25 - do not change!
 sprite_irq_setup_code
 !for COUNT, 8, NR_OF_VIRTUAL_SPRITES-1 {
