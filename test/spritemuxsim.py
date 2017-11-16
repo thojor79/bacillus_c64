@@ -56,34 +56,46 @@ def RenderSprite(im, x, y, c):	# fixme data later maybe
 	im.putdata(px)
 	return im
 
+def AddRasterlineMarker(im, rl):
+	px = list(im.getdata())
+	for xx in range(0, 320+2*24):
+		c = px[rl*504+(xx+offset_x)]
+		c = (255-c[0], 255-c[1], 255-c[2])
+		px[rl*504+(xx+offset_x)] = c
+	im.putdata(px)
+	return im
+
 im = PIL.Image.open('screenmask.png')
 
 f = open(inputfilename, 'rb')
 d = f.read()
 f.close()
 
-# find 8 0xDE characters that mark begin/end of virtual sprite data
-marker_begin = 0
-marker_end = 0
-for i in range(7, len(d)):
-	j = 0
-	while d[i-j] == 0xDE and j < 8:
-		j += 1
-	if j == 8:
-		# found marker
-		print('Marker found at',i-j)
-		if marker_begin == 0:
-			marker_begin = i - j + 9
-		elif marker_end == 0:
-			marker_end = i - j + 1
+# find start address of memory dump
+marker_string = 'C64MEM\x00'
+memory_start = 0
+for i in range(0, len(d)):
+	match = True
+	for j in range(0, len(marker_string)):
+		if d[i+j] != ord(marker_string[j]):
+			match = False
+			break
+	if match:
+		memory_start = i+26
+if memory_start == 0:
+	print('No memory dump found!')
+	sys.exit(0)
+print('Memory dump starts in .vsf file at offset', memory_start)
+# Start address of sprite data is at offset 2069 (LSB/MSB)
+address = d[memory_start+2069]+d[memory_start+2070]*256
+print('Sprite data start at',address)
 
-if marker_end == 0:
-	raise False
-
-# Count number of sprites
-data_size = marker_end - marker_begin
-nr_vsprites = (data_size - 1) // 5
+# Count number of sprites (count up to end marker)
+nr_vsprites = 0
+while d[memory_start+address+nr_vsprites] != 255:
+	nr_vsprites += 1
 print('Number of virtual sprites:',nr_vsprites)
+databegin = memory_start+address
 
 # Read data to arrays
 # Y coords (+1 stop marker)
@@ -94,10 +106,10 @@ xcoords = []
 pointers = []
 colors = []
 for i in range(0, nr_vsprites):
-	ycoords += [d[marker_begin + i]]
-	xcoords += [d[marker_begin + nr_vsprites + 1 + i] + 256 * d[marker_begin + nr_vsprites*2 + 1 + i]]
-	pointers += [d[marker_begin + nr_vsprites*3 + 1 + i]]
-	colors += [d[marker_begin + nr_vsprites*4 + 1 + i]]
+	ycoords += [d[databegin + i]]
+	xcoords += [d[databegin + nr_vsprites + 1 + i] + 256 * d[databegin + nr_vsprites*2 + 1 + i]]
+	pointers += [d[databegin + nr_vsprites*3 + 1 + i]]
+	colors += [d[databegin + nr_vsprites*4 + 1 + i]]
 #print(ycoords)
 #print(xcoords)
 
@@ -128,6 +140,29 @@ print(ysorted)
 #print(psorted)
 #print(csorted)
 
+# get the sorted y coordinates from dump
+sort_order_c64 = []
+ysorted_c64 = []
+for i in range(0, nr_vsprites):
+	sort_order_c64 += [d[memory_start+63+i]]
+	ysorted_c64 += [d[memory_start+64+i+nr_vsprites]]
+print('Sorted Y coordinates by C64 (with y > MINY!):')
+print(ysorted_c64)
+print('Sort index by C64:')
+print(sort_order_c64)
+rasterlines_c64 = []
+xhigh_c64 = []
+for i in range(0, nr_vsprites-8):
+	offset = memory_start+64+nr_vsprites*3+i
+	if d[offset] == 0:
+		break
+	rasterlines_c64 += [d[offset]]
+	xhigh_c64 += [d[offset - nr_vsprites]]
+print('Rasterlines for IRQs by C64:')
+print(rasterlines_c64)
+print('XHigh values by C64:')
+print(xhigh_c64)
+
 # Ok now simulate display: reject sprites that are too low
 miny = 30
 maxy = 250
@@ -141,13 +176,9 @@ while ysorted[sort_index] < miny:
 while sort_index < nr_vsprites and ysorted[sort_index] < maxy:
 	im = RenderSprite(im, xsorted[sort_index], ysorted[sort_index], csorted[sort_index])
 	sort_index += 1
+for i in rasterlines_c64:
+	im = AddRasterlineMarker(im, i)
 
 # Show result how it should look like
 Show(im)
-
-
-
-
-
-
 

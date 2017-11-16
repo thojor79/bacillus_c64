@@ -151,6 +151,10 @@ CIA1_ICR = $DC0D
 !byte $10,$08,$BB,$07,$9E,$32,$30,$36,$36,$3A,$8F,$20,$54,$4A,$00,$00,$00
 
 main
+	jmp +
+!byte <vsprite_y
+!byte >vsprite_y
++
 	; Set position and move values with randomness from kernal code
 	; Positions
 !if KERNAL_RAND_POS {
@@ -239,11 +243,6 @@ vsprite_dy
 
 }
 
-!if TESTING {
-dummy0
-!byte $DE, $DE, $DE, $DE, $DE, $DE, $DE, $DE	; as debug marker
-}
-
 vsprite_y
 !for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
 	!if TESTING {
@@ -288,11 +287,6 @@ vsprite_col
 	} else {
 		!byte 0
 	}
-}
-
-!if TESTING {
-dummy1
-!byte $DE, $DE, $DE, $DE, $DE, $DE, $DE, $DE	; as debug marker
 }
 
 bit_nand_table
