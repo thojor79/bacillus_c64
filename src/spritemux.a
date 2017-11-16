@@ -24,7 +24,8 @@
 NR_OF_VIRTUAL_SPRITES = 24 ; rather test 24 or less sprites, works with 44, min 2
 MIN_SPRITE_Y = 30
 MAX_SPRITE_Y = 250
-SPRITE_Y_DISTANCE = 24
+SPRITE_Y_DISTANCE = 25		; 21 sprite lines + 4 irq start
+SPRITE_IRQ_TRIGGER_RASTER_BEFORE = 4
 
 ;TESTING = 1
 ;DEBUG_TIMING = 1
@@ -109,18 +110,10 @@ SPRITE_Y_DISTANCE = 24
 ; note charset blends over sprite data for test from sprite 30 on
 
 ; fixme number of rasterlines to trigger irq before sprite should be dynamic!
+; not really needed but helps against gfx artifacts with dense sprite formations.
 
-; fixme distances between sprites must be > 21 or so to avoid artefacts
-; with 24 it is better
-
-; fixme test first static display, movement later
-; compare with Lasse's multiplexer multi2
-
-; fixme randomly it seems to run amok, for sure if space for xhigh is NR_VIRT-8,
-; what should be enough. strange!
-
-; fixme with movement there seem to be many clipped sprites or other errors.
-; maybe rather test corner cases as well
+; Note distances between sprites must be > 21 or so to avoid artefacts
+; with 24 it is better - we have that now
 
 !if TESTING {
 TEMP0 = 2
@@ -129,6 +122,7 @@ TEMP2 = 4
 TEMP3 = 5
 TEMP4 = 6
 TEMP5 = 7
+TEMPADR0 = 8
 VICBGCOL = $D020
 VICFGCOL = $D021
 VICCTRL2 = $D016
@@ -208,12 +202,21 @@ main_prep_pos_dxy
 	sta vsprite_xh,x
 	beq +
 	lda vsprite_xl,x
+!if 0 {
 	bpl +
 	; x overflow - subtract 384
 	dec vsprite_xh,x
 	lda vsprite_xl,x
 	sec
 	sbc #128
+} else {
+	cmp #64
+	bcc +
+	dec vsprite_xh,x
+	lda vsprite_xl,x
+	sec
+	sbc #64
+}
 	sta vsprite_xl,x
 +	lda vsprite_y,x
 	clc
@@ -238,12 +241,15 @@ vsprite_dy
 
 }
 
+!if TESTING {
+dummy0
+!byte $DE, $DE, $DE, $DE, $DE, $DE, $DE, $DE	; as debug marker
+}
 
 vsprite_y
 !for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
 	!if TESTING {
-		!byte <(50 + 5*COUNT)
-;		!byte 50+((COUNT * 37157) % 180)
+		!byte <(50 + 3*COUNT)	; *5
 	} else {
 		!byte 0
 	}
@@ -253,7 +259,7 @@ vsprite_y
 vsprite_xl
 !for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
 	!if TESTING {
-		!byte <(24 + (COUNT & 7) * 30 + (COUNT / 8) * 10)
+		!byte <(24 + (COUNT % 8) * 30 + (COUNT / 8) * 10)
 	} else {
 		!byte 0
 	}
@@ -262,7 +268,7 @@ vsprite_xl
 vsprite_xh
 !for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
 	!if TESTING {
-		!byte >(24 + (COUNT & 7) * 30 + (COUNT / 8) * 10)
+		!byte >(24 + (COUNT % 8) * 30 + (COUNT / 8) * 10)
 	} else {
 		!byte 0
 	}
@@ -284,6 +290,11 @@ vsprite_col
 	} else {
 		!byte 0
 	}
+}
+
+!if TESTING {
+dummy1
+!byte $DE, $DE, $DE, $DE, $DE, $DE, $DE, $DE	; as debug marker
 }
 
 bit_nand_table
@@ -331,13 +342,14 @@ sprite_mux_init
 ; sorts sprite indices by the sprite's y coordinate
 ; and prepares interrupt data (needs to be called while raster is not in
 ; visible area of screen!
-; USES	TEMP0,TEMP1,TEMP2,TEMP3,TEMP4,A,X,Y
+; USES	TEMP0,TEMP1,TEMP2,TEMP3,TEMP4,TEMP5,TEMPADR0,A,X,Y
 SPRITE_MUX_XHVAL = TEMP0
 SPRITE_MUX_SLOTNR = TEMP1	; 8...NR_OF_VIRTUAL_SPRITES-9
 SPRITE_MUX_IRQNR = TEMP2	; Nr. of prepared IRQ 0...
 SPRITE_MUX_OFFSET = TEMP3	; offset for irq data write
 SPRITE_MUX_SORT_INDEX = TEMP4	; index in sorted table
 SPRITE_MUX_CURRENT_Y = TEMP5	; uses as temporary
+SPRITE_MUX_COLADR = TEMPADR0	; address in zeropage for last color setup code address
 ; ************************************************************
 sprite_mux_prepare
 !if DEBUG_TIMING {
@@ -416,6 +428,7 @@ sprite_mux_set_first8
 +
 }
 sprite_mux_set_first8_end
+	lda SPRITE_MUX_XHVAL
 	sta $D010		; save current xhigh value to register
 !if DEBUG_TIMING {
 	inc VICBGCOL
@@ -436,6 +449,7 @@ sprite_mux_set_first8_end
 	+set8im sprite_mux_irq_setxh+1, sprite_irq_xhval
 	+set8im sprite_mux_irq_prepare_next+1, <(sprite_irq_rasterline+1)
 	+set16im sprite_mux_irq_jmpadr+1, sprite_irq_setup_code
+	+set16im SPRITE_MUX_COLADR, sprite_irq_setup_code+16-25
 	; prepare irq data
 	+set8im SPRITE_MUX_SLOTNR, 0
 	sta SPRITE_MUX_IRQNR
@@ -443,7 +457,7 @@ sprite_mux_set_first8_end
 	ldx sprite_sort_order,y	; load next virtual sprite index
 	lda vsprite_y,x		; load next virtual sprite y coord
 	sec
-	sbc #4
+	sbc #SPRITE_IRQ_TRIGGER_RASTER_BEFORE
 	sta sprite_irq_rasterline
 sprite_mux_prepare_next_vsprite	; y is index in sortlist
 	ldx sprite_sort_order,y	; load next virtual sprite index
@@ -462,47 +476,45 @@ sprite_mux_prepare_next_vsprite	; y is index in sortlist
 	; This is the case if current rasterline is >= last y coord for this slot + SPRITE_Y_DISTANCE lines.
 	; We already have that value in accu!
 	ldx SPRITE_MUX_IRQNR	; check for new irq
+	sty SPRITE_MUX_SORT_INDEX	; save sort index
+	ldy SPRITE_MUX_OFFSET		; prepare y as mux offset
 	cmp sprite_irq_rasterline,x	; compare y of current slot against current irq rasterline
 	bcc sprite_mux_prepare_same_irq	; last line of last sprite in same slot already drawn
 	; need to make new irq
 	lda SPRITE_MUX_CURRENT_Y
 	sec
-	sbc #4			; some rasterlines before, depends on nr of sprites per irq - not counted yet! fixme
+	sbc #SPRITE_IRQ_TRIGGER_RASTER_BEFORE	; some rasterlines before, depends on nr of sprites per irq - not counted yet! fixme
 	sta sprite_irq_rasterline+1,x	; store rasterline for next irq
 	inc SPRITE_MUX_IRQNR
 	lda SPRITE_MUX_XHVAL		; prepare xhigh
 	sta sprite_irq_xhval,x
 	; set highest bit of last written color to flag end of irq!
-	ldx SPRITE_MUX_OFFSET		; here load target address offset!
-sprite_mux_prepare_adr0
-	lda sprite_irq_setup_code+16-25,x
+	lda (SPRITE_MUX_COLADR),y	; y has mux offset here!
 	ora #$80
-sprite_mux_prepare_adr1
-	sta sprite_irq_setup_code+16-25,x
+	sta (SPRITE_MUX_COLADR),y
 sprite_mux_prepare_same_irq
-	ldx sprite_sort_order-1,y	; -1 because y alreadly inc'd
-	sty SPRITE_MUX_SORT_INDEX	; save y
-	ldy SPRITE_MUX_OFFSET		; here load target address offset!
+	ldx SPRITE_MUX_SORT_INDEX
+	lda sprite_sort_order-1,x	; -1 because y alreadly inc'd
+	tax
 	lda vsprite_xl,x
-sprite_mux_prepare_adr2
+sprite_mux_prepare_adr0
 	sta sprite_irq_setup_code+6,y	; store x value in irq code
 	lda vsprite_ptr,x
-sprite_mux_prepare_adr3
+sprite_mux_prepare_adr1
 	sta sprite_irq_setup_code+11,y	; store ptr value in irq code
 	lda vsprite_col,x
-sprite_mux_prepare_adr4
+sprite_mux_prepare_adr2
 	sta sprite_irq_setup_code+16,y	; store col value in irq code
 	; inc y by 25 (write to next irq code block) - when overflow inc highbyte of write-to address
 	tya
 	clc
 	adc #25				; can overflow after ~ 10 sprites
 	bcc +
-	; now increase the 5 addresses in their high bytes!
+	; now increase the 4 addresses in their high bytes!
 	inc sprite_mux_prepare_adr0+2
 	inc sprite_mux_prepare_adr1+2
 	inc sprite_mux_prepare_adr2+2
-	inc sprite_mux_prepare_adr3+2
-	inc sprite_mux_prepare_adr4+2
+	inc SPRITE_MUX_COLADR+1
 +	sta SPRITE_MUX_OFFSET
 	ldy SPRITE_MUX_SLOTNR
 	lda SPRITE_MUX_XHVAL		; xhigh
@@ -515,9 +527,6 @@ sprite_mux_prepare_adr4
 	sta SPRITE_MUX_XHVAL
 +	inc SPRITE_MUX_SLOTNR
 	ldy SPRITE_MUX_SORT_INDEX
-!if DEBUG_TIMING {
-	inc VICBGCOL
-}
 	jmp sprite_mux_prepare_next_vsprite
 sprite_mux_irqs_prepared
 !if DEBUG_TIMING {
@@ -530,13 +539,23 @@ sprite_mux_irqs_prepared
 	; set xhigh value of last irq
 	lda SPRITE_MUX_XHVAL
 	sta sprite_irq_xhval,x
+	; set end marker for last irq (high bit of color)
+	ldy SPRITE_MUX_OFFSET
+	lda (SPRITE_MUX_COLADR),y
+	ora #$80
+	sta (SPRITE_MUX_COLADR),y
 	; how can we check that only 8 sprites are drawn and no irq is needed? irq is 0 and slotnr is 0!
+	; but xh is then already written, but that doesn't hurt, its the actual value
 	lda SPRITE_MUX_IRQNR
 	ora SPRITE_MUX_SLOTNR
-	beq +
-	lda sprite_irq_rasterline
+	bne +
+	; only 8 sprites are drawn, set jump target to do nothing address
+	+set16im sprite_mux_irq_jmpadr+1, sprite_mux_irq_done
+	; doesn't matter when irq is triggered
+	bne ++	; highbyte is !0, so always jumps
++	lda sprite_irq_rasterline
 	sta VICRASTER
-+
+++
 
 ; we need to set the hibyte of the screen address for all virtual sprites!
 ; so one load and 16-32 stores.
@@ -550,19 +569,18 @@ FIRST8_SIZE = (sprite_mux_set_first8_end-sprite_mux_set_first8)/8
 	sta sprite_irq_setup_code+(COUNT-8)*25+14
 }
 	; restore the write addresses!
-	+set8im sprite_mux_prepare_adr0+2, >sprite_irq_setup_code+16-25
-	sta sprite_mux_prepare_adr1+2
+	+set8im SPRITE_MUX_COLADR+1, >sprite_irq_setup_code+16-25
 	lda #>(sprite_irq_setup_code+6)
-	sta sprite_mux_prepare_adr2+2
+	sta sprite_mux_prepare_adr0+2
 ;fixme we could spare two lda's here
 ;!if >(sprite_irq_setup_code+11) != >(sprite_irq_setup_code+6) {
 	lda #>(sprite_irq_setup_code+11)
 ;}
-	sta sprite_mux_prepare_adr3+2
+	sta sprite_mux_prepare_adr1+2
 ;!if >(sprite_irq_setup_code+16) != >(sprite_irq_setup_code+11) {
 	lda #>(sprite_irq_setup_code+16)
 ;}
-	sta sprite_mux_prepare_adr4+2
+	sta sprite_mux_prepare_adr2+2
 !if DEBUG_TIMING {
 	+set8im VICBGCOL,14
 }
@@ -588,10 +606,15 @@ sprite_mux_irq_prepare_next
 	sta VICRASTER			; prepare next raster irq
 	inc sprite_mux_irq_setxh+1	; increase read addresses for xhigh
 	inc sprite_mux_irq_prepare_next+1	; and rasterline
-	sec				; check if we are late for next irq!
-	sbc #3
+;	sec				; check if we are late for next irq!
+;	sbc #2				; maybe 2 is enough - fixme try without - looks good!
 	cmp VICRASTER
-	bcc sprite_mux_irq_jmpadr	; call next irq directly
+	; if C=0 we are too late for next irq, but do not start it BEFORE the
+	; stored raster line or it will be too early!
+	; Do we need a bit of busy waiting here?
+	; current rasterline is after next irq - 2, maybe don't need to subtract 2
+	; here as irqs are fast and we have enough time (4 rasterlines)
+	bcc sprite_mux_irq_setxh	; call next irq directly
 sprite_mux_irq_done
 	asl $D019			; ACK irq
 	pla				; restore accu
