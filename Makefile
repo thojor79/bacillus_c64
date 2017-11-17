@@ -13,9 +13,9 @@ test/spritemux.prg : src/spritemux.a Makefile
 #	acme -DTESTING=1 -DDEBUG_TIMING=1 -DTEST_STATIC_POS=1 -DKERNAL_RAND_POS=0 src/spritemux.a
 	
 bacillus.all : bacillus.prg
-	c1541 -format diskname,id d64 bacillus.d64 -attach bacillus.d64 -write bacillus.prg bacillus
+	c1541 -format diskname,id d64 bacillus.d64 -attach bacillus.d64 -write bacillus.prg bacillus -write test/spritemux.prg spritemux
 	~/c64/exomizer/src/exomizer sfx sys bacillus.prg -o bacillus_x.prg
-	c1541 -format diskname,id d64 bacillus_x.d64 -attach bacillus_x.d64 -write bacillus_x.prg bacillus
+	c1541 -format diskname,id d64 bacillus_x.d64 -attach bacillus_x.d64 -write bacillus_x.prg bacillus -write test/spritemux.prg spritemux
 
 srun : test/spritemux.prg
 	x64 --autostart test/spritemux.prg
