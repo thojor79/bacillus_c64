@@ -88,6 +88,11 @@ every frame with 50fps, every 2nd or 4th frame is ok. For more than 7
 enemies with sprite multiplexer this will be necessary as time is not enough
 to do it every frame.
 
+Maybe boni could be flying and modeled as sprites with use of the sprite
+multiplexer. Maybe even traps. But we would need to make them single colored
+then or all sprites multicolored (rather that because player is multicolor).
+Don't do that with bacillus but rather a new game.
+
 Reorder trap animations and use them in forward order as originally
 intended.
 
