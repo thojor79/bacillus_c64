@@ -21,7 +21,9 @@
 ;
 ; ***************************************************************************************
 
-NR_OF_VIRTUAL_SPRITES = 30 ; rather test 24 or less sprites, works with 44, min 2
+; with 24 sprites up to ~70 rasterlines in preparation
+; with 16 sprites ~40 rasterlines in preparation, that's ok
+NR_OF_VIRTUAL_SPRITES = 16 ; rather test 24 or less sprites, works with 44, min 2 (<8 doesn't make sense though)
 MIN_SPRITE_Y = 30
 MAX_SPRITE_Y = 250
 SPRITE_Y_DISTANCE = 25		; 21 sprite lines + 4 irq start
