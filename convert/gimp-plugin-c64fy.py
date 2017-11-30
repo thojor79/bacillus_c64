@@ -44,7 +44,7 @@ import c64fylib
 #sys.stderr = open('./gimpstderr.txt', 'w')
 #sys.stdout = open('./gimpstdout.txt', 'w')
 
-def c64fy(img, layer, fix_index_0, fix_index_1, fix_index_2, hiresmode, enable_dithering, enable_mixing) :
+def c64fy(img, layer, fix_index_0, fix_index_1, fix_index_2, hiresmode, multicolorscaledown, enable_dithering, enable_mixing) :
 	''' Converts a layer to a C64 compatible bitmap format (RGB or RGBA).
 	Horizontally two pixels are merged.
 	
@@ -166,7 +166,7 @@ def c64fy(img, layer, fix_index_0, fix_index_1, fix_index_2, hiresmode, enable_d
 						if has_transparent_pixels and yuv[0] < -0.5:
 							yuv = c64fylib.colors_c64_yuv[most_used_index]
 						colorblock += [yuv]
-				color_indices = c64fylib.GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode, enable_dithering, uv_limit_grey)[0]
+				color_indices = c64fylib.GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode, multicolorscaledown, enable_dithering, uv_limit_grey)[0]
 				for yy in range(0, 8):
 					for xx in range(0, 8):
 						color_index = color_indices[yy*8+xx]
@@ -224,6 +224,7 @@ register(
 		(PF_SLIDER, "fix_index_1", "Fix color index 1", -1, (-1, 15, -1)),
 		(PF_SLIDER, "fix_index_2", "Fix color index 2", -1, (-1, 15, -1)),
 		(PF_OPTION, "hiresmode", "HiRes mode:", 0, ["no", "yes"]),
+		(PF_OPTION, "multicolorscaledown", "Scale down for multicolor:", 1, ["no", "yes"]),
 		(PF_OPTION, "enable_dithering", "Enable dithering:", 1, ["no", "yes"]),
 		(PF_OPTION, "enable_mixing", "Enable color mixing:", 0, ["no", "yes"])	# fixme: implement
 		#(PF_FILE, "filepath", "Output Filepath", ""),

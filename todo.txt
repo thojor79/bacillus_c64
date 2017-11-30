@@ -156,6 +156,33 @@ Ultimate coding would be 8way scrolling 50fps maybe with some background
 parallax scrolling and also sprite multiplexer (24 sprites or so) and maybe
 sound playing. Only possible with interleaved AI/physics.
 
+It seems that 8way scrolling with color ram, sprite mux and music overloads
+cpu ressources. Turrican3 has it all but sometimes has slowdown and
+flickering of score panel. This is just too much.
+
+Levels 256 tiles wide with 2x2 tiles seem ok, larger levels would eat up to
+20k of RAM but that would be ok (80 lines of tiles, for a screen with 20x10
+tiles giving 12.5x8 screens per level - 100 screens). We would need a
+loading routine then to load level data. This means no kernal and also fast
+load routine.
+
+Plan would be to have 20 lines of level display, one black line and 4 lines
+of score panel. Boni would be sprites. First step would be to have vertical
+scrolling, then vertical and horizontal scrolling, then integrate the sprite
+muxer and have screen split with score panel. That way we can use all 256
+characters for level data. Next step would be loading for more levels and
+later then sprite bullets in case of shoot'em'up game.
+
+Alternativly we could implement char bullets first and still have the 2way
+or 1way scroller with sprite muxer. We can implement a simple shooter with
+fix scrolling, sprite muxer and maybe char bullets then, some space shooter
+like Katakis. Would be rather easy. If score display is done in bottom
+border with border open we could even use full 25 lines. But that is not
+necessary.
+
+But it would all be just a repeating of existing stuff. And walking around
+and exploring levels that I have created myself is not big fun.
+
 However randomly or procedurally generated content would be cool. Like a RPG
 game with huge world map (256x256 maybe) so that the C64 can generate the
 data on the fly. Would also be more interesting to play in unknown data.
@@ -284,6 +311,177 @@ We would need many graphics of tree trunks and leaves etc.
 Overdraw could be much larger. Preparing images in gimp would be rather
 easy. Rendering brick walls could be simple by placing repeatable pattern in
 multiple of blocks.
+
+We should reuse blocks and compose tile images out of blocks. E.g. roads
+with curves are in the inner corner similar to T-junction roads or
+crossings, so we can reuse the inner corner blocks. Use different floor
+patterns (stone, bricks, mud, sand) with overlay images for landscape types
+(grass, swamp, stone, mud). Every image for a tile is stored in vertical
+runs that reference block numbers. Every block is 10 bytes (8 bitmap, 2
+color and use free bits to signal that block is fully opaque). Maybe
+sometimes it even helps to reuse the bitmap data but that would maybe cost
+too much space for indirect information. However with 10 bytes we could
+store > 2048 blocks, so use 12 bits for block number. Maybe 11 would be
+enough, but if we could use that bit is uncertain. Maybe we can store images
+as runs not of block numbers but runs of color data and block number. We
+need 12 bits for color information, as every block has maximum three colors.
+It could have four if opaque, but that would only work if one of the colors
+is like background color. Maybe only 3 colors is too limiting. However with
+a bit for opaque flag and 3 colors and 11bit block number we would have
+24bits in the image for every block reference and 8 bytes per block. That
+way we can reuse the bitmap data. We would put all images in one png and let
+c64fy compose a charset of 2048 characters of the data. However the opacity
+is more a feature of the bitmap data? Or can we have 4 colors for a block
+when opaque? That would be 16bit, 12bit block number and one opaque flag
+bit, hence 29bits.
+We don't know if reusing the bitmap data saves more space than the extra
+space for colors cost but that should be the case.
+Every tile is 8 char blocks wide and 7 char blocks high and tile images are
+up to 14 char blocks high. Certainly not all blocks are used. 
+
+...xx......oo...
+..xxxx....oooo..
+.xxxxxx..oooooo.
+xxxxxxxxoooooooo
+.xxxxxx..oooooo.
+..xxxx....oooo..
+...xx......oo..
+
+Column heights for the 8 colums are then up to:
+8,10,12,14,14,12,10,8. Sum is 88.
+No!!! It is 9,11,13,15,15,13,11,9->96 not 88, or 10% more! All calculations
+below are 10% off then!
+So at most 88 32bit values -> 364 bytes for one tile image and 88*8=704
+bytes for the bitmap data. At max 1068 bytes for a full tile image, so we
+would have space for roughly 30 full tile images, that is not much!
+However most tile images are not complete and we have the block reuse.
+Filled floor tiles are 8+2*6+2*4+2*2=32 char blocks, hence at max 32*4+32*8=
+128+256=384 bytes. And we certainly will have block reuse then.
+
+For the landscape it would be good to create a 16x16 or 32x32 byte world map
+that has 1 byte per cell with bits signalling if there is road/water and
+what type of terrain. Each cell is then extracted to 16x16 or 8x8 real data
+cells, where we store 32x32 real data cells for a local part of the world
+map. Real data is extrapolated from world data and some position based
+randomness. World data is true random, maybe generate paths by the recursive
+dungeon creation algorithm (not recursivly implemented though).
+That way roads are not straight but with some pattern like moving the road
+position to +/- 3 real cells on the border between the 8x8 sized read world
+data tiles. We have then always a 32x32 buffer (1k) with real world data and
+wrap around access. For rendering 5 tiles are seen horizontally with 4+2
+interleaved, so 11 tiles wide and 3+2+2=7 tiles high. So we can move around
+without the need to recreate real data. We can move around 4*2 or nearly 4*3
+screens without the need to recreate real data.
+
+So we could start with the dungeon crawl algorithm to create a net of roads
+and also rivers (only few rivers, 1/2 or 1/4 resolution) and distribute
+country types by random sample.
+
+Then we need some world to real data extrapolation and the real data needs
+to define how the tiles look. However with roads in all directions there are
+2+4+4+1=11 different road directions, different type of trees, decorations,
+floor types etc. so it is very difficult to pack it all in 8 bits. Maybe
+have 5 different types of floor w/o road, so 4bit for road data, maybe 2
+types of river crossing road, so 3 types of non-road. Then we would have 4
+bits for landscape type and type of decoration. With 4 landscape types this
+leaves only 4 types of decoration like trees and we have no rivers coded. If
+we store per real data cell only that there is a road and/or water and
+landscape type and decoration type then it will work better. Use 1 bit for
+road, 1 bit for water, 2 bits for landscape type and 4 for decoration number
+so we can chose road background by deco number or tree type by deco number
+etc. and create matching tile images by combinations of the 4 surrounding
+cells and this cell. We could for example place animals and fences etc. And
+we can position trees or decorations with a +/- 1 position variation inside
+the tile so it is more flexible.
+However this doesn't make it easy to gather all data what images to render
+for a tile. We have one floor type, one floor decoration, 0-2 decorations on
+top (like tree composed of two parts, trunk and leaves - or animals and
+fences). So this would be up to 4 images per tile. The decoration images
+could be taller than one tile, so they overlap other tiles. Decorations
+could be high grass and plants as well. So two images overlap tiles to the
+left/right/top.
+This means for one char block on a tile we have 2 blocks for the floor and 3
+sources of tile data with 2 blocks each so up to 2+3*2=8 image blocks to
+combine for one screen block.
+Because position can vary and all the checks it will take rather hundreds of
+cycles to prepare data. We need to read up to 5 real data cells and prepare
+lists of blocks for every tile (can do this once for rendering). So lets say
+it is 500 cycles per tile with 77 tiles so it is 33kcycles for preparation
+and converting a block to 32 pixels is surely say 200 cycles per block. So
+we have 40*20 blocks and 5 time overdraw so it is 200*800*5=800000 cycles
+total to create the blocks and surely more time to render the data. But that
+is still less than one second! That would be super fast.
+With all that technique we will have 256x256 tiles to render with 11x7 on
+screen giving nearly 1000 visible screens without loading!
+It takes 1k of world data and 1k of real data cache and surely
+77*5*4=1540bytes of preparation data, so 3.5kb gone, 16k gone for
+bitmap/screen/sprites, which doesn't leave much space for code and data. We
+have 112 sprites free roughly and if the player is facing 4 directions with
+3 animation phases each and 2 sprites it takes 24 sprites for the player
+alone. That is space only for 4-5 characters. So we have to copy the
+monsters visible on screen to the vic bank memory and need space for them as
+well. A cartridge would be very helpful here. If every monster could turn
+and move as well, maybe not with animations but 4 directions and 2x2 sprites
+it is 16 sprites per monster or 1k of data. With only 8 different monsters
+(not much for that huge world!) that would be 8k of sprite data. So we have
+47.5kb free and 3.5kb gone for preparation, so 44kb for code and data! Even
+if we can do that in 16kb of code, this leaves space for 28k of data - that
+would be 8 monsters and only 20k for landscape blocks - this is really few
+space. Let's assume we can reuse 1/3 of the blocks and let's also assume
+mean tile image has ~ 32 char blocks filled (full tile bottom or
+decorations - maybe less) then we need 32*4+32*8*2/3=128+85=213 bytes per
+image tile (not counted run encoding!) and we have 20kb = 20480 bytes then
+we can store 96 tile images maximum.
+This means 2+4+4+1+2 for roads/bridge, 2+4+4 for rivers, 8 tree trunks, 8
+tree leaves, 4*2 floor types for all landscapes, 2 animals, 2 fences, 2
+types of floor decoration per landscape (*4), we have already:
+13+10+8+8+8+2+2+8=59.
+And there are no cities/houses yet - so far we don't have them in this
+concept. So this game would be just walking around, smashing monsters and
+collecting goods.
+However with NPCs and quests it would take more ram to hold texts and data
+about started quests etc. etc. But there is no space for it. Monsters are
+somehow placed also randomly, shouldn't we have some final place at opposite
+end of map with very strong monsters and some final goal / treasure?
+A stripped down version of all this would be just some dungeon crawler game
+with less variation of graphics and then maybe more plots/quests but still
+random.
+However there are some questions:
+would this all work? If we need to paint all graphics first to test it that
+would be waste of time. Uncertain how good such a screen would look and how
+fast block composing is (we can try it in gimp but need some graphics
+first!)
+Would such a game be enough fun? It is a simple hack and slay game with
+superb graphics but no suprises and not much tension. And we need all the
+code for map generation etc. Trying the map generator would also be possible
+but maybe first in python to see how it would look.
+We also need some translation table how the 5 cell types generate the up to
+4 images per tile.
+Can it work to have opaque blocks with 4 colors? Would work only if
+background color is part of that block and block is opaque but all blocks
+must be opaque then to make it work! This can only happen for floor data
+(lowest layer of data) and there it doesn't make sense to store 4 colors as
+the fourth color is always background color.
+What background color to use? medium grey? green? brown?
+So we have at most 3 colors per block and maybe opaque bit. So 12+1+11 bits
+or 3 byte per block, not 4. How do we encode per tile image what blocks are
+used? A bitmask with 88 bits? decorations always 2 char blocks taller and
+smaller? Won't work for fences and animals. Rather use from top number of
+empty blocks and then number of filled (14/14 max), so one byte per column.
+If there are empty blocks in between use block number 0 for totally
+transparent block.
+Do we need opaque flag? Opaque blocks can only be directly copied for lowest
+floor layer. For decorations we still need a conversion? No. We could
+rearrange opaque blocks so blocknumbers 0-x are halftransparent and x+1-max
+are opaque so we can use 12bits for block number - no! Block numbers
+reference to bitmap data only, so we need an opaque bit here. But with
+11bits of block numbers we can have 2048 bitmap blocks of 8 bytes giving
+16kb of bitmap data - more we can't store in memory either.
+So we could try to paint some tiles in gimp and combine them to test how it
+would look like.
+Hmm seems we can't handle 95 images but rather 85-86, but it seems we have
+enough space.
+It also doesn't look isometric but just diagonal!
 
 SID Composing
 =============

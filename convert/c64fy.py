@@ -429,7 +429,7 @@ for y in range(0, img_h//8):
 		for yy in range(0, 8):
 			for xx in range(0, 8):
 				colorblock += [pxyuv[(y * 8 + yy) * img_w + (x * 8 + xx)]]
-		bbd = c64fylib.GenerateBestBlock(colorblock, fixindices, charmode, hiresmode, enable_dithering, uv_limit_grey)
+		bbd = c64fylib.GenerateBestBlock(colorblock, fixindices, charmode, hiresmode, True, enable_dithering, uv_limit_grey)
 		bitmapbytes += bbd[1]
 		if charmode:
 			freecolor = bbd[2][3]

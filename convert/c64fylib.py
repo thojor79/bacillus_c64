@@ -249,7 +249,7 @@ def ComputeMixFactorAndDistance(yuv, index0, index1):
 
 # fixme offer function to find most used color(s) also handling alpha channel!		
 		
-def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode, enable_dithering, uv_limit_grey):
+def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode, multicolorscaledown, enable_dithering, uv_limit_grey):
 	''' This is the core function of the converter. Convert a YUV color block of 8x8 pixels to C64 indices according to format.
 		In multicolor mode two pixels horizontally are merged.
 		Depending on mode 0-3 colors can be chosen freely, so already fix colors are given (1-4).
@@ -301,7 +301,7 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode, enable_dit
 		# Half error for comparison with multicolor
 		lowcolorblockerror = blockerror * 0.5
 	# For multicolor half x resolution!
-	if not hiresmode:
+	if not hiresmode and multicolorscaledown:
 		inputblock = BlockHiResToMultiColor(colorblock)
 	resultindices = []
 	# For every pixel find the two most similar colors and the best mix between them to represent the
@@ -407,7 +407,8 @@ def GenerateBestBlock(colorblock, fixed_indices, charmode, hiresmode, enable_dit
 						bits = i
 				byte = byte * 4 + bits
 			resultbytes += [byte]
-		resultindices = BlockMultiColorToHiRes(resultindices)
+		if multicolorscaledown:
+			resultindices = BlockMultiColorToHiRes(resultindices)
 		if charmode and fixed_indices_this_block[3] < 8:
 			fixed_indices_this_block[3] += 8	# Set multicolor flag
 	# Return image data, encoded bytes and colors used for this block
