@@ -81,6 +81,11 @@ It takes at least 147 raster lines (150 lines ~ 9000cyc with badlines, so
 Ideas for later
 ===============
 
+Add flying actors that drop other actors that just fall down like bombs or
+stones etc. Would make the game much more interesting!
+This would maybe need the sprite multiplexer.
+The falling actors should not get stored back to map!
+
 Many illegal opcodes of the C64 are very handy. Use them more in the code.
 
 Many checks like collisions between player and enemy doesn't need to be done
@@ -482,6 +487,174 @@ would look like.
 Hmm seems we can't handle 95 images but rather 85-86, but it seems we have
 enough space.
 It also doesn't look isometric but just diagonal!
+What happens if player or monster walks behind a tree is not defined. We
+could just forbid tiles with large decorations below roads.
+How can we make it look more isometric?
+The last ninja has roads with 4:1 diagonal factor, even 2:1 would look
+better, and here we have 1:1.
+Oh shit, the whole idea is doomed or can we have tiles with 2:1 or even 4:1
+shape?!
+2:1 Shape would be double width each?
+
+With 1:1 we have 8x7 size
+
+2:1 - 10x5 size
+....xx....
+..xxxxxx..
+xxxxxxxxxx
+..xxxxxx..
+....xx....
+
+The shape doesn't fit!
+
+Or 14x7 size...
+
+4:1 - 20x5 size difficult to have trees with such tiles.
+........xxxx
+....xxxxxxxxxxxx
+xxxxxxxxxxxxxxxxxxxx
+....xxxxxxxxxxxx
+........xxxx
+
+or 28x7 size - far too much.
+
+The shape doesn't fit!
+
+We need to double the middle row to make it work!
+So 10x6 or 20x6 size. 20x6 is too big.
+How would it look like with 10x6?
+
+Seems ok, shape is
+
+....xx....
+..xxxxxx..
+xxxxxxxxxx
+xxxxxxxxxx
+..xxxxxx..
+....xx....
+
+And shapes stack on top of each other. So its 3.333 shapes vertically
+and 4 horizontally (4+3+2=9, 3+2+2=7).
+
+Looks different than last ninja but still ok.
+Seems ok for roads - so the idea still works.
+
+Better store colors together with bitmap data, reusing only the bitmap data
+should be a very rare occasion. So have 10 bytes per block, use 1 spare bit
+for opaque marker.
+For tile images have two bytes header that encode offset and size in x/y
+directory with 4bit each.
+Per column have a list of two byte values encoding 11bits block number, 1
+bit repeat/ascend flag and 4 bit counter that tells how many blocks follow.
+With repeat flag same block is repeated, with ascend flag we signal that N
+blocks follow with ascending numbers. Normally we expect numbers to ascend,
+so this gives good compression. Every column then has 1-12 twobyte pairs.
+We need to know where each column starts. Either code that in the column or
+with some offset value per column. We can have 2-24 bytes per column, 10
+columns, so 20-240 bytes, so one byte index is enough. Store that after
+header.
+So tile image is 2 + N + N * M bytes with 2<=M<=24 and 1<=N<=10.
+Data size is then 2+1+1*2=5 to 2+10+10*24=252. So tile image is 5...252
+bytes. If we assume 128 bytes mean and have 8k for them we can store 64 tile
+images referring to 2048 blocks. That would be 28k for bitmap/tile data.
+2048 blocks are just two full screens of different blocks. Hopefully we can
+store tile images with less than 128 bytes that way we can have maybe 96 or
+128 tile images.
+
+Problem is all graphic works is wasted if the world generation doesn't look
+good. And all of that code is wasted if the graphics don't look good enough
+or the compression doesn't work.
+Maybe paint some road tiles first and some trees and try it out how it would
+look like and if it is good code the world stuff...
+
+If we would have 1 bit free per block in the tile image data we could
+reference a block and with horizontal mirror flag. There may be some blocks
+that can be reused mirrored...
+
+Realistic graphics like trees don't look to good, on green grass trees with
+green leaves don't look good, so trees need a black outline or only light
+green leaves - but that's not enough colors. Or forest floor needs to be
+brown but tree trunks are already brown - we need outlines in black here
+anyway.
+However last ninja looked rather realistic and not comic. So it should be
+possible.
+Use also cyan and yellow for trees. Lawn was light green and leaves dark
+green there. Last ninja two has dark green lawn and also shadows for trees.
+Sometimes cherry trees with white blossoms.
+In last ninja 3 the trees look well, leaves with green, cyan, dark gray, a
+bit black and the trunks orange, brown and partly black, also a bit light
+red at some spots.
+Rather realistic works.
+However trees need at least an darker outline to the right and top so they
+don't blend into the background.
+
+Tiles below road must not allow trees but rather bushes, so tile images are
+not higher than tile or at least only one char block or so.
+
+Landscape with rock walls would be cool, so player walks through canyons.
+Tile images are always two tiles high and we have inside/outside corners for
+all 4 directions, 2 tile images for left/right straight wall and one for
+filled top. Maybe have slightly varying height of border at top inside tile.
+
+Use sprites for on screen animations. Sparkling/flowing water, waving grass.
+
+Dense forest won't work rather have a bit more variation in positioning
+trees and also leave some tiles empty sometimes.
+
+First rough tests in GIMP seem to prove that the idea would work. But it
+highly depends on the quality of the graphics.
+
+When rendering trees variate their position +/- 1 row/column inside the tile
+depending on their position.
+
+The map is 256x256 in coordinates (tiles) but where x and y goes? y goes
+left/down and x right/down.
+
+World data is what? where roads and water and and kind of terrain. If we
+have 4 types of terrain (forest, bushland, swamp, rocks) we have 2 bits for
+terrain. We could encode road with 4 bits (or 12 values of there are no dead
+ends) and have 2 bits left for water (or maybe 5 different values, because
+5*12 is 60, and we can encode 64 values). 4 values for water could be: none,
+crossing n/s or w/e but not enough space for directions. For road and water
+we have only sharp curves then. Maybe we need more bits like monster density
+or treasure probability. Maybe hold 2 maps of 16x16 for this, still takes
+only half the memory than 32x32. And road directions can be stored in one
+cell, doesn't need to look at neighboring cells.
+So first part is to encode dungeon crawl w/o recursion in 16x16 block.
+We could use the CBM characters for directions.
+
+The algorithm for dungeon crawl works but needs good randomization for every
+decision and it may generate long straight paths. Even if we variate the
+terrain type every 16 real tiles a straight path of 4-6 world cells will
+result in a straight path of 64-96 tiles that is 10-12 screens of straight
+path with only minor variation of terrain. Not ideal.
+And if we don't try directions randomly but try remember last direction and
+trying one of the side directions first and then straight path? we need to
+store not only next position but also last direction then. Also not ideal,
+try also straight direction but with less probability rather.
+Can we later also stray in random connections? But this can give short
+circles that are bad.
+If we subdivide the field of 16x16 in 4 squares of 8x8 and have one
+connection between every square and the neighbor and then again subdivide to
+4x4 and 2x2 would that work?
+Have 15x15 fields and on cross shaped border with x or y = 8 mark on even
+positions one of them in every 4 parts of the cross. Again for next smaller
+cross (remain 7x7 with cross at x/y=4 and 3x3 with cross at x/y=1). No,
+don't mark for crosses in 3x3. Doesn't work all too well.
+Or like cities are: Have 3x3 or 5x5 spaced fields with one city randomly
+positioned in that area. then connect every city to 2-8 neighboring cities.
+Gives a rather regular map but with well sized circles and variation.
+If the pathes between cities are varied a bit (perturbation, shifting) it
+will work well. e.g. we can move the cell that the road goes over along the
+border of the cell! Gives a good perturbation of road. This means: a city is
+anywhere in the 3x3 or 5x5 area and is connected to all 4 borders of the
+cell. Corner tiles of the cell must not be used twice. This is more
+difficult, rather use 5x5 cells and don't use the corners or 3x3 and some
+special checks or so. 16x16 worls gives space for 5x5 cells of 3x3 size
+giving 25 knots.
+
+
+
 
 SID Composing
 =============
