@@ -11,11 +11,24 @@ test/spritemux.prg : src/spritemux.a Makefile
 #	acme -DTESTING=1 -DDEBUG_TIMING=0 -DTEST_STATIC_POS=0 -DKERNAL_RAND_POS=1 src/spritemux.a
 	acme -DTESTING=1 -DDEBUG_TIMING=1 -DTEST_STATIC_POS=0 -DKERNAL_RAND_POS=1 src/spritemux.a
 #	acme -DTESTING=1 -DDEBUG_TIMING=1 -DTEST_STATIC_POS=1 -DKERNAL_RAND_POS=0 src/spritemux.a
+#	acme -DTESTING=1 -DDEBUG_TIMING=1 -DTEST_STATIC_POS=1 -DKERNAL_RAND_POS=1 src/spritemux.a
+
+test/spritemux2.prg : src/spritemux2.a Makefile
+#	acme -DTESTING=1 -DDEBUG_TIMING=0 -DTEST_STATIC_POS=0 -DKERNAL_RAND_POS=1 src/spritemux2.a
+#	acme -DTESTING=1 -DDEBUG_TIMING=1 -DTEST_STATIC_POS=0 -DKERNAL_RAND_POS=1 src/spritemux2.a
+	acme -DTESTING=1 -DDEBUG_TIMING=1 -DTEST_STATIC_POS=1 -DKERNAL_RAND_POS=0 src/spritemux2.a
+#	acme -DTESTING=1 -DDEBUG_TIMING=1 -DTEST_STATIC_POS=1 -DKERNAL_RAND_POS=1 src/spritemux2.a
+
+test/dcrawl.prg : src/dcrawl.a
+	acme src/dcrawl.a
 	
 bacillus.all : bacillus.prg
 	c1541 -format diskname,id d64 bacillus.d64 -attach bacillus.d64 -write bacillus.prg bacillus -write test/spritemux.prg spritemux
 	~/c64/exomizer/src/exomizer sfx sys bacillus.prg -o bacillus_x.prg
 	c1541 -format diskname,id d64 bacillus_x.d64 -attach bacillus_x.d64 -write bacillus_x.prg bacillus -write test/spritemux.prg spritemux
+
+drun : test/dcrawl.prg
+	x64 --autostart test/dcrawl.prg
 
 srun : test/spritemux.prg
 	x64 --autostart test/spritemux.prg

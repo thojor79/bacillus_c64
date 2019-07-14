@@ -38,6 +38,19 @@ Maybe show monster sprites in title screen at the sides.
 
 Implement 6 levels, 2 per world.
 
+Maybe use sprite muxer and have boni as floating objects as sprites.
+But it would be very difficult to store them back to level data?
+Would be like with monsters. To spawn them their data must be in the
+level data together with background data, so they can be stored again.
+We can even use the same system for boni like that for enemies so we
+don't need to check for player to tile collisions.
+Boni would then be actors. Maybe this brings some simplifications and
+we have more chars available for the level data and they could look
+nicer. Even animation can be done better.
+Collision checking and actor movement with more than 7 enemies will be
+too expensive to do it every frame. Interleave the enemies and do it every
+second frame? How to avoid enemies running into walls then?
+What is with traps then? Also use sprites?
 
 
 INFO
@@ -653,6 +666,58 @@ difficult, rather use 5x5 cells and don't use the corners or 3x3 and some
 special checks or so. 16x16 worls gives space for 5x5 cells of 3x3 size
 giving 25 knots.
 
+Alternative: free simulation like elite or pirates, exploring planets in
+space or so.
+
+Together with world generation we can also generate quests randomly.
+Player needs to find an item, that is on a part of the map where she has
+no access to. Player needs a key or bypass a guardian. A gate or door would
+need extra graphics though. But it would give more variation than only NPCs
+there. Player could search for items or people, where one found item or person
+gives next item for quest. Multiple items are needed for the next. The computer
+can generate a solution tree randomly and place the barriers on the map then.
+So every game will be different. If the set of items, persons, keys is large
+enough so that only a part of it is used every game then it will be interesting
+enough.
+Beside the tech demo this can also be implemented with 8-way-scrolling in char
+mode. Landscape generation and puzzle generation can also be done on a large
+2d map with scrolling. We can have gates/doors there more easy.
+This would drop the idea of graphic composition altogether but only implement
+the world and puzzle generator.
+This would be a large RPG with random content, but that is not so interesting.
+Trying the image composer is more interesting.
+We can code it in python and also have some graphics there to test it.
+A set of tree trunks that can be used with a set of leaves give many different
+trees. Howevery the overdraw effect with color finding may be rarely used.
+We would have to draw two or more trees behind each other in one char to make
+use of it and most probably it will be hard to distinguish the multiple images
+with the few colors that are used.
+The top of the tree with some brown uses the same chars as the trunk of the next
+tree, or some green is reused, but probably this doesn't look well.
+Also the grey of the road doesn't interact with the trees.
+The original idea had 3 layers with varying size and more a first person view.
+Maybe rather some image generation algorithm that paints brick walls or similar
+is more useful in combination with that color reduction code. For example
+paint streets and houses like in Lords of Doom and have many screens that can be
+generated from RAM only. Paint structures as houses with lines or line boundaries
+and fill the 2d areas with many different texture patterns like varying wall/brick
+textures, wood, stone and so on. Problem is to draw it char based, so for every
+char compute all layers like basic pattern and decoration. Two or three or more
+patterns could be in one char if the 2d net of lines is in that char.
+We could generate a smaller part of the screen as location image then.
+Would the player be seen as figure there or would it be first person view?
+With 2d drawing we could also have 3 or more detail levels of the patterns,
+so we can render a house with different distances (detail levels).
+However this is very complex and any combining of patterns with pixel accuracy
+will give bad results. The whole idea of combining images is interesting,
+but if it is really useful has to be tested yet.
+It would at least be some new kind of game, not repeating existing stuff.
+An open world game like pirates would be cool as well. But what setting
+and how to use the bitmap composition for it? Large scrolling map can be done
+easily but it would all be new stuff.
+Can we try to use a sprite muxer with a bit more overhead while drawing and
+less overhead in preparation? Ideally combine bacillus and sprite muxer
+with boni as actors.
 
 
 
@@ -664,3 +729,4 @@ own instruments.
 understand/learn what filter and pulse tables are.
 maybe easier to get some notes and write them, free composing is very
 difficult, music sounds ok, but rather mechanical.
+
