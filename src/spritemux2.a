@@ -24,21 +24,14 @@
 NR_OF_VIRTUAL_SPRITES = 24 ; rather test 24 or less sprites, works with 44, min 2 (<8 doesn't make sense though)
 MIN_SPRITE_Y = 30
 MAX_SPRITE_Y = 250
-SPRITE_Y_DISTANCE = 21+2	; 21 sprite lines + 4 irq start, with 2 also ok but gives more errors
+SPRITE_Y_DISTANCE = 21		; This is just the sprite height.
 
 ;TESTING = 1
 ;DEBUG_TIMING = 1
 ;TEST_STATIC_POS = 1
 ;KERNAL_RAND_POS = 1
 
-; in some situations a sprite_y_distance of 21+2 works and we can see all 32 sprites
-; in the 32 test, which is superb! fixme this shoudl always work with the min(y-advance(nrofsprite))
-; for all raster lines of all sprites in that irq.
-
-; sometimes sprites aren't drawn, because 9th sprite and the size+4 limit, with size+2
-; there can be visible errors, especially if too many additional sprites in the same irq shift the
-; rasterline trigger much higher upwards. with 3 as limit it works
-
+; fixme describe the muxer idea and all its great ideas here thoroughly, then we can release and use it!
 
 ; We can speed up the irq exit by unrolling the rest of the handler code as
 ; well and by hardcoding the storage of the next irq address to $FFFE.
@@ -47,8 +40,11 @@ SPRITE_Y_DISTANCE = 21+2	; 21 sprite lines + 4 irq start, with 2 also ok but giv
 ; 15 or more cycles per irq.
 ; We can even precompute slot_raster-3 values so we don't need to sbc in the
 ; irq (cld would be needed otherwise!)
-; and check why adc #1 is done.
 ; We can even have both variants to have a tradeoff between code size and irq cycles.
+; If the next irq is triggered 1 raster line earlier (adc #1 instead of #2 at end of irq) we can avoid all the busy waiting.
+; it has to be tested yet if the faster irq exit would just be enough to avoid the busy
+; waiting stuff. if we change the foreground color we can see when the busy waiting starts, its more
+; at the end of the rasterline. So just 15 cycles won't help there. This is just not avoidable.
 
 ; We need to trigger the irq earlier depending on how many sprites are set in the
 ; interrupt but it depends on every line and the time until then!
@@ -58,7 +54,10 @@ SPRITE_Y_DISTANCE = 21+2	; 21 sprite lines + 4 irq start, with 2 also ok but giv
 ; with one sprite 2 lines earlier, with 8 sprites 5 lines earlier but only if all 8 are
 ; at the same line. If they are set up at later lines there is more time, so we don't
 ; need to trigger the irq 5 lines earlier, maybe 2 suffice.
-; fixme this will cost preparation time but is sensible and necessary
+; fixme it makes the preparation slower (more computation) ~ 6 RL, no surprise.
+; The advantage for display is only minor. It will skip less sprites in certain situations
+; or give less artifacts.
+
 
 ; The lower copy of the color ram is triggered when the raster irq is at half of screen,
 ; however this would interfere with the sprite raster interrupts. So check the raster line
@@ -163,6 +162,8 @@ main
 	jmp +
 !byte <vsprite_y
 !byte >vsprite_y
+!byte <(sprite_mux_irq_code_end-sprite_mux_irq)
+!byte >(sprite_mux_irq_code_end-sprite_mux_irq)
 +
 	; Set position and move values with randomness from kernal code
 	; Positions
@@ -267,6 +268,7 @@ vsprite_y
 		!byte 0
 	}
 }
+!byte 255	; y value to use as end marker (saves extra check in preparation loop!)
 
 vsprite_xl
 !for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
@@ -351,9 +353,11 @@ sprite_mux_irq_lines_before_sprite
 ; (NR_V-8)*5 for the other values, so in total NR_V*7-5*8.
 ; For 32 sprites this would be 184 bytes of zeropage,
 ; for 24 sprites this would be 128 bytes of zeropage, thats ok.
-sprite_sort_order = 64		; must be in zeropage because of stx xxx,y
+; use one extra byte in sprite_sort_order as end marker to save one additional stop check in preparation loop!
+; This saves 6*16=96 cycles in preparation loop at the cost of only 1 zeropage byte and 1 byte ram, seems good
+sprite_sort_order = 64-1		; must be in zeropage because of stx xxx,y
 ; Note! The following data doesn't need to be in zeropage, but it is faster that way
-sprite_sorted_y = sprite_sort_order + NR_OF_VIRTUAL_SPRITES	;$40+$18=$58, for 16
+sprite_sorted_y = sprite_sort_order + NR_OF_VIRTUAL_SPRITES + 1	;$40+$18=$58, for 16
 slot_d010 = sprite_sorted_y + NR_OF_VIRTUAL_SPRITES		;$58+$18=$70
 slot_xl = slot_d010 + NR_OF_VIRTUAL_SPRITES-8			;$80
 slot_ptr = slot_xl + NR_OF_VIRTUAL_SPRITES-8			;$90
@@ -366,7 +370,7 @@ sprite_mux_init
 	; turn on all sprites
 	+set8im VICSPRITEENABLE, $FF
 	; prepare any initial sort order - must be in zeropage!
-	ldy #(NR_OF_VIRTUAL_SPRITES-1)
+	ldy #NR_OF_VIRTUAL_SPRITES	; one more to also set sort index for stop marker!
 -	tya
 	sta sprite_sort_order,y
 	dey
@@ -403,8 +407,12 @@ sprite_mux_prepare
 	; currently processed vsprite index in TEMP1, it's y value in accu
 	; the sorting takes many cycles even for already sorted arrays, but we can't
 	; remove more commands.
-	;fixme count cycles here and check if thats plausible, the long computation time?
-	;but code can't be solved shorter/faster
+	; Can we speed up this code anyhow? X and Y are needed in inner loop,
+	; so we need to use zeropage for storage. Seems this is the minimum
+	; version for intersion sort. Either there is a faster algorithm for nearly sorted
+	; lists or it just takes that long.
+	; Sorting indices in reverse order to save the cpy call in the outer loop would
+	; save at least that call, but that saves only ~3*24 cycles (1 rasterline) total.
 	ldy #1			; outer counter 1...NR_OF_VIRTUAL_SPRITES-1
 sprite_mux_sort_outerloop
 	ldx sprite_sort_order,y
@@ -428,6 +436,59 @@ sprite_mux_sort_innerdone
 !if DEBUG_TIMING {
 	inc VICBGCOL
 }
+
+!if 0 {
+; test algorithm idea: sort only the y values and then the sort indices accordingly.
+; it is ~8 raster lines faster, but how much faster is it for unsorted input?
+; and some sprites are missing when it is used... no this is a follow up error of the raster line changes.
+; so this solution may be a good idea!
+; BIG advantage would be: the y values are already existing in sorted order afterwards!
+; so we don't need to read sort order index and from that the y value when sprite muxing is done later.
+; But we MUST NOT swap vsprite_y values! We would need to copy the vsprite_y to sorted_y array
+; and sort that array - but the sorted_y values are not identical to the original vsprite_y values
+; sorted - because some sprites may have been skipped! We would need to copy the y values first,
+; which would take time again. So finally this solution shouldn't really be faster. Sadly...
+; insertion sort:
+; i = 1
+; outer:
+; val = A[i]
+; j = i
+; inner:
+; if A[j-1] <= val then goto out
+; A[j] = A[j-1]
+; j--
+; if j > 0 then goto inner
+; out:
+; A[j] = val
+; ++i
+; if i < len(A) goto outer
+	ldy #1
+outer
+	tya
+	tax
+	lda vsprite_y,y
+inner
+	cmp vsprite_y-1,x
+	bcs inner_done
+	; expensive assign, must assign sort indices too!
+	lda vsprite_y-1,x
+	sta vsprite_y,x
+	lda sprite_sort_order-1,x
+	sta sprite_sort_order,x
+	; and load a again as vsprite_y,y
+	lda vsprite_y,y
+	dex
+	bne inner
+inner_done
+	sta vsprite_y,x
+	iny
+	cpy #NR_OF_VIRTUAL_SPRITES
+	bne outer
+!if DEBUG_TIMING {
+	inc VICBGCOL
+}
+}
+
 
 ; next step: skip all sprites with y coords that are too low
 ; advance y register to first sprite index with visible sprite
@@ -520,11 +581,6 @@ sprite_mux_set_first8_end
 	sta SPRITE_MUX_CURRENT_RL	; first rasterline = 0 as marker, so comparison below is always false for first irq
 sprite_mux_prepare_next_vsprite
 	ldx SPRITE_MUX_SORT_INDEX	; get sort order index
-	cpx #NR_OF_VIRTUAL_SPRITES	; compare if all are done
-	beq sprite_mux_irqs_prepared	; then skip further processing
-					; With additional sort index and additional
-					; maximum y value we can spare this extra check cpx/beq.
-					; fixme saves 6*16 cyles at cost of 2 bytes zeropage. seems fair.
 	lda sprite_sort_order,x		; get sort order. 
 	tax				; put it in x
 	lda vsprite_y,x			; load next virtual sprite y coord
@@ -537,20 +593,18 @@ sprite_mux_prepare_next_vsprite
 	cmp sprite_sorted_y+8,y		; compare against current sprite y
 	bcs sprite_mux_prepare_next_vsprite	; sprite would be 9th in rasterline, skip it!
 	; sprite can be displayed - check if in this irq or new irq
-	cmp SPRITE_MUX_CURRENT_RL	; compare y of last slot + 21 + tolerance < current rasterline ?
+	cmp SPRITE_MUX_CURRENT_RL	; compare y of last slot + 21 < current rasterline ?
 	bcc sprite_mux_prepare_same_irq	; same irq can be used if this slot has finished drawing
 	; need new irq
 	lda SPRITE_MUX_CURRENT_RL	; load current raster line
 	beq +				; if 0, this is first irq
 	; not first (new) irq, finish last one
-	ldx SPRITE_MUX_NRSPRINIRQ
-	;maybe we have to restore x afterwards!
-	sbc sprite_mux_irq_lines_before_sprite-1,x	; C=1 before, C=0 after
+	; read the current irq rasterline start and store it for the slot at irq begin
+	lda SPRITE_MUX_CURRENT_RL
 	ldx SLOT_NR_IRQ_BEGIN
-	sta slot_raster,x		; store rasterline for slot where current irq begun
-	; only after irq is complete we know the number of sprites in irq and how many raster lines
-	; to trigger the irq earlier to have enough time.
-	lda SPRITE_MUX_XHVAL		; prepare xhigh
+	sta slot_raster,x
+	; prepare xhigh value
+	lda SPRITE_MUX_XHVAL
 	sta slot_d010,x			; store at matching slot
 	sty SLOT_NR_IRQ_BEGIN		; memorize for next irq
 	+set8im SPRITE_MUX_NRSPRINIRQ, 0	; 0 sprites in this irq
@@ -558,7 +612,8 @@ sprite_mux_prepare_next_vsprite
 	lda slot_col-1,y		; write to slot before, so -1 here
 	ora #$80
 	sta slot_col-1,y
-+	lda sprite_sorted_y+8,y		; load sorted y
++
+	lda #$FF			; real value is set later, use neutral value for mininum computation.
 	sta SPRITE_MUX_CURRENT_RL	; save as rasterline
 sprite_mux_prepare_same_irq
 	ldx SPRITE_MUX_SORT_INDEX	; set x again to sort order
@@ -570,8 +625,6 @@ sprite_mux_prepare_same_irq
 	sta slot_ptr,y
 	lda vsprite_col,x
 	sta slot_col,y
-	; count up nr of sprites in irq variable here
-	inc SPRITE_MUX_NRSPRINIRQ
 	lda SPRITE_MUX_XHVAL		; xhigh
 	and bit_nand_table,y		; slotnumber (NUM_VSPRITES-8 sized!)
 	sta SPRITE_MUX_XHVAL
@@ -580,7 +633,19 @@ sprite_mux_prepare_same_irq
 	lda SPRITE_MUX_XHVAL
 	ora bit_or_table,y
 	sta SPRITE_MUX_XHVAL
-+	iny				; use next slot
++	
+	; load sprite y and decrease by offset depending on number of sprites in interrupt
+	lda vsprite_y,x
+	ldx SPRITE_MUX_NRSPRINIRQ
+	sec
+	sbc sprite_mux_irq_lines_before_sprite,x
+	; compare if that is lower than current irq raster start, if so, use it
+	cmp SPRITE_MUX_CURRENT_RL
+	bcs +
+	sta SPRITE_MUX_CURRENT_RL
++
+	inc SPRITE_MUX_NRSPRINIRQ	; sprite handled
+	iny				; use next slot
 !if DEBUG_TIMING {
 	inc VICBGCOL
 }
@@ -590,10 +655,8 @@ sprite_mux_irqs_prepared
 !if DEBUG_TIMING {
 	inc VICBGCOL
 }
-	; read nr of sprites for irq here
-	ldx SPRITE_MUX_NRSPRINIRQ
+	; store the irq start raster line for that slot
 	lda SPRITE_MUX_CURRENT_RL
-	sbc sprite_mux_irq_lines_before_sprite-1,x	; C=1 before, C=0 after
 	ldx SLOT_NR_IRQ_BEGIN
 	sta slot_raster,x				; to slot where irq begun
 	; set xhigh value of last irq
@@ -729,18 +792,14 @@ sprite_mux_irq_prepare_next
 	jmp sprite_mux_irq_last_done
 +	sta VICRASTER			; set as irq trigger
 	sec				; check if we are late for next irq!
-	sbc #3				; Need at least 3 lines, 2 are not enough.
+MIN_RASTER_LINES_BETWEEN_IRQS = 3	; with 2 we miss rasterlines/irqs and many sprites are missing
+	sbc #MIN_RASTER_LINES_BETWEEN_IRQS
 	cmp VICRASTER
 	; if C=0 we are too late for next irq, but do not start it BEFORE the
 	; stored raster line or it will be too early!
 	; if we are too late for the irq all displaying fails from here on
 	bcs sprite_mux_irq_done		; if carry set, VICRASTER <= next_rasterline - 2, so end IRQ
-	adc #1				; C=0, prepare check VICRASTER <= next_rasterline - 1
-					; because IRQs are still too early! (4-5 lines, need less!)
-	;fixme why not wait for the original raster line?!
-	;this starts the irq up to 2 lines too early, maybe a problem.
-	;but the late in irq doesn't explain the xhigh display errors.
-	;with unrolling we can lda slot_raster again, otherwise we need to adc 3 again.
+	adc #(MIN_RASTER_LINES_BETWEEN_IRQS-1)	; C=0, prepare check VICRASTER <= next_rasterline - 1
 -	cmp VICRASTER			; as long as we are in line before, do busy waiting
 	bcs -
 	rts				; return to unrolled code to continue irq.
@@ -757,5 +816,11 @@ sprite_mux_irq_done			; set up next irq vector from saved address and end irq
 !if DEBUG_TIMING {
 	dec VICBGCOL
 }
+; fixme, make irq quicker: jsr 6, pla 4, clc 2, adc 2, pla 4, adc 2 avoided -> 20 cycles saved.
+; last irq: jsr,pla,pla saved: 14 cycles saved.
+; late: jsr,rts saved but we need cld (12-2), 10 cycles saved.
+; fixme unroll always or per code switch? try with a copy of the code and check size!
+; it may cost 500 bytes?!
 	rti
+sprite_mux_irq_code_end
 
