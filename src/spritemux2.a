@@ -33,6 +33,8 @@ SPRITE_Y_DISTANCE = 21		; This is just the sprite height.
 
 ; fixme describe the muxer idea and all its great ideas here thoroughly, then we can release and use it!
 
+; fixme describe full unrolling and its costs and how much it saves, but it isnt't worth the trouble
+
 ; We can speed up the irq exit by unrolling the rest of the handler code as
 ; well and by hardcoding the storage of the next irq address to $FFFE.
 ; Or unroll only the storage and then jmp to a handler routine, that does
@@ -164,6 +166,8 @@ main
 !byte >vsprite_y
 !byte <(sprite_mux_irq_code_end-sprite_mux_irq)
 !byte >(sprite_mux_irq_code_end-sprite_mux_irq)
+!byte <(sprite_mux_irq_unroll1-sprite_mux_irq_unroll0)
+!byte >(sprite_mux_irq_unroll1-sprite_mux_irq_unroll0)
 +
 	; Set position and move values with randomness from kernal code
 	; Positions
@@ -712,6 +716,8 @@ MUXIRQ_SCREEN_ADR = (sprite_mux_irq_unroll_adr_p1-1 - sprite_mux_irq_unroll0)
 ; ******************************************
 ; the magic sprite mux irq
 ; ******************************************
+MIN_RASTER_LINES_BETWEEN_IRQS = 3	; with 2 we miss rasterlines/irqs and many sprites are missing
+UNROLL_FULL_IRQ = 0
 sprite_mux_irq
 !if DEBUG_TIMING {
 	inc VICBGCOL
@@ -733,8 +739,38 @@ sprite_mux_irq_unroll_adr_p1
 !if 0 < NR_OF_VIRTUAL_SPRITES-1-8 {
 	bpl ++				; if highbit set irq ends, so highbit clear, do next slot
 	lda slot_raster + 0+1		; load next irq raster line, next so +1
+!if UNROLL_FULL_IRQ {
+	; when accu is 0 so zero bit is set, no new irq needs to be called
+	; but the last one needs to end!
+	bne +
+	jmp sprite_mux_irq_last_done
++	sta VICRASTER			; set as irq trigger
+	cld
+	sec				; check if we are late for next irq!
+	sbc #MIN_RASTER_LINES_BETWEEN_IRQS
+	cmp VICRASTER
+	; if C=0 we are too late for next irq, but do not start it BEFORE the
+	; stored raster line or it will be too early!
+	; if we are too late for the irq all displaying fails from here on
+	bcc +				; if carry set, VICRASTER <= next_rasterline - 2, so end IRQ
+	+set16im $FFFE, sprite_mux_irq_next_start
+	pla		; restore accu
+	asl $D019	; ack irq
+!if DEBUG_TIMING {
+	dec VICBGCOL
+}
+	rti
++	adc #(MIN_RASTER_LINES_BETWEEN_IRQS-1)	; C=0, prepare check VICRASTER <= next_rasterline - 1
+inc VICFGCOL;fixme
+-	cmp VICRASTER			; as long as we are in line before, do busy waiting
+	bcs -
+dec VICFGCOL;fixme
+	bcc +				; directly jump to next irq code (always branches)
+} else {
 	jsr sprite_mux_irq_prepare_next	; save address for next irq or returns if late
 	bcc +				; carry is clear from caller, so this always branches
+}
+sprite_mux_irq_next_start
 !if DEBUG_TIMING {
 	inc VICBGCOL
 }
@@ -757,8 +793,38 @@ sprite_mux_irq_unroll1
 !if COUNT < NR_OF_VIRTUAL_SPRITES-1-8 {
 	bpl ++				; if highbit set irq ends, so highbit clear, do next slot
 	lda slot_raster + COUNT+1	; load next irq raster line, next so +1
+!if UNROLL_FULL_IRQ {
+	; when accu is 0 so zero bit is set, no new irq needs to be called
+	; but the last one needs to end!
+	bne +
+	jmp sprite_mux_irq_last_done
++	sta VICRASTER			; set as irq trigger
+	cld
+	sec				; check if we are late for next irq!
+	sbc #MIN_RASTER_LINES_BETWEEN_IRQS
+	cmp VICRASTER
+	; if C=0 we are too late for next irq, but do not start it BEFORE the
+	; stored raster line or it will be too early!
+	; if we are too late for the irq all displaying fails from here on
+	bcc +				; if carry set, VICRASTER <= next_rasterline - 2, so end IRQ
+	+set16im $FFFE, +++;sprite_mux_irq_next_start
+	pla		; restore accu
+	asl $D019	; ack irq
+!if DEBUG_TIMING {
+	dec VICBGCOL
+}
+	rti
++	adc #(MIN_RASTER_LINES_BETWEEN_IRQS-1)	; C=0, prepare check VICRASTER <= next_rasterline - 1
+inc VICFGCOL;fixme
+-	cmp VICRASTER			; as long as we are in line before, do busy waiting
+	bcs -
+dec VICFGCOL;fixme
+	bcc +				; directly jump to next irq code (always branches)
+} else {
 	jsr sprite_mux_irq_prepare_next	; save address for next irq or returns if late
 	bcc +				; carry is clear from caller, so this always branches
+}
++++
 !if DEBUG_TIMING {
 	inc VICBGCOL
 }
@@ -791,8 +857,8 @@ sprite_mux_irq_prepare_next
 	pla				; undo jsr
 	jmp sprite_mux_irq_last_done
 +	sta VICRASTER			; set as irq trigger
+	cld				; needed, as the main program can use decimal mode anywhere
 	sec				; check if we are late for next irq!
-MIN_RASTER_LINES_BETWEEN_IRQS = 3	; with 2 we miss rasterlines/irqs and many sprites are missing
 	sbc #MIN_RASTER_LINES_BETWEEN_IRQS
 	cmp VICRASTER
 	; if C=0 we are too late for next irq, but do not start it BEFORE the
@@ -800,8 +866,10 @@ MIN_RASTER_LINES_BETWEEN_IRQS = 3	; with 2 we miss rasterlines/irqs and many spr
 	; if we are too late for the irq all displaying fails from here on
 	bcs sprite_mux_irq_done		; if carry set, VICRASTER <= next_rasterline - 2, so end IRQ
 	adc #(MIN_RASTER_LINES_BETWEEN_IRQS-1)	; C=0, prepare check VICRASTER <= next_rasterline - 1
+inc VICFGCOL;fixme
 -	cmp VICRASTER			; as long as we are in line before, do busy waiting
 	bcs -
+dec VICFGCOL;fixme
 	rts				; return to unrolled code to continue irq.
 sprite_mux_irq_done			; set up next irq vector from saved address and end irq
 	pla
@@ -821,6 +889,14 @@ sprite_mux_irq_done			; set up next irq vector from saved address and end irq
 ; late: jsr,rts saved but we need cld (12-2), 10 cycles saved.
 ; fixme unroll always or per code switch? try with a copy of the code and check size!
 ; it may cost 500 bytes?!
+; it costs 77 bytes for one unroll part (16 or 24 parts for 24 or 32 sprites) with debug output. (1232/1848)
+; $47=71 bytes for one unroll part w/o debug output: 1136/1704 bytes.
+; with usual numbers (16) full unrolling takes 1136 bytes. not fully unrolled:
+; $23 = 35 bytes per block plus extra code. hmm measured separately: $262=610 bytes
+; 16*35=560, extra code 50 bytes. So with 32 sprites: 890. So not fully unrolled: 560/890 bytes. Compared to 1136/1704.
+; code size nearly doubles for a few cycles. unroll it fully and then test if its worth.
+; yes, 15-20 cycles less are realistic, but it doesn't help for tight sprite formations to reduce the busy waiting.
+; so clearly not worth it!
 	rti
 sprite_mux_irq_code_end
 
