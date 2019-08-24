@@ -35,6 +35,8 @@ SPRITE_Y_DISTANCE = 21		; This is just the sprite height.
 
 ; fixme describe full unrolling and its costs and how much it saves, but it isnt't worth the trouble
 
+; fixme store date in zeropage or other ram, it influences the interrupt cycle time!
+
 ; We can speed up the irq exit by unrolling the rest of the handler code as
 ; well and by hardcoding the storage of the next irq address to $FFFE.
 ; Or unroll only the storage and then jmp to a handler routine, that does
@@ -162,12 +164,13 @@ CIA1_ICR = $DC0D
 
 main
 	jmp +
+; for easier debugging
 !byte <vsprite_y
 !byte >vsprite_y
 !byte <(sprite_mux_irq_code_end-sprite_mux_irq)
 !byte >(sprite_mux_irq_code_end-sprite_mux_irq)
-!byte <(sprite_mux_irq_unroll1-sprite_mux_irq_unroll0)
-!byte >(sprite_mux_irq_unroll1-sprite_mux_irq_unroll0)
+!byte <MUXIRQ_SIZE
+!byte >MUXIRQ_SIZE
 +
 	; Set position and move values with randomness from kernal code
 	; Positions
@@ -518,26 +521,9 @@ inner_done
 ; we need to set the correct screen address later!
 	+set8im SPRITE_MUX_XHVAL, 0	; prepare D010 (xh) register
 sprite_mux_set_first8
-; we need to unroll the first iteration manually to know the offsets of replaced screen address!
-	ldy sprite_sort_order+0-8,x	; -8 because x already with offset 8.
-	lda vsprite_y,y
-	sta sprite_sorted_y+0
-	sta $D001+0*2
-	lda vsprite_xl,y
-	sta $D000+0*2
-	lda vsprite_ptr,y
-	sta $07F8+0			; screen address needs replace later
-sprite_mux_set_first8_screenadr_p1
-	lda vsprite_col,y
-	sta $D027+0
-	lda vsprite_xh,y
-	beq +
-	lda SPRITE_MUX_XHVAL
-	ora #(1 << 0)
-	sta SPRITE_MUX_XHVAL
-+
-sprite_mux_set_first8_blocksize
-!for COUNT, 1, 7 {
+!for COUNT, 0, 7 {
+!zone {
+.adrstart
 	ldy sprite_sort_order+COUNT-8,x	; -8 because x already with offset 8.
 	lda vsprite_y,y
 	sta sprite_sorted_y+COUNT
@@ -546,6 +532,7 @@ sprite_mux_set_first8_blocksize
 	sta $D000+COUNT*2
 	lda vsprite_ptr,y
 	sta $07F8+COUNT			; screen address needs replace later
+.adrp1
 	lda vsprite_col,y
 	sta $D027+COUNT
 	lda vsprite_xh,y
@@ -554,8 +541,11 @@ sprite_mux_set_first8_blocksize
 	ora #(1 << COUNT)
 	sta SPRITE_MUX_XHVAL
 +
+.adrend
+FIRST8_SCREEN_ADR = .adrp1 - .adrstart - 1
+FIRST8_SIZE = .adrend - .adrstart
 }
-sprite_mux_set_first8_end
+}
 	lda SPRITE_MUX_XHVAL	; must be loaded again because the beq above may have been taken
 	sta $D010		; save current xhigh value to register
 !if DEBUG_TIMING {
@@ -697,15 +687,11 @@ sprite_mux_irqs_prepared
 ; we need to set the hibyte of the screen address for all virtual sprites!
 ; so one load and 16-32 stores.
 	lda #$07		; hibyte of screen address
-FIRST8_SIZE = (sprite_mux_set_first8_blocksize-sprite_mux_set_first8)
-FIRST8_SCREEN_ADR = (sprite_mux_set_first8_screenadr_p1-1-sprite_mux_set_first8)
 !for COUNT, 0, 7 {
 	sta sprite_mux_set_first8+COUNT*FIRST8_SIZE+FIRST8_SCREEN_ADR
 }
-MUXIRQ_SIZE = (sprite_mux_irq_unroll1 - sprite_mux_irq_unroll0)
-MUXIRQ_SCREEN_ADR = (sprite_mux_irq_unroll_adr_p1-1 - sprite_mux_irq_unroll0)
 !for COUNT, 8, NR_OF_VIRTUAL_SPRITES-1 {
-	sta sprite_mux_irq_unroll0+MUXIRQ_SIZE*(COUNT-8)+MUXIRQ_SCREEN_ADR
+	sta sprite_mux_irq_unroll+MUXIRQ_SIZE*(COUNT-8)+MUXIRQ_SCREEN_ADR
 }
 !if DEBUG_TIMING {
 	+set8im VICBGCOL,14
@@ -725,72 +711,21 @@ sprite_mux_irq
 	pha				; save accu
 	lda slot_d010			; load xhigh for irq start at that slot
 	sta $D010			; set xhigh for this irq
-; we need to unroll the first block manually to know the offsets
-sprite_mux_irq_unroll0
-	lda sprite_sorted_y + 0 + 8	; load y coord
-	sta $D001+(0 & 7)*2		; set for hardware sprite
-	lda slot_xl + 0		; load xl coord
-	sta $D000+(0 & 7)*2		; set for hardware sprite
-	lda slot_ptr + 0		; load sprite pointer
-	sta $07F8+(0 & 7)		; set in register
-sprite_mux_irq_unroll_adr_p1
-	lda slot_col + 0		; load color
-	sta $D027+(0 & 7)		; set in register
-!if 0 < NR_OF_VIRTUAL_SPRITES-1-8 {
-	bpl ++				; if highbit set irq ends, so highbit clear, do next slot
-	lda slot_raster + 0+1		; load next irq raster line, next so +1
-!if UNROLL_FULL_IRQ {
-	; when accu is 0 so zero bit is set, no new irq needs to be called
-	; but the last one needs to end!
-	bne +
-	jmp sprite_mux_irq_last_done
-+	sta VICRASTER			; set as irq trigger
-	cld
-	sec				; check if we are late for next irq!
-	sbc #MIN_RASTER_LINES_BETWEEN_IRQS
-	cmp VICRASTER
-	; if C=0 we are too late for next irq, but do not start it BEFORE the
-	; stored raster line or it will be too early!
-	; if we are too late for the irq all displaying fails from here on
-	bcc +				; if carry set, VICRASTER <= next_rasterline - 2, so end IRQ
-	+set16im $FFFE, sprite_mux_irq_next_start
-	pla		; restore accu
-	asl $D019	; ack irq
-!if DEBUG_TIMING {
-	dec VICBGCOL
-}
-	rti
-+	adc #(MIN_RASTER_LINES_BETWEEN_IRQS-1)	; C=0, prepare check VICRASTER <= next_rasterline - 1
-inc VICFGCOL;fixme
--	cmp VICRASTER			; as long as we are in line before, do busy waiting
-	bcs -
-dec VICFGCOL;fixme
-	bcc +				; directly jump to next irq code (always branches)
-} else {
-	jsr sprite_mux_irq_prepare_next	; save address for next irq or returns if late
-	bcc +				; carry is clear from caller, so this always branches
-}
-sprite_mux_irq_next_start
-!if DEBUG_TIMING {
-	inc VICBGCOL
-}
-	pha				; save accu
-+	lda slot_d010 + 0+1		; load xhigh for irq start at that slot
-	sta $D010			; set xhigh for this irq
-++
-}
-sprite_mux_irq_unroll1
-; now the code with COUNT=1...
-!for COUNT, 1, NR_OF_VIRTUAL_SPRITES-1-8 {
+sprite_mux_irq_unroll
+	; unroll one iteration less than needed, last iteration is shorter and manually unrolled.
+	; note that the instructions must be identical in the last iteration to make it work!
+!for COUNT, 0, NR_OF_VIRTUAL_SPRITES-2-8 {
+!zone {
+.adrstart
 	lda sprite_sorted_y + COUNT + 8	; load y coord
 	sta $D001+(COUNT & 7)*2		; set for hardware sprite
 	lda slot_xl + COUNT		; load xl coord
 	sta $D000+(COUNT & 7)*2		; set for hardware sprite
 	lda slot_ptr + COUNT		; load sprite pointer
 	sta $07F8+(COUNT & 7)		; set in register
+.adrp1
 	lda slot_col + COUNT		; load color
 	sta $D027+(COUNT & 7)		; set in register
-!if COUNT < NR_OF_VIRTUAL_SPRITES-1-8 {
 	bpl ++				; if highbit set irq ends, so highbit clear, do next slot
 	lda slot_raster + COUNT+1	; load next irq raster line, next so +1
 !if UNROLL_FULL_IRQ {
@@ -807,7 +742,7 @@ sprite_mux_irq_unroll1
 	; stored raster line or it will be too early!
 	; if we are too late for the irq all displaying fails from here on
 	bcc +				; if carry set, VICRASTER <= next_rasterline - 2, so end IRQ
-	+set16im $FFFE, +++;sprite_mux_irq_next_start
+	+set16im $FFFE, +++ 		; sprite_mux_irq_next_start
 	pla		; restore accu
 	asl $D019	; ack irq
 !if DEBUG_TIMING {
@@ -832,7 +767,23 @@ dec VICFGCOL;fixme
 +	lda slot_d010 + COUNT+1		; load xhigh for irq start at that slot
 	sta $D010			; set xhigh for this irq
 ++
-}
+.adrend
+MUXIRQ_SIZE = .adrend - .adrstart
+MUXIRQ_SCREEN_ADR = .adrp1 - 1 - .adrstart
+} ; zone
+} ; for
+; Now iteration for COUNT=NR_OF_VIRTUAL_SPRITES-1-8 manually unrolled, only
+; a few instructions. Must be identical to unrolled irq code!
+!zone {
+.COUNT=NR_OF_VIRTUAL_SPRITES-1-8
+	lda sprite_sorted_y + .COUNT + 8	; load y coord
+	sta $D001+(.COUNT & 7)*2		; set for hardware sprite
+	lda slot_xl + .COUNT		; load xl coord
+	sta $D000+(.COUNT & 7)*2		; set for hardware sprite
+	lda slot_ptr + .COUNT		; load sprite pointer
+	sta $07F8+(.COUNT & 7)		; set in register
+	lda slot_col + .COUNT		; load color
+	sta $D027+(.COUNT & 7)		; set in register
 }
 sprite_mux_irq_last_done
 	; last irq is done, set rasterline to scoreline panel
@@ -884,6 +835,11 @@ sprite_mux_irq_done			; set up next irq vector from saved address and end irq
 !if DEBUG_TIMING {
 	dec VICBGCOL
 }
+; fixme: was this comment about full unroll or not? seems so... maybe have 2 versions of the irq
+; in code, even with code duplication, full unrolled vs. partially unrolled.
+; otherwise its hard to understand.
+; then comment costs and size
+
 ; fixme, make irq quicker: jsr 6, pla 4, clc 2, adc 2, pla 4, adc 2 avoided -> 20 cycles saved.
 ; last irq: jsr,pla,pla saved: 14 cycles saved.
 ; late: jsr,rts saved but we need cld (12-2), 10 cycles saved.
