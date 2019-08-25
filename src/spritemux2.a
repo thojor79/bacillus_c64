@@ -420,14 +420,19 @@ sprite_mux_sort_innerdone
 !if 0 {
 ; test algorithm idea: sort only the y values and then the sort indices accordingly.
 ; it is ~8 raster lines faster, but how much faster is it for unsorted input?
-; and some sprites are missing when it is used... no this is a follow up error of the raster line changes.
 ; so this solution may be a good idea!
 ; BIG advantage would be: the y values are already existing in sorted order afterwards!
 ; so we don't need to read sort order index and from that the y value when sprite muxing is done later.
-; But we MUST NOT swap vsprite_y values! We would need to copy the vsprite_y to sorted_y array
-; and sort that array - but the sorted_y values are not identical to the original vsprite_y values
-; sorted - because some sprites may have been skipped! We would need to copy the y values first,
-; which would take time again. So finally this solution shouldn't really be faster. Sadly...
+; But we need to access vsprite_y coordinate later then always indirect via index, which adds
+; more cycles, when reading/writing y values when handling actors.
+; BUT: the sorted y coordinates are NOT identical to the sorted values we use later.
+; If sprites are skipped because they would be the 9th sprite on a row their sorted y
+; value is overwritten - so we would need to copy these sorted_y values to yet another
+; array. Copying of 24 bytes (for 24 sprites) takes at least 24*8 cycles, ~3 raster lines
+; plus the overhead on access later. So we save only 5 rasterlines on preparation plus
+; more access time. This doesn't seem an advantage.
+; 
+; If sprites are skipped does that influence the vsprite
 ; insertion sort:
 ; i = 1
 ; outer:
