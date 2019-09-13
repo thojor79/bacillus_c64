@@ -379,6 +379,14 @@ sprite_mux_prepare
 !if DEBUG_TIMING {
 	inc VICBGCOL
 }
+	; Changing value for one sprite and sorting it in sorted list would be
+	; logN (make heap). Hence all sprites can change position and mostly will
+	; every frame, this is N*logN like heap sort. So this will NOT be faster.
+	; The fastest continuous sorting algorithm is insertion sort.
+	; We also tried bubble sort, which is faster on already sorted arrays
+	; but will be very bad in certain yet realistic situations.
+	; So use insertion sort here.
+!if 1 {
 	; as first sort indices so that sprite y coordinates are ascending with
 	; insertion sort
 	; outer counter of insertion sort loop is stored in y/TEMP0, going from 1 to
@@ -393,6 +401,7 @@ sprite_mux_prepare
 	; lists or it just takes that long.
 	; Sorting indices in reverse order to save the cpy call in the outer loop would
 	; save at least that call, but that saves only ~3*24 cycles (1 rasterline) total.
+	; Even with 32 sprites the sorting is fast enough in realistic situations.
 	ldy #1			; outer counter 1...NR_OF_VIRTUAL_SPRITES-1
 sprite_mux_sort_outerloop
 	ldx sprite_sort_order,y
@@ -413,6 +422,61 @@ sprite_mux_sort_innerdone
 	iny
 	cpy #NR_OF_VIRTUAL_SPRITES
 	bne sprite_mux_sort_outerloop
+} else {
+	; bubble sort
+	; For already sorted arrays it is faster, but could be slower in other cases.
+	; if last entry to be sorted is smallest, i.e. 0, it takes quadratic number
+	; of situations! yes because it goes down only 1 step per outer iteration,
+	; because we count the inner iteration upwards.
+	; But if the first entry would be the largest, it would go to the end after
+	; one inner iteration, but if we reverse inner order it would take
+	; also quadratic number of iterations.
+	; So these extreme cases are costly for bubblesort.
+	; It works with insertion sort though... so bubble sort is NO OPTION.
+	ldy #NR_OF_VIRTUAL_SPRITES
+-	ldx sprite_sort_order-1,y
+	lda vsprite_y,x
+	sta $8000-1,y
+	dey
+	bne -
+
+	ldy #(NR_OF_VIRTUAL_SPRITES-1)
+sprite_mux_sort_outerloop
+	sty TEMP0
+	ldy #1			; set new outer y value to 1
+	sty TEMP1
+	dey			; y=0
+	inc VICBGCOL;fixme
+sprite_mux_sort_innerloop
+	ldx sprite_sort_order+1,y
+	lda vsprite_y,x
+	ldx sprite_sort_order,y
+	cmp vsprite_y,x
+	bcc +
+	iny
+	cpy TEMP0
+	bne sprite_mux_sort_innerloop
+	; end inner loop
+	ldy TEMP1
+	dey
+	bne sprite_mux_sort_outerloop
+	beq ++		; sorting done, always jumps
++	; do swap
+	ldx sprite_sort_order+1,y
+	lda sprite_sort_order,y
+	stx sprite_sort_order,y
+	sta sprite_sort_order+1,y
+	iny
+	sty TEMP1
+	cpy TEMP0
+	bne sprite_mux_sort_innerloop
+	; end inner loop
+	;ldy TEMP0	; already in y!
+	dey
+	bne sprite_mux_sort_outerloop
+++	; done
+	inc VICFGCOL;fixme
+}
 !if DEBUG_TIMING {
 	inc VICBGCOL
 }

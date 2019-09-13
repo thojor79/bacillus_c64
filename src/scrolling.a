@@ -25,11 +25,12 @@
 ; bytes that are kept, remaining columns can be filled up easily. It is very easy to write and to use, better than
 ; approaches that use some power of two as loop counter. Code is rather short (~100 bytes for half screen).
 ; And it uses partial loop unrolling, taking ((4+5)*12+7)*39 = 4485 cycles per half screen (71.2 raster lines),
-; Which is pretty fast (9.6 cycles/byte, optimum with maximal unrolling only 9 cycles/byte!).
+; Which is pretty fast (9.6 cycles/byte, optimum with maximal unrolling only 8 cycles/byte!).
 ; Final advantage: there are no overlaps and no bytes to save/restore.
 ; And the same macro can be used for color ram shifting as well!
 ; It takes ~80 raster lines (with bad lines ~58 cycles per rasterline medium, so seems ok)
 ; Full screen is 312 raster lines, so it takes ~ half raster time to copy, seems fair.
+
 !macro halfscreencopy .dstadr, .srcadr {
 	ldx #0
 -

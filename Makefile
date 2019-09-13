@@ -20,7 +20,7 @@ test/spritemux2.prg : src/spritemux2.a Makefile
 #	acme -DTESTING=1 -DDEBUG_TIMING=1 -DTEST_STATIC_POS=1 -DKERNAL_RAND_POS=1 src/spritemux2.a
 
 test/scrolling2d.prg : src/scrolling2d.a Makefile
-	acme -DTESTING=1 -DDEBUG_TIMING=1 src/scrolling2d.a
+	acme -DTESTING=1 -DDEBUG_TIMING=1 -DHIRES=1 src/scrolling2d.a
 
 test/dcrawl.prg : src/dcrawl.a
 	acme src/dcrawl.a
