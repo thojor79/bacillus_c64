@@ -157,9 +157,27 @@
 
 ; fixme: is_scroll_active remove that from main program. same for screen_pos_x.
 
-; fixme only to the plain scrolling here and call fill_new_first_row etc. functions here
-; that are implemented in tile rendering!
-; do tile rendering in other file!
+; fixme implement tile2d renderer outside... just functions that take screen_pos_x/y
+; and read tile data and write that to the buffers.
+; offset can be 1 so handle first tile specially or write to buffer-1 or so...
+; can we have versions for new row when tiley is char offset 0 and char offset 1?
+; and vice versa? so 4 versions for 4 char offsets?
+; with tile_y_coord we need to read the correct level data, so the offset for each
+; y pos of level needs to be read from a table, even more overhead.
+; if all levels are 128 tiles wide, this can be simplified though.
+; but it would be good to be flexible here... this is costly for new column generation.
+; 21 lines are 11 tiles no matter what offset. 39 columns are 20 tiles no matter what
+; offset. so we can always access 20 or 11 tiles and need to adjust the output...
+; if we don't have to read (and clear!) the actors from level data, code will be simpler.
+; screen_pos_x/y upper byte to tile coordinate. tile data (2 of 4 bytes) for row/col
+; to buffer, inc buffer counter twice, then jump to next tile...
+; initial buffer offset 0 or 1 then and pointing one byte before buffer...
+; for columns add line size to tile coord (8+16 add), costly...
+; sounds like a plan, isn't that complicated to do a tile renderer
+
+; Here we implement only the plain scrolling and transfer from new data to the screen(s)
+; and color ram. Functions like scoll_generate_* have to be implemented externally
+; in e.g. some tile renderer. So tile rendering is done in another file.
 
 ; Note! Parallax scrolling by counter shifting some characters is not implemented here,
 ; as we would need special code for all 8 directions. This is not trivial and eats
@@ -197,23 +215,12 @@
 ; color data to upper and lower part and we must copy the upper half of the column
 ; after the upper part was moved or it will be too late also.
 
-; fixme can we render tile data to linear buffer and copy that later to matching screen?
-; thus tile rendering don't need to fiddle with line offsets and screen.
-; but it costs twice the copy time, could be slower!
-; but like linear copy for color (buffer to colorram) we can have simple unrolled versions
-; that write directly to matching address. This should be much faster than address computation...
-; it needs even more code, another kb of code for transfer... 
-; we could also render always full tiles and read then with offset 0 or 1 later...
-
 ; Note with a sprite muxer we need to interleave the code: first compute new screen pos at end of screen
 ; and new hardware register value, then do all the sprite muxing, and then the copying.
 ; When the sprite muxer has sorted the sprites and set up the first 8 and maybe created the first
 ; irq we can do the copying and let the muxer create the rest of the irqs later? no, we have to copy
 ; all the sprite data before display starts because during display sprite data can be changed by
 ; actor code.
-
-; fixme 
-; sometimes when scrolling up the first line looks garbled, maybe because color is not set yet?
 
 ; When switching from left to right or vice versa and up to down etc. we need one
 ; preparation frame with 1 pixel scroll, hence the neutral position for left/up is
@@ -225,7 +232,17 @@
 
 ; fixme: raster IRQ to blend out sprites is needed, invalid mode or bitmap on
 ; and restored later! so do not directly write vicctrl but to var,
-; and set that later!
+; and set that later! turn off screen and yscroll first instantly,
+; then modify memory layout (if needed) and set ctrl2 and then ctrl1 again.
+; later restore memory layout (if needed) and set ctrl1/2 to desired values.
+; maybe also implement score panel display here. can be bitmap or char, but without scrolling.
+
+; Note that the final scroll code is ca. 5.5kb because of the many unrolled code parts.
+; That is a lot, but a working 8-way scroller that is fast enough is one of the major parts
+; of a game, so investing that much code is acceptable. Even if the level data eats 32kb and
+; 16kb for graphical data we have 16kb left for code/data and there the scroll and sprite muxer
+; will take 8kb max, so 8kb for actor logic, AI and so on, that should be enough. And mostly
+; level data is smaller!
 
 !if TESTING {
 TEMP0 = $2
@@ -282,14 +299,15 @@ main
 	; repeat, but wait first until raster is again near start of screen
 -	lda VICRASTER
 	bmi -
+	lda scroll_vicctrl1
+	sta VICCTRL1
+	lda scroll_vicctrl2
+	sta VICCTRL2
 	jmp --
 
 joy_scrolldir
 !byte 0, 2, 6, 0,  8, 1, 7, 0,  4, 3, 5, 0,  0, 0, 0, 0
 
-; for testing - fixme we need versions that write to screen0 AND version for screen1,
-; how did the old code do that? vertically we can have half tiles, this will be a complex
-; and slow code!
 scroll_generate_first_row
 	lda screen_pos_x+1
 	clc
@@ -298,7 +316,7 @@ scroll_generate_first_row
 	ldx #39
 -	tya
 	sta scroll_color_newdata_tmpbuf_row-1,x
-	sta SCREEN0-1,x
+	sta scroll_char_newdata_tmpbuf_row-1,x
 	iny
 	dex
 	bne -
@@ -313,17 +331,34 @@ scroll_generate_last_row
 	ldx #39
 -	tya
 	sta scroll_color_newdata_tmpbuf_row-1,x
-	sta SCREEN0-1+20*40,x
+	sta scroll_char_newdata_tmpbuf_row-1,x
 	iny
 	dex
 	bne -
 	rts
 
 scroll_generate_first_col
-;fixme iterations columns not easy
+	ldy screen_pos_y+1
+	ldx #21
+-	tya
+	sta scroll_color_newdata_tmpbuf_col-1,x
+	sta scroll_char_newdata_tmpbuf_col-1,x
+	iny
+	dex
+	bne -
 	rts
 
 scroll_generate_last_col
+	ldy screen_pos_y+1
+	iny
+	iny
+	ldx #21
+-	tya
+	sta scroll_color_newdata_tmpbuf_col-1,x
+	sta scroll_char_newdata_tmpbuf_col-1,x
+	iny
+	dex
+	bne -
 	rts
 
 }
@@ -336,7 +371,7 @@ screen_pos_x
 screen_pos_y
 !word 0
 
-!word scoll_code_end_adr-scoll_code_begin_adr	;fixme size measurement, 4839 bytes now
+!word scoll_code_end_adr-scoll_code_begin_adr	;fixme size measurement, 5439 bytes now
 
 scroll_active
 !byte 0
@@ -358,6 +393,16 @@ scroll_color_tmpbuf
 !byte 0
 }
 
+scroll_char_newdata_tmpbuf_row
+!for COUNT, 0, 38 {	; we need 39 bytes at most
+!byte 0
+}
+
+scroll_char_newdata_tmpbuf_col
+!for COUNT, 0, 24 {	; we need 25 bytes at most
+!byte 0
+}
+
 scroll_color_newdata_tmpbuf_row
 !for COUNT, 0, 38 {	; we need 39 bytes at most
 !byte 0
@@ -367,6 +412,11 @@ scroll_color_newdata_tmpbuf_col
 !for COUNT, 0, 24 {	; we need 25 bytes at most
 !byte 0
 }
+
+scroll_vicctrl1
+!byte 0
+scroll_vicctrl2
+!byte 0
 
 scoll_code_begin_adr ; for measuring size
 
@@ -446,32 +496,55 @@ scroll_jmp_table_color_endscreen
 ; by coincidence we can use the same values for both registers when multicolor is enabled!
 ; vicctrl1: hibit irq off, extended color mode off, bitmap off, screen on
 ; vicctrl2: multicolor enabled
-scroll_vicctrl1
+scroll_vicctrl1_for_offset
 !byte $17,$16,$15,$14,$13,$12,$11,$10
 
 !if HIRES {
-scroll_vicctrl2
+scroll_vicctrl2_for_offset
 !byte $07,$06,$05,$04,$03,$02,$01,$00
 } else {
-scroll_vicctrl2 = scroll_vicctrl1
+scroll_vicctrl2_for_offset = scroll_vicctrl1_for_offset
 }
 
 ; copy data from temporary buffers to color ram.
 ; note that we can use index register for horizontal copy,
-; but that adds 39*(1+2+3)=234 cycles (4 RL) to the copy cost (8*39=312 | 5.3 RL)
-; and we would save 38*6-3=225 bytes of ram. Rather use the ram.
-; this also means all the color copy eats another 1kb of ram!
+; but should partly unroll otherwise we use too many extra cycles for loop handling.
+; if we unroll 13 copies (3*13=39) we can save ~2/3 of the ram with acceptable
+; overhead (~1RL). The vertical version can not be reduced though.
+; color copy code total takes 424 byte. twice of that needed for screen copy additionally.
 scroll_copy_color_first_row
+!if 0 {
 !for COUNT, 0, 38 {
 	lda scroll_color_newdata_tmpbuf_row+COUNT
 	sta COLORRAM+COUNT
 }
+} else {
+	ldx #3
+-
+!for COUNT, 0, 12 {
+	lda scroll_color_newdata_tmpbuf_row+COUNT*3-1,x
+	sta COLORRAM+COUNT*3-1,x
+}
+	dex
+	bne -
+}
 	rts
 
 scroll_copy_color_last_row
+!if 0 {
 !for COUNT, 0, 38 {
 	lda scroll_color_newdata_tmpbuf_row+COUNT
 	sta COLORRAM+20*40+COUNT
+}
+} else {
+	ldx #3
+-
+!for COUNT, 0, 12 {
+	lda scroll_color_newdata_tmpbuf_row+COUNT*3-1,x
+	sta COLORRAM+20*40+COUNT*3-1,x
+}
+	dex
+	bne -
 }
 	rts
 
@@ -500,6 +573,78 @@ scroll_copy_color_last_col_endscreen
 !for COUNT, 10, 20 {
 	lda scroll_color_newdata_tmpbuf_col+COUNT
 	sta COLORRAM+COUNT*40+38
+}
+	rts
+
+scroll_copy_char_first_row_to0
+	ldx #3
+-
+!for COUNT, 0, 12 {
+	lda scroll_char_newdata_tmpbuf_row+COUNT*3-1,x
+	sta SCREEN0+COUNT*3-1,x
+}
+	dex
+	bne -
+	rts
+
+scroll_copy_char_first_row_to1
+	ldx #3
+-
+!for COUNT, 0, 12 {
+	lda scroll_char_newdata_tmpbuf_row+COUNT*3-1,x
+	sta SCREEN1+COUNT*3-1,x
+}
+	dex
+	bne -
+	rts
+
+scroll_copy_char_last_row_to0
+	ldx #3
+-
+!for COUNT, 0, 12 {
+	lda scroll_char_newdata_tmpbuf_row+COUNT*3-1,x
+	sta SCREEN0+20*40+COUNT*3-1,x
+}
+	dex
+	bne -
+	rts
+
+scroll_copy_char_last_row_to1
+	ldx #3
+-
+!for COUNT, 0, 12 {
+	lda scroll_char_newdata_tmpbuf_row+COUNT*3-1,x
+	sta SCREEN1+20*40+COUNT*3-1,x
+}
+	dex
+	bne -
+	rts
+
+scroll_copy_char_first_col_to0
+!for COUNT, 0, 20 {
+	lda scroll_char_newdata_tmpbuf_col+COUNT
+	sta SCREEN0+COUNT*40
+}
+	rts
+
+scroll_copy_char_first_col_to1
+!for COUNT, 0, 20 {
+	lda scroll_char_newdata_tmpbuf_col+COUNT
+	sta SCREEN1+COUNT*40
+}
+	rts
+
+scroll_copy_char_last_col_to0
+!for COUNT, 0, 20 {
+	lda scroll_color_newdata_tmpbuf_col+COUNT
+	sta SCREEN0+COUNT*40+38
+}
+	rts
+
+scroll_copy_char_last_col_to1
+!for COUNT, 0, 20 {
+	lda scroll_color_newdata_tmpbuf_col+COUNT
+	sta SCREEN1+COUNT*40+38
 }
 	rts
 
@@ -559,139 +704,147 @@ scroll_copy_color_last_col_endscreen
 
 scroll_left_up_midscreen_0to1
 	+screen_part_copy 0, 41, 38, 10, 0, SCREEN0, SCREEN1
-	rts
+	jsr scroll_generate_first_row
+	jmp scroll_generate_first_col
 
 scroll_left_up_endscreen_0to1
 	+screen_part_copy 0, 41, 38, 10, 10, SCREEN0, SCREEN1
-	jsr scroll_generate_first_row
-	jmp scroll_generate_first_col
+	jsr scroll_copy_char_first_row_to1
+	jmp scroll_copy_char_first_col_to1
 
 scroll_up_midscreen_0to1
 	+screen_part_copy 0, 40, 39, 10, 0, SCREEN0, SCREEN1
-	rts
+	jmp scroll_generate_first_row
 
 scroll_up_endscreen_0to1
 	+screen_part_copy 0, 40, 39, 10, 10, SCREEN0, SCREEN1
-	jmp scroll_generate_first_row
+	jmp scroll_copy_char_first_row_to1
 
 scroll_right_up_midscreen_0to1
 	+screen_part_copy 1, 40, 38, 10, 0, SCREEN0, SCREEN1
-	rts
+	jsr scroll_generate_first_row
+	jmp scroll_generate_last_col
 
 scroll_right_up_endscreen_0to1
 	+screen_part_copy 1, 40, 38, 10, 10, SCREEN0, SCREEN1
-	jsr scroll_generate_first_row
-	jmp scroll_generate_last_col
+	jsr scroll_copy_char_first_row_to1
+	jmp scroll_copy_char_last_col_to1
 
 scroll_right_midscreen_0to1
 	+screen_part_copy 1, 0, 38, 10, 0, SCREEN0, SCREEN1
-	rts
+	jmp scroll_generate_last_col
 
 scroll_right_endscreen_0to1
 	+screen_part_copy 1, 0, 38, 11, 10, SCREEN0, SCREEN1
-	jmp scroll_generate_last_col
+	jmp scroll_copy_char_last_col_to1
 
 scroll_right_down_midscreen_0to1
 	+screen_part_copy 41, 0, 38, 10, 0, SCREEN0, SCREEN1
-	rts
+	jsr scroll_generate_last_row
+	jmp scroll_generate_last_col
 
 scroll_right_down_endscreen_0to1
 	+screen_part_copy 41, 0, 38, 10, 10, SCREEN0, SCREEN1
-	jsr scroll_generate_last_row
-	jmp scroll_generate_last_col
+	jsr scroll_copy_char_last_row_to1
+	jmp scroll_copy_char_last_col_to1
 
 scroll_down_midscreen_0to1
 	+screen_part_copy 40, 0, 39, 10, 0, SCREEN0, SCREEN1
-	rts
+	jmp scroll_generate_last_row
 
 scroll_down_endscreen_0to1
 	+screen_part_copy 40, 0, 39, 10, 10, SCREEN0, SCREEN1
-	jmp scroll_generate_last_row
+	jmp scroll_copy_char_last_row_to1
 
 scroll_left_down_midscreen_0to1
 	+screen_part_copy 40, 1, 38, 10, 0, SCREEN0, SCREEN1
-	rts
+	jsr scroll_generate_last_row
+	jmp scroll_generate_first_col
 
 scroll_left_down_endscreen_0to1
 	+screen_part_copy 40, 1, 38, 10, 10, SCREEN0, SCREEN1
-	jsr scroll_generate_last_row
-	jmp scroll_generate_first_col
+	jsr scroll_copy_char_last_row_to1
+	jmp scroll_copy_char_first_col_to1
 
 scroll_left_midscreen_0to1
 	+screen_part_copy 0, 1, 38, 10, 0, SCREEN0, SCREEN1
-	rts
+	jmp scroll_generate_first_col
 
 scroll_left_endscreen_0to1
 	+screen_part_copy 0, 1, 38, 11, 10, SCREEN0, SCREEN1
-	jmp scroll_generate_first_col
+	jmp scroll_copy_char_first_col_to1
 
 scroll_left_up_midscreen_1to0
 	+screen_part_copy 0, 41, 38, 10, 0, SCREEN1, SCREEN0
-	rts
+	jsr scroll_generate_first_row
+	jmp scroll_generate_first_col
 
 scroll_left_up_endscreen_1to0
 	+screen_part_copy 0, 41, 38, 10, 10, SCREEN1, SCREEN0
-	jsr scroll_generate_first_row
-	jmp scroll_generate_first_col
+	jsr scroll_copy_char_first_row_to0
+	jmp scroll_copy_char_first_col_to0
 
 scroll_up_midscreen_1to0
 	+screen_part_copy 0, 40, 39, 10, 0, SCREEN1, SCREEN0
-	rts
+	jmp scroll_generate_first_row
 
 scroll_up_endscreen_1to0
 	+screen_part_copy 0, 40, 39, 10, 10, SCREEN1, SCREEN0
-	jmp scroll_generate_first_row
+	jmp scroll_copy_char_first_row_to0
 
 scroll_right_up_midscreen_1to0
 	+screen_part_copy 1, 40, 38, 10, 0, SCREEN1, SCREEN0
-	rts
-
-scroll_right_up_endscreen_1to0
-	+screen_part_copy 1, 40, 38, 10, 10, SCREEN1, SCREEN0
 	jsr scroll_generate_first_row
 	jmp scroll_generate_last_col
 
+scroll_right_up_endscreen_1to0
+	+screen_part_copy 1, 40, 38, 10, 10, SCREEN1, SCREEN0
+	jsr scroll_copy_char_first_row_to0
+	jmp scroll_copy_char_last_col_to0
+
 scroll_right_midscreen_1to0
 	+screen_part_copy 1, 0, 38, 10, 0, SCREEN1, SCREEN0
-	rts
+	jmp scroll_generate_last_col
 
 scroll_right_endscreen_1to0
 	+screen_part_copy 1, 0, 38, 11, 10, SCREEN1, SCREEN0
-	jmp scroll_generate_last_col
+	jmp scroll_copy_char_last_col_to1
 
 scroll_right_down_midscreen_1to0
 	+screen_part_copy 41, 0, 38, 10, 0, SCREEN1, SCREEN0
-	rts
-
-scroll_right_down_endscreen_1to0
-	+screen_part_copy 41, 0, 38, 10, 10, SCREEN1, SCREEN0
 	jsr scroll_generate_last_row
 	jmp scroll_generate_last_col
 
+scroll_right_down_endscreen_1to0
+	+screen_part_copy 41, 0, 38, 10, 10, SCREEN1, SCREEN0
+	jsr scroll_copy_char_last_row_to0
+	jmp scroll_copy_char_last_col_to0
+
 scroll_down_midscreen_1to0
 	+screen_part_copy 40, 0, 39, 10, 0, SCREEN1, SCREEN0
-	rts
+	jmp scroll_generate_last_row
 
 scroll_down_endscreen_1to0
 	+screen_part_copy 40, 0, 39, 10, 10, SCREEN1, SCREEN0
-	jmp scroll_generate_last_row
+	jmp scroll_copy_char_last_row_to0
 
 scroll_left_down_midscreen_1to0
 	+screen_part_copy 40, 1, 38, 10, 0, SCREEN1, SCREEN0
-	rts
-
-scroll_left_down_endscreen_1to0
-	+screen_part_copy 40, 1, 38, 10, 10, SCREEN1, SCREEN0
 	jsr scroll_generate_last_row
 	jmp scroll_generate_first_col
 
+scroll_left_down_endscreen_1to0
+	+screen_part_copy 40, 1, 38, 10, 10, SCREEN1, SCREEN0
+	jsr scroll_copy_char_last_row_to0
+	jmp scroll_copy_char_first_col_to0
+
 scroll_left_midscreen_1to0
 	+screen_part_copy 0, 1, 38, 10, 0, SCREEN1, SCREEN0
-	rts
+	jmp scroll_generate_first_col
 
 scroll_left_endscreen_1to0
 	+screen_part_copy 0, 1, 38, 11, 10, SCREEN1, SCREEN0
-	jmp scroll_generate_first_col
+	jmp scroll_copy_char_first_col_to0
 
 scroll_color_left_up_midscreen
 	+color_part_copy 0, 41, 38, 10, 0, 0, 1
@@ -773,10 +926,12 @@ scroll_color_left_endscreen
 
 scrolling_init
 	; set up VIC control register and screen position to half char shift
-	lda scroll_vicctrl1+4
+	lda scroll_vicctrl1_for_offset+4
 	sta VICCTRL1
-	lda scroll_vicctrl2+4
+	sta scroll_vicctrl1
+	lda scroll_vicctrl2_for_offset+4
 	sta VICCTRL2
+	sta scroll_vicctrl2
 	lda screen_pos_x
 	ora #$40
 	sta screen_pos_x
@@ -874,6 +1029,8 @@ scrolling_midscreen_active
 	+scroll_jmp_table_call scroll_jmp_table_color_midscreen
 
 scrolling_endscreen
+	+set8im VICCTRL2, $10	; test to avoid scroll, fixme need to reset ctrl1 as well!
+	+set8im VICCTRL1, $70	; MC on
 	ldy scroll_direction
 	bne +
 	rts
@@ -913,8 +1070,9 @@ scrolling_endscreen_adjust_hw_registers
 	lsr
 	and #$07
 	tax
-	lda scroll_vicctrl2,x
-	sta VICCTRL2
+	lda scroll_vicctrl2_for_offset,x
+;	sta VICCTRL2
+	sta scroll_vicctrl2
 	lda screen_pos_y
 	lsr
 	lsr
@@ -922,8 +1080,9 @@ scrolling_endscreen_adjust_hw_registers
 	lsr
 	and #$07
 	tax
-	lda scroll_vicctrl1,x
-	sta VICCTRL1
+	lda scroll_vicctrl1_for_offset,x
+	sta scroll_vicctrl1
+;	sta VICCTRL1
 	; increase scroll phase and check for copy operations
 	ldx scroll_phase
 	inx
