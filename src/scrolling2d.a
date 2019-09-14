@@ -255,6 +255,7 @@ CIA1_DATAPORT_A = $DC00
 main
 	; set up multicolor mode and scroll situation initially.
 	jsr scrolling_init
+	jsr level_init
 	; wait for raster to be at mid of screen
 --	lda #130
 -	cmp VICRASTER
@@ -332,25 +333,25 @@ scroll_color_tmpbuf
 }
 
 scroll_char_newdata_tmpbuf_row_raw
-!for COUNT, 0, 39 {	; we need 39 bytes at most, but one extra byte first (!) for easier tile rendering
+!for COUNT, 0, 40 {	; we need 39 bytes at most, but one extra byte before+after (!) for easier tile rendering
 !byte 0
 }
 scroll_char_newdata_tmpbuf_row = scroll_char_newdata_tmpbuf_row_raw+1
 
 scroll_char_newdata_tmpbuf_col_raw
-!for COUNT, 0, 21 {	; we need 21 bytes at most, but one extra byte first (!) for easier tile rendering
+!for COUNT, 0, 22 {	; we need 21 bytes at most, but one extra byte before+after (!) for easier tile rendering
 !byte 0
 }
 scroll_char_newdata_tmpbuf_col = scroll_char_newdata_tmpbuf_col_raw+1
 
 scroll_color_newdata_tmpbuf_row_raw
-!for COUNT, 0, 39 {	; we need 39 bytes at most, but one extra byte first (!) for easier tile rendering
+!for COUNT, 0, 40 {	; we need 39 bytes at most, but one extra byte before+after (!) for easier tile rendering
 !byte 0
 }
 scroll_color_newdata_tmpbuf_row =scroll_color_newdata_tmpbuf_row_raw+1
 
 scroll_color_newdata_tmpbuf_col_raw
-!for COUNT, 0, 21 {	; we need 21 bytes at most, but one extra byte first (!) for easier tile rendering
+!for COUNT, 0, 22 {	; we need 21 bytes at most, but one extra byte before+after (!) for easier tile rendering
 !byte 0
 }
 scroll_color_newdata_tmpbuf_col = scroll_color_newdata_tmpbuf_col_raw+1

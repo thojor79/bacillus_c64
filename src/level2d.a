@@ -21,17 +21,63 @@
 ;
 ; ***************************************************************************************
 
+; Note:
+; Actor and boni are not longer stored in the level data itself.
+; It is complex to read them from data when new tiles are shown on the screen
+; and even more difficult to remove them live from screen (boni) or even store
+; them later.
+; Instead use an extra list with x,y pos (tiles) and type, and parts of that
+; list are checked for intersection with screen frame (a bit larger) in frames
+; where no copying needs to be done. Then they come to live. Actors leaving
+; screen are stored in the list again. All boni are done with sprites, there for
+; we have the muxer.
+
+; later give realistic values here! fixme
 LEVEL_DATA=$A000
 LEVEL_TILE_DATA=$B000
 NUM_TILES=$10
-LEVEL_TILE_ROW_ADR_L
-LEVEL_TILE_ROW_ADR_H
-;fixme need space for that
+LEVEL_TILE_ROW_ADR_L=$9000
+LEVEL_TILE_ROW_ADR_H=$9100
 ;fixme need init function for data, that generates row_adr and generates level data
+
+; fixme if it all really works we can only see when we use realistic tile data from
+; bacillus! we have the data and could also use the level unpack code and
+; do a 2d level with some special width (non power 2) and much data.
+; but if we append the data to code, it will be overwritten by second screen,
+; so transfer it somewhere else!
 
 ; Here we read and use screen_pos_x/y from scrolling2d.a.
 ; We read the matching tile data and write that to the buffers:
 ; scroll_char|color_newdata_tmpbuf_row|col
+level_width_tiles
+!byte 128
+level_height_tiles
+!byte 128
+
+level_init
+	; Generate LEVEL_TILE_ROW_ADR data with known width/height of level.
+	; NUM_TILES must be globally fix for all levels, number of tiles
+	; that can be used in level data.
+	; fixme Level data itself can be unpacked from RLE code or generated.
+	; Level tile data is read for the level/world as tileset.
+	; here we also need to render the first screen at start position.
+	; start position must be set before scrolling init, depends on level.
+	lda #<LEVEL_DATA
+	sta LEVEL_TILE_ROW_ADR_L
+	lda #>LEVEL_DATA
+	sta LEVEL_TILE_ROW_ADR_H
+	ldx #1
+-	lda LEVEL_TILE_ROW_ADR_L-1,x
+	clc
+	adc level_width_tiles
+	sta LEVEL_TILE_ROW_ADR_L,x
+	lda LEVEL_TILE_ROW_ADR_H-1,x
+	adc #0
+	sta LEVEL_TILE_ROW_ADR_H,x
+	inx
+	cpx level_height_tiles
+	bcc -
+	rts
 
 !macro scroll_generate_tile_row .tile_row_nr {
 	lda LEVEL_TILE_ROW_ADR_L,x
@@ -76,8 +122,8 @@ LEVEL_TILE_ROW_ADR_H
 	sta scroll_color_newdata_tmpbuf_col_raw+1,y
 	iny
 	iny
-	inc .read_adr+1	; load next tile value
-	cpy #21		; now 21 or 22, depending on start value, fixme true
+	inc TEMP0	; go to next tile row
+	cpy #22		; now 22 or 23, depending on start value
 	bcc .loop
 	rts
 }
@@ -112,7 +158,7 @@ scroll_generate_first_col
 	jmp scroll_generate_col
 
 scroll_generate_last_col
-	; last col is 38 chars down, so 19 tiles, fixme true?
+	; last col is 38 chars further right, so 19 tiles
 	lda screen_pos_x+1
 	clc
 	adc #19
@@ -167,74 +213,4 @@ scroll_generate_col
 ; inc zp, ldx zp takes only 8 cycles. so 24 cycles for every address...
 
 
-
-
-; Here we implement only the plain scrolling and transfer from new data to the screen(s)
-; and color ram. Functions like scoll_generate_* have to be implemented externally
-; in e.g. some tile renderer. So tile rendering is done in another file.
-
-; Note! Parallax scrolling by counter shifting some characters is not implemented here,
-; as we would need special code for all 8 directions. This is not trivial and eats
-; some time but it can be done. Do the counter scrolling e.g. in frames when there is nothing
-; to do. But since two consecutive frames do copying we can't distribute counter scrolling
-; evenly among the frames. Would be a cool effect, but extremly costly on raster time.
-; If we would do the screen copy not the frame before color copy, we could do counter
-; scroll every two frames but its hard to modify the scroll code again and we would need
-; to adjust the chars every frame anyway...
-
-; These macros used below copy screen parts line based. There are several advantages: when scrolling this only copies
-; bytes that are kept, remaining columns can be filled up easily. It is very easy to write and to use, better than
-; approaches that use some power of two as loop counter. Code is rather short (~100 bytes for half screen).
-; And it uses partial loop unrolling, taking ((4+5)*12+7)*39 = 4485 cycles per half screen (71.2 raster lines),
-; Which is pretty fast (9.6 cycles/byte, optimum with maximal unrolling only 8 cycles/byte!).
-; Final advantage: there are no overlaps and no bytes to save/restore.
-; And the same macro can be used for color ram shifting as well!
-; It takes ~80 raster lines (with bad lines ~58 cycles per rasterline medium, so seems ok)
-; Full screen is 312 raster lines, so it takes ~ half raster time to copy, seems fair.
-
-; Note! For parallax scrolling we need to counter-rotate some chars and we need to do that
-; for all 8 directions! Data is rotated over several characters. This can be done but
-; is another larger part of code, needs diligence to code it.
-
-; color data generation:
-; either copy tile data to temporary buffer when creating new row/col data and later
-; copy that data to screen or render color information of tiles to color ram.
-; Note that the offset would be different then as char data was generated with different
-; offset as it was a frame before. But this happens only when rendering tiles directly
-; to screen what was used when some boni were collected. If we use sprites for boni
-; we can avoid that complexity!
-
-; We need to copy new color data for first row after first half of colorram has been
-; moved or it will be too late. We also need to split the copying of the first/last column
-; color data to upper and lower part and we must copy the upper half of the column
-; after the upper part was moved or it will be too late also.
-
-; Note with a sprite muxer we need to interleave the code: first compute new screen pos at end of screen
-; and new hardware register value, then do all the sprite muxing, and then the copying.
-; When the sprite muxer has sorted the sprites and set up the first 8 and maybe created the first
-; irq we can do the copying and let the muxer create the rest of the irqs later? no, we have to copy
-; all the sprite data before display starts because during display sprite data can be changed by
-; actor code.
-
-; When switching from left to right or vice versa and up to down etc. we need one
-; preparation frame with 1 pixel scroll, hence the neutral position for left/up is
-; 3 not 4. This is because there should be two frames until char movement, so for
-; left/up the process starts at 3 with screen preparation then to 1 with color
-; preparation and then 7 where new char position is used, finally 5 and then 3.
-; This means when scroll starts we need to check if neutral position is matching
-; directory and if not we need one preparation frame.
-
-; fixme: raster IRQ to blend out sprites is needed, invalid mode or bitmap on
-; and restored later! so do not directly write vicctrl but to var,
-; and set that later! turn off screen and yscroll first instantly,
-; then modify memory layout (if needed) and set ctrl2 and then ctrl1 again.
-; later restore memory layout (if needed) and set ctrl1/2 to desired values.
-; maybe also implement score panel display here. can be bitmap or char, but without scrolling.
-
-; Note that the final scroll code is ca. 5.5kb because of the many unrolled code parts.
-; That is a lot, but a working 8-way scroller that is fast enough is one of the major parts
-; of a game, so investing that much code is acceptable. Even if the level data eats 32kb and
-; 16kb for graphical data we have 16kb left for code/data and there the scroll and sprite muxer
-; will take 8kb max, so 8kb for actor logic, AI and so on, that should be enough. And mostly
-; level data is smaller!
 
