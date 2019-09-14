@@ -157,24 +157,6 @@
 
 ; fixme: is_scroll_active remove that from main program. same for screen_pos_x.
 
-; fixme implement tile2d renderer outside... just functions that take screen_pos_x/y
-; and read tile data and write that to the buffers.
-; offset can be 1 so handle first tile specially or write to buffer-1 or so...
-; can we have versions for new row when tiley is char offset 0 and char offset 1?
-; and vice versa? so 4 versions for 4 char offsets?
-; with tile_y_coord we need to read the correct level data, so the offset for each
-; y pos of level needs to be read from a table, even more overhead.
-; if all levels are 128 tiles wide, this can be simplified though.
-; but it would be good to be flexible here... this is costly for new column generation.
-; 21 lines are 11 tiles no matter what offset. 39 columns are 20 tiles no matter what
-; offset. so we can always access 20 or 11 tiles and need to adjust the output...
-; if we don't have to read (and clear!) the actors from level data, code will be simpler.
-; screen_pos_x/y upper byte to tile coordinate. tile data (2 of 4 bytes) for row/col
-; to buffer, inc buffer counter twice, then jump to next tile...
-; initial buffer offset 0 or 1 then and pointing one byte before buffer...
-; for columns add line size to tile coord (8+16 add), costly...
-; sounds like a plan, isn't that complicated to do a tile renderer
-
 ; Here we implement only the plain scrolling and transfer from new data to the screen(s)
 ; and color ram. Functions like scoll_generate_* have to be implemented externally
 ; in e.g. some tile renderer. So tile rendering is done in another file.
@@ -308,60 +290,16 @@ main
 joy_scrolldir
 !byte 0, 2, 6, 0,  8, 1, 7, 0,  4, 3, 5, 0,  0, 0, 0, 0
 
-scroll_generate_first_row
-	lda screen_pos_x+1
-	clc
-	adc screen_pos_y+1
-	tay
-	ldx #39
--	tya
-	sta scroll_color_newdata_tmpbuf_row-1,x
-	sta scroll_char_newdata_tmpbuf_row-1,x
-	iny
-	dex
-	bne -
-	rts
-
-scroll_generate_last_row
-	lda screen_pos_x+1
-	clc
-	adc screen_pos_y+1
-	adc #$33
-	tay
-	ldx #39
--	tya
-	sta scroll_color_newdata_tmpbuf_row-1,x
-	sta scroll_char_newdata_tmpbuf_row-1,x
-	iny
-	dex
-	bne -
-	rts
-
-scroll_generate_first_col
-	ldy screen_pos_y+1
-	ldx #21
--	tya
-	sta scroll_color_newdata_tmpbuf_col-1,x
-	sta scroll_char_newdata_tmpbuf_col-1,x
-	iny
-	dex
-	bne -
-	rts
-
-scroll_generate_last_col
-	ldy screen_pos_y+1
-	iny
-	iny
-	ldx #21
--	tya
-	sta scroll_color_newdata_tmpbuf_col-1,x
-	sta scroll_char_newdata_tmpbuf_col-1,x
-	iny
-	dex
-	bne -
-	rts
+!src "src/level2d.a"
 
 }
+
+; implement these functions from outside!
+;scroll_generate_first_row
+;scroll_generate_last_row
+;scroll_generate_first_col
+;scroll_generate_last_col
+
 
 ; fixme there is certainly some space left at the bottom of screen0 or screen1 for these
 
@@ -389,29 +327,33 @@ scroll_vicmemctrl
 !byte 0
 
 scroll_color_tmpbuf
-!for COUNT, 0, 38 {	; we need 39 bytes at most
+!for COUNT, 0, 38 {	; we need 39 bytes at most, temporary buffer while scrolling upwards
 !byte 0
 }
 
-scroll_char_newdata_tmpbuf_row
-!for COUNT, 0, 38 {	; we need 39 bytes at most
+scroll_char_newdata_tmpbuf_row_raw
+!for COUNT, 0, 39 {	; we need 39 bytes at most, but one extra byte first (!) for easier tile rendering
 !byte 0
 }
+scroll_char_newdata_tmpbuf_row = scroll_char_newdata_tmpbuf_row_raw+1
 
-scroll_char_newdata_tmpbuf_col
-!for COUNT, 0, 24 {	; we need 25 bytes at most
+scroll_char_newdata_tmpbuf_col_raw
+!for COUNT, 0, 21 {	; we need 21 bytes at most, but one extra byte first (!) for easier tile rendering
 !byte 0
 }
+scroll_char_newdata_tmpbuf_col = scroll_char_newdata_tmpbuf_col_raw+1
 
-scroll_color_newdata_tmpbuf_row
-!for COUNT, 0, 38 {	; we need 39 bytes at most
+scroll_color_newdata_tmpbuf_row_raw
+!for COUNT, 0, 39 {	; we need 39 bytes at most, but one extra byte first (!) for easier tile rendering
 !byte 0
 }
+scroll_color_newdata_tmpbuf_row =scroll_color_newdata_tmpbuf_row_raw+1
 
-scroll_color_newdata_tmpbuf_col
-!for COUNT, 0, 24 {	; we need 25 bytes at most
+scroll_color_newdata_tmpbuf_col_raw
+!for COUNT, 0, 21 {	; we need 21 bytes at most, but one extra byte first (!) for easier tile rendering
 !byte 0
 }
+scroll_color_newdata_tmpbuf_col = scroll_color_newdata_tmpbuf_col_raw+1
 
 scroll_vicctrl1
 !byte 0

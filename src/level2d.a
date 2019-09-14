@@ -1,0 +1,240 @@
+; Bacillus_c64
+; Copyright (C) 2016-2019  Thorsten Jordan.
+; 
+; This program is free software; you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation; either version 2 of the License, or
+; (at your option) any later version.
+; 
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+; ***************************************************************************************
+;
+; all code related to 2D level data (tile rendering, generation)
+;
+; ***************************************************************************************
+
+LEVEL_DATA=$A000
+LEVEL_TILE_DATA=$B000
+NUM_TILES=$10
+LEVEL_TILE_ROW_ADR_L
+LEVEL_TILE_ROW_ADR_H
+;fixme need space for that
+;fixme need init function for data, that generates row_adr and generates level data
+
+; Here we read and use screen_pos_x/y from scrolling2d.a.
+; We read the matching tile data and write that to the buffers:
+; scroll_char|color_newdata_tmpbuf_row|col
+
+!macro scroll_generate_tile_row .tile_row_nr {
+	lda LEVEL_TILE_ROW_ADR_L,x
+	sta .read_adr+1
+	lda LEVEL_TILE_ROW_ADR_H,x
+	sta .read_adr+2
+.read_adr
+	ldx LEVEL_DATA			; read tile number
+	lda LEVEL_TILE_DATA+(0+.tile_row_nr*2)*NUM_TILES,x
+	sta scroll_char_newdata_tmpbuf_row_raw,y
+	lda LEVEL_TILE_DATA+(1+.tile_row_nr*2)*NUM_TILES,x
+	sta scroll_char_newdata_tmpbuf_row_raw+1,y
+	lda LEVEL_TILE_DATA+(4+.tile_row_nr*2)*NUM_TILES,x
+	sta scroll_color_newdata_tmpbuf_row_raw,y
+	lda LEVEL_TILE_DATA+(5+.tile_row_nr*2)*NUM_TILES,x
+	sta scroll_color_newdata_tmpbuf_row_raw+1,y
+	iny
+	iny
+	inc .read_adr+1	; load next tile value
+	cpy #40		; now 40 or 41, depending on start value
+	bcc .read_adr
+	rts
+}
+
+!macro scroll_generate_tile_col .tile_col_nr {
+	stx TEMP0
+.loop
+	ldx TEMP0
+	lda LEVEL_TILE_ROW_ADR_L,x
+	sta .read_adr+1
+	lda LEVEL_TILE_ROW_ADR_H,x
+	sta .read_adr+2
+.read_adr
+	ldx LEVEL_DATA			; read tile number
+	lda LEVEL_TILE_DATA+(0+.tile_col_nr)*NUM_TILES,x
+	sta scroll_char_newdata_tmpbuf_col_raw,y
+	lda LEVEL_TILE_DATA+(2+.tile_col_nr)*NUM_TILES,x
+	sta scroll_char_newdata_tmpbuf_col_raw+1,y
+	lda LEVEL_TILE_DATA+(4+.tile_col_nr)*NUM_TILES,x
+	sta scroll_color_newdata_tmpbuf_col_raw,y
+	lda LEVEL_TILE_DATA+(6+.tile_col_nr)*NUM_TILES,x
+	sta scroll_color_newdata_tmpbuf_col_raw+1,y
+	iny
+	iny
+	inc .read_adr+1	; load next tile value
+	cpy #21		; now 21 or 22, depending on start value, fixme true
+	bcc .loop
+	rts
+}
+
+scroll_generate_first_row
+	ldx screen_pos_y+1
+	jmp scroll_generate_row
+
+scroll_generate_last_row
+	; last row is 20 chars down, so 10 tiles
+	lda screen_pos_y+1
+	clc
+	adc #10
+	tax
+scroll_generate_row
+	; initialize offset in y, is 0 or 1 depending on x offset (half-tile/one-char offset)
+	; if char offset is 0, y is 1 so we render at buffer+1, where it is read.
+	; if char offset is 1, y is 0, so we render at buffer, and read is buffer+1 !
+	ldy #0
+	lda screen_pos_x
+	bmi +
+	iny
++	lda screen_pos_y
+	bmi +
+	; first row of a tile has to be rendered
+	+scroll_generate_tile_row 0
++	; second row of a tile has to be rendered
+	+scroll_generate_tile_row 1
+
+scroll_generate_first_col
+	ldx screen_pos_x+1
+	jmp scroll_generate_col
+
+scroll_generate_last_col
+	; last col is 38 chars down, so 19 tiles, fixme true?
+	lda screen_pos_x+1
+	clc
+	adc #19
+	tax
+scroll_generate_col
+	; initialize offset in y, is 0 or 1 depending on x offset (half-tile/one-char offset)
+	; if char offset is 0, y is 1 so we render at buffer+1, where it is read.
+	; if char offset is 1, y is 0, so we render at buffer, and read is buffer+1 !
+	ldy #0
+	lda screen_pos_y
+	bmi +
+	iny
++	lda screen_pos_x
+	bmi +
+	; first col of a tile has to be rendered
+	+scroll_generate_tile_col 0
++	; second col of a tile has to be rendered
+	+scroll_generate_tile_col 1
+
+
+
+
+; fixme implement tile2d renderer outside... just functions that take screen_pos_x/y
+; and read tile data and write that to the buffers.
+; offset can be 1 so handle first tile specially or write to buffer-1 or so...
+; can we have versions for new row when tiley is char offset 0 and char offset 1?
+; and vice versa? so 4 versions for 4 char offsets?
+; with tile_y_coord we need to read the correct level data, so the offset for each
+; y pos of level needs to be read from a table, even more overhead.
+; if all levels are 128 tiles wide, this can be simplified though.
+; but it would be good to be flexible here... this is costly for new column generation.
+; 21 lines are 11 tiles no matter what offset. 39 columns are 20 tiles no matter what
+; offset. so we can always access 20 or 11 tiles and need to adjust the output...
+; if we don't have to read (and clear!) the actors from level data, code will be simpler.
+; screen_pos_x/y upper byte to tile coordinate. tile data (2 of 4 bytes) for row/col
+; to buffer, inc buffer counter twice, then jump to next tile...
+; initial buffer offset 0 or 1 then and pointing one byte before buffer...
+; for columns add line size to tile coord (8+16 add), costly...
+; sounds like a plan, isn't that complicated to do a tile renderer
+; have that in some level2d.a, yes
+
+; fixme 56cyc/tile. 20 tiles. so 1120 cycles or 19 raster lines.
+; what costs the copy itself? 9 per byte plus 5/13 extra, ca. 9.5per byte with 39
+; bytes, so 9*39+39*5/13=351+15=366=6RL,so total 25 RL, even faster than old version, great!
+; plus preparation time, that can take longer. and we need a version that switches
+; to next tile adr by adding either offset, or rereading the addresses
+; lda,clc,adc,sta,lda,adc,sta to add, 4,2,4,4,4,4,4=26 cycles per tile line extra (260), ouch.
+; that is 4-5RL just for that. 16c for adjusting adr plus ldx,inx,stx (8-10)
+; with that we can have any width of level in 1-255 range...
+; when width is always 128 it can be a bit faster, but it would be very inflexible.
+; we can inc the read addresses though,but saving x in zeropage is also ok
+; inc zp, ldx zp takes only 8 cycles. so 24 cycles for every address...
+
+
+
+
+; Here we implement only the plain scrolling and transfer from new data to the screen(s)
+; and color ram. Functions like scoll_generate_* have to be implemented externally
+; in e.g. some tile renderer. So tile rendering is done in another file.
+
+; Note! Parallax scrolling by counter shifting some characters is not implemented here,
+; as we would need special code for all 8 directions. This is not trivial and eats
+; some time but it can be done. Do the counter scrolling e.g. in frames when there is nothing
+; to do. But since two consecutive frames do copying we can't distribute counter scrolling
+; evenly among the frames. Would be a cool effect, but extremly costly on raster time.
+; If we would do the screen copy not the frame before color copy, we could do counter
+; scroll every two frames but its hard to modify the scroll code again and we would need
+; to adjust the chars every frame anyway...
+
+; These macros used below copy screen parts line based. There are several advantages: when scrolling this only copies
+; bytes that are kept, remaining columns can be filled up easily. It is very easy to write and to use, better than
+; approaches that use some power of two as loop counter. Code is rather short (~100 bytes for half screen).
+; And it uses partial loop unrolling, taking ((4+5)*12+7)*39 = 4485 cycles per half screen (71.2 raster lines),
+; Which is pretty fast (9.6 cycles/byte, optimum with maximal unrolling only 8 cycles/byte!).
+; Final advantage: there are no overlaps and no bytes to save/restore.
+; And the same macro can be used for color ram shifting as well!
+; It takes ~80 raster lines (with bad lines ~58 cycles per rasterline medium, so seems ok)
+; Full screen is 312 raster lines, so it takes ~ half raster time to copy, seems fair.
+
+; Note! For parallax scrolling we need to counter-rotate some chars and we need to do that
+; for all 8 directions! Data is rotated over several characters. This can be done but
+; is another larger part of code, needs diligence to code it.
+
+; color data generation:
+; either copy tile data to temporary buffer when creating new row/col data and later
+; copy that data to screen or render color information of tiles to color ram.
+; Note that the offset would be different then as char data was generated with different
+; offset as it was a frame before. But this happens only when rendering tiles directly
+; to screen what was used when some boni were collected. If we use sprites for boni
+; we can avoid that complexity!
+
+; We need to copy new color data for first row after first half of colorram has been
+; moved or it will be too late. We also need to split the copying of the first/last column
+; color data to upper and lower part and we must copy the upper half of the column
+; after the upper part was moved or it will be too late also.
+
+; Note with a sprite muxer we need to interleave the code: first compute new screen pos at end of screen
+; and new hardware register value, then do all the sprite muxing, and then the copying.
+; When the sprite muxer has sorted the sprites and set up the first 8 and maybe created the first
+; irq we can do the copying and let the muxer create the rest of the irqs later? no, we have to copy
+; all the sprite data before display starts because during display sprite data can be changed by
+; actor code.
+
+; When switching from left to right or vice versa and up to down etc. we need one
+; preparation frame with 1 pixel scroll, hence the neutral position for left/up is
+; 3 not 4. This is because there should be two frames until char movement, so for
+; left/up the process starts at 3 with screen preparation then to 1 with color
+; preparation and then 7 where new char position is used, finally 5 and then 3.
+; This means when scroll starts we need to check if neutral position is matching
+; directory and if not we need one preparation frame.
+
+; fixme: raster IRQ to blend out sprites is needed, invalid mode or bitmap on
+; and restored later! so do not directly write vicctrl but to var,
+; and set that later! turn off screen and yscroll first instantly,
+; then modify memory layout (if needed) and set ctrl2 and then ctrl1 again.
+; later restore memory layout (if needed) and set ctrl1/2 to desired values.
+; maybe also implement score panel display here. can be bitmap or char, but without scrolling.
+
+; Note that the final scroll code is ca. 5.5kb because of the many unrolled code parts.
+; That is a lot, but a working 8-way scroller that is fast enough is one of the major parts
+; of a game, so investing that much code is acceptable. Even if the level data eats 32kb and
+; 16kb for graphical data we have 16kb left for code/data and there the scroll and sprite muxer
+; will take 8kb max, so 8kb for actor logic, AI and so on, that should be enough. And mostly
+; level data is smaller!
+
