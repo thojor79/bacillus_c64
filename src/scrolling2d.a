@@ -34,6 +34,14 @@
 ; - Neutral position is with hardware register position in center of char, so we have time
 ;   to prepare next position
 ; - Thus the scroll directions must defined by char offsets, hence 8 directions possible!
+
+; fixme The frame that copies char data (between screens) can do that any time.
+; It can even start at top of frame, so it doesn't interfer with sprite muxer.
+; Sprite muxer must run early enough, maybe it must interrupt the copying, maybe do
+; the sprite mux preparation in the irq that shows the score panel, but ack it before
+; sprite preparations begin so it can be interrupted by another irq.
+; Check if the full muxer works when copying starts at mid of frame, otherwise start
+; copying at begin of frame.
 ;
 ; Note that we could also keep two backbuffers for color that we can prepare in advance,
 ; but that doesn't make the code faster or easier.
@@ -310,7 +318,7 @@ screen_pos_x
 screen_pos_y
 !word 0
 
-!word scoll_code_end_adr-scoll_code_begin_adr	;fixme size measurement, 5439 bytes now
+!word scoll_code_end_adr-scoll_code_begin_adr	;fixme size measurement, 5258 bytes now
 
 scroll_active
 !byte 0
@@ -395,26 +403,6 @@ scroll_jmp_table_midscreen_1to0
 !word scroll_down_midscreen_1to0
 !word scroll_left_down_midscreen_1to0
 !word scroll_left_midscreen_1to0
-
-scroll_jmp_table_endscreen_0to1
-!word scroll_left_up_endscreen_0to1
-!word scroll_up_endscreen_0to1
-!word scroll_right_up_endscreen_0to1
-!word scroll_right_endscreen_0to1
-!word scroll_right_down_endscreen_0to1
-!word scroll_down_endscreen_0to1
-!word scroll_left_down_endscreen_0to1
-!word scroll_left_endscreen_0to1
-
-scroll_jmp_table_endscreen_1to0
-!word scroll_left_up_endscreen_1to0
-!word scroll_up_endscreen_1to0
-!word scroll_right_up_endscreen_1to0
-!word scroll_right_endscreen_1to0
-!word scroll_right_down_endscreen_1to0
-!word scroll_down_endscreen_1to0
-!word scroll_left_down_endscreen_1to0
-!word scroll_left_endscreen_1to0
 
 scroll_jmp_table_color_midscreen
 !word scroll_color_left_up_midscreen
@@ -593,16 +581,18 @@ scroll_copy_char_last_col_to1
 
 ; Use a macro that is called with source/dest offset and number of rows and start row.
 
-!macro screen_part_copy .srcoff, .dstoff, .numcols, .numrows, .rowoff, .srcadr, .dstadr {
+!macro screen_part_copy .srcoff, .dstoff, .numcols, .numrows, .srcadr, .dstadr {
 !if DEBUG_TIMING { inc VICBGCOL }
 	ldy #.numcols
 .copycode
-!for ROW, .rowoff, .rowoff+.numrows-1 {
+!for ROW, 0, .numrows-1 {
 	lda .srcadr+ROW*40-1+.srcoff,y
 	sta .dstadr+ROW*40-1+.dstoff,y
 }
 	dey
-	bne .copycode
+	beq +	; just 1 byte too far!
+	jmp .copycode
++
 !if DEBUG_TIMING { dec VICBGCOL }
 }
 
@@ -646,147 +636,99 @@ scroll_copy_char_last_col_to1
 }
 
 scroll_left_up_midscreen_0to1
-	+screen_part_copy 0, 41, 38, 10, 0, SCREEN0, SCREEN1
+	+screen_part_copy 0, 41, 38, 20, SCREEN0, SCREEN1
 	jsr scroll_generate_first_row
-	jmp scroll_generate_first_col
-
-scroll_left_up_endscreen_0to1
-	+screen_part_copy 0, 41, 38, 10, 10, SCREEN0, SCREEN1
+	jsr scroll_generate_first_col
 	jsr scroll_copy_char_first_row_to1
 	jmp scroll_copy_char_first_col_to1
 
 scroll_up_midscreen_0to1
-	+screen_part_copy 0, 40, 39, 10, 0, SCREEN0, SCREEN1
-	jmp scroll_generate_first_row
-
-scroll_up_endscreen_0to1
-	+screen_part_copy 0, 40, 39, 10, 10, SCREEN0, SCREEN1
+	+screen_part_copy 0, 40, 39, 20, SCREEN0, SCREEN1
+	jsr scroll_generate_first_row
 	jmp scroll_copy_char_first_row_to1
 
 scroll_right_up_midscreen_0to1
-	+screen_part_copy 1, 40, 38, 10, 0, SCREEN0, SCREEN1
+	+screen_part_copy 1, 40, 38, 20, SCREEN0, SCREEN1
 	jsr scroll_generate_first_row
-	jmp scroll_generate_last_col
-
-scroll_right_up_endscreen_0to1
-	+screen_part_copy 1, 40, 38, 10, 10, SCREEN0, SCREEN1
+	jsr scroll_generate_last_col
 	jsr scroll_copy_char_first_row_to1
 	jmp scroll_copy_char_last_col_to1
 
 scroll_right_midscreen_0to1
-	+screen_part_copy 1, 0, 38, 10, 0, SCREEN0, SCREEN1
-	jmp scroll_generate_last_col
-
-scroll_right_endscreen_0to1
-	+screen_part_copy 1, 0, 38, 11, 10, SCREEN0, SCREEN1
+	+screen_part_copy 1, 0, 38, 21, SCREEN0, SCREEN1
+	jsr scroll_generate_last_col
 	jmp scroll_copy_char_last_col_to1
 
 scroll_right_down_midscreen_0to1
-	+screen_part_copy 41, 0, 38, 10, 0, SCREEN0, SCREEN1
+	+screen_part_copy 41, 0, 38, 20, SCREEN0, SCREEN1
 	jsr scroll_generate_last_row
-	jmp scroll_generate_last_col
-
-scroll_right_down_endscreen_0to1
-	+screen_part_copy 41, 0, 38, 10, 10, SCREEN0, SCREEN1
+	jsr scroll_generate_last_col
 	jsr scroll_copy_char_last_row_to1
 	jmp scroll_copy_char_last_col_to1
 
 scroll_down_midscreen_0to1
-	+screen_part_copy 40, 0, 39, 10, 0, SCREEN0, SCREEN1
-	jmp scroll_generate_last_row
-
-scroll_down_endscreen_0to1
-	+screen_part_copy 40, 0, 39, 10, 10, SCREEN0, SCREEN1
+	+screen_part_copy 40, 0, 39, 20, SCREEN0, SCREEN1
+	jsr scroll_generate_last_row
 	jmp scroll_copy_char_last_row_to1
 
 scroll_left_down_midscreen_0to1
-	+screen_part_copy 40, 1, 38, 10, 0, SCREEN0, SCREEN1
+	+screen_part_copy 40, 1, 38, 20, SCREEN0, SCREEN1
 	jsr scroll_generate_last_row
-	jmp scroll_generate_first_col
-
-scroll_left_down_endscreen_0to1
-	+screen_part_copy 40, 1, 38, 10, 10, SCREEN0, SCREEN1
+	jsr scroll_generate_first_col
 	jsr scroll_copy_char_last_row_to1
 	jmp scroll_copy_char_first_col_to1
 
 scroll_left_midscreen_0to1
-	+screen_part_copy 0, 1, 38, 10, 0, SCREEN0, SCREEN1
-	jmp scroll_generate_first_col
-
-scroll_left_endscreen_0to1
-	+screen_part_copy 0, 1, 38, 11, 10, SCREEN0, SCREEN1
+	+screen_part_copy 0, 1, 38, 21, SCREEN0, SCREEN1
+	jsr scroll_generate_first_col
 	jmp scroll_copy_char_first_col_to1
 
 scroll_left_up_midscreen_1to0
-	+screen_part_copy 0, 41, 38, 10, 0, SCREEN1, SCREEN0
+	+screen_part_copy 0, 41, 38, 20, SCREEN1, SCREEN0
 	jsr scroll_generate_first_row
-	jmp scroll_generate_first_col
-
-scroll_left_up_endscreen_1to0
-	+screen_part_copy 0, 41, 38, 10, 10, SCREEN1, SCREEN0
+	jsr scroll_generate_first_col
 	jsr scroll_copy_char_first_row_to0
 	jmp scroll_copy_char_first_col_to0
 
 scroll_up_midscreen_1to0
-	+screen_part_copy 0, 40, 39, 10, 0, SCREEN1, SCREEN0
-	jmp scroll_generate_first_row
-
-scroll_up_endscreen_1to0
-	+screen_part_copy 0, 40, 39, 10, 10, SCREEN1, SCREEN0
+	+screen_part_copy 0, 40, 39, 20, SCREEN1, SCREEN0
+	jsr scroll_generate_first_row
 	jmp scroll_copy_char_first_row_to0
 
 scroll_right_up_midscreen_1to0
-	+screen_part_copy 1, 40, 38, 10, 0, SCREEN1, SCREEN0
+	+screen_part_copy 1, 40, 38, 20, SCREEN1, SCREEN0
 	jsr scroll_generate_first_row
-	jmp scroll_generate_last_col
-
-scroll_right_up_endscreen_1to0
-	+screen_part_copy 1, 40, 38, 10, 10, SCREEN1, SCREEN0
+	jsr scroll_generate_last_col
 	jsr scroll_copy_char_first_row_to0
 	jmp scroll_copy_char_last_col_to0
 
 scroll_right_midscreen_1to0
-	+screen_part_copy 1, 0, 38, 10, 0, SCREEN1, SCREEN0
-	jmp scroll_generate_last_col
-
-scroll_right_endscreen_1to0
-	+screen_part_copy 1, 0, 38, 11, 10, SCREEN1, SCREEN0
+	+screen_part_copy 1, 0, 38, 21, SCREEN1, SCREEN0
+	jsr scroll_generate_last_col
 	jmp scroll_copy_char_last_col_to1
 
 scroll_right_down_midscreen_1to0
-	+screen_part_copy 41, 0, 38, 10, 0, SCREEN1, SCREEN0
+	+screen_part_copy 41, 0, 38, 20, SCREEN1, SCREEN0
 	jsr scroll_generate_last_row
-	jmp scroll_generate_last_col
-
-scroll_right_down_endscreen_1to0
-	+screen_part_copy 41, 0, 38, 10, 10, SCREEN1, SCREEN0
+	jsr scroll_generate_last_col
 	jsr scroll_copy_char_last_row_to0
 	jmp scroll_copy_char_last_col_to0
 
 scroll_down_midscreen_1to0
-	+screen_part_copy 40, 0, 39, 10, 0, SCREEN1, SCREEN0
-	jmp scroll_generate_last_row
-
-scroll_down_endscreen_1to0
-	+screen_part_copy 40, 0, 39, 10, 10, SCREEN1, SCREEN0
+	+screen_part_copy 40, 0, 39, 20, SCREEN1, SCREEN0
+	jsr scroll_generate_last_row
 	jmp scroll_copy_char_last_row_to0
 
 scroll_left_down_midscreen_1to0
-	+screen_part_copy 40, 1, 38, 10, 0, SCREEN1, SCREEN0
+	+screen_part_copy 40, 1, 38, 20, SCREEN1, SCREEN0
 	jsr scroll_generate_last_row
-	jmp scroll_generate_first_col
-
-scroll_left_down_endscreen_1to0
-	+screen_part_copy 40, 1, 38, 10, 10, SCREEN1, SCREEN0
+	jsr scroll_generate_first_col
 	jsr scroll_copy_char_last_row_to0
 	jmp scroll_copy_char_first_col_to0
 
 scroll_left_midscreen_1to0
-	+screen_part_copy 0, 1, 38, 10, 0, SCREEN1, SCREEN0
-	jmp scroll_generate_first_col
-
-scroll_left_endscreen_1to0
-	+screen_part_copy 0, 1, 38, 11, 10, SCREEN1, SCREEN0
+	+screen_part_copy 0, 1, 38, 21, SCREEN1, SCREEN0
+	jsr scroll_generate_first_col
 	jmp scroll_copy_char_first_col_to0
 
 scroll_color_left_up_midscreen
@@ -1030,30 +972,20 @@ scrolling_endscreen_adjust_hw_registers
 	ldx scroll_phase
 	inx
 	stx scroll_phase
-	; x is now 0-4, check all values by dex/bne|beq calls
-	beq scrolling_endscreen_done	; phase 0, nothing to do
-	dex
-	bne ++
-	; phase 1, do screen copy
-	tya	; direction to a for jump table
-	ldy scroll_srcdst_flag
-	bmi +
-	+scroll_jmp_table_call scroll_jmp_table_endscreen_1to0
-+	+scroll_jmp_table_call scroll_jmp_table_endscreen_0to1
-++	dex
+	; x is now 0-4, only for phase 2 and 4 something needs to be done
+	cpx #2
 	bne +
 	; phase 2, do colorram copy and switch screens
 	lda scroll_vicmemctrl
 	sta VICMEMCTRL
 	tya	; direction to a for jump table
 	+scroll_jmp_table_call scroll_jmp_table_color_endscreen
-+	dex
-	beq scrolling_endscreen_done	; phase 3, nothing to do
++	cpx #4
+	bne +
 	; phase 4, scroll reached end, stop by clearing direction
 	+set8im scroll_phase, 0	; reinit to default
 	sta scroll_direction
-scrolling_endscreen_done
-	rts
++	rts
 
 scoll_code_end_adr ; for measuring size
 
