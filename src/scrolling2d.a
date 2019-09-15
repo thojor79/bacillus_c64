@@ -37,9 +37,6 @@
 
 ; fixme The frame that copies char data (between screens) can do that any time.
 ; It can even start at top of frame, so it doesn't interfer with sprite muxer.
-; Sprite muxer must run early enough, maybe it must interrupt the copying, maybe do
-; the sprite mux preparation in the irq that shows the score panel, but ack it before
-; sprite preparations begin so it can be interrupted by another irq.
 ; Check if the full muxer works when copying starts at mid of frame, otherwise start
 ; copying at begin of frame.
 ;

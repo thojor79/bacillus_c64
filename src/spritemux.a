@@ -144,6 +144,7 @@ CIA1_ICR = $DC0D
 main
 	jmp +
 ; for easier debugging
+!byte sprite_mux_first_zeropage_address
 !byte <vsprite_y
 !byte >vsprite_y
 !byte <(sprite_mux_irq_code_end-sprite_mux_irq)
@@ -344,15 +345,21 @@ sprite_mux_irq_lines_before_sprite
 ; for 24 sprites this would be 128 bytes of zeropage, thats ok.
 ; use one extra byte in sprite_sort_order as end marker to save one additional stop check in preparation loop!
 ; This saves 6*16=96 cycles in preparation loop at the cost of only 1 zeropage byte and 1 byte ram, seems good
-sprite_sort_order = 64-1		; must be in zeropage because of stx xxx,y
 ; Note! The following data doesn't need to be in zeropage, but it is faster that way
-sprite_sorted_y = sprite_sort_order + NR_OF_VIRTUAL_SPRITES + 1	;$40+$18=$58, for 16
-slot_d010 = sprite_sorted_y + NR_OF_VIRTUAL_SPRITES		;$58+$18=$70
-slot_xl = slot_d010 + NR_OF_VIRTUAL_SPRITES-8			;$80
-slot_ptr = slot_xl + NR_OF_VIRTUAL_SPRITES-8			;$90
-slot_col = slot_ptr + NR_OF_VIRTUAL_SPRITES-8			;$a0
-slot_raster = slot_col + NR_OF_VIRTUAL_SPRITES-8		;$b0
-
+slot_raster = 256 - (NR_OF_VIRTUAL_SPRITES-8)
+slot_col = slot_raster - (NR_OF_VIRTUAL_SPRITES-8)
+slot_ptr = slot_col - (NR_OF_VIRTUAL_SPRITES-8)
+slot_xl = slot_ptr - (NR_OF_VIRTUAL_SPRITES-8)
+slot_d010 = slot_xl - (NR_OF_VIRTUAL_SPRITES-8)
+sprite_sorted_y = slot_d010 - NR_OF_VIRTUAL_SPRITES
+; must be in zeropage because of stx xxx,y
+sprite_sort_order = sprite_sorted_y - (NR_OF_VIRTUAL_SPRITES+1)
+sprite_mux_xhval = sprite_sort_order-1
+sprite_mux_sort_index = sprite_sort_order-2	; index in sorted table
+sprite_mux_nr_spr_in_irq = sprite_sort_order-3	; uses one byte, nr of sprites in current irq
+sprite_mux_current_RL = sprite_sort_order-4	; uses one byte, current rasterline for irq
+slot_nr_irq_begin = sprite_sort_order-5
+sprite_mux_first_zeropage_address = slot_nr_irq_begin
 
 ; Prepare the sprite multiplexer
 sprite_mux_init
@@ -376,18 +383,9 @@ sprite_mux_init
 ; *************************************************************
 ; sorts sprite indices by the sprite's y coordinate
 ; and prepares sprite interrupt data.
-; NOTE!!! Not reentrant code! It uses zeropage variables without saving
-; them! Either have 5 dedicated zeropage variables for this or don't allow
-; game logic to be interrupted by that IRQ. Rather invest 5 more zeropage
-; bytes!!! (fixme) maybe we can put some of these at the end of the arrays, xhval at the end of
+; NOTE!!! Not reentrant code! It uses dedicated zeropage variables without saving
+; them!  (fixme) maybe we can put some of these at the end of the arrays, xhval at the end of
 ; the xh array...
-; Note that sorting uses TEMP0,TEMP1 which can reuse one of the other five variables.
-; USES	TEMP0,TEMP1,TEMP2,TEMP3,TEMP4
-SPRITE_MUX_XHVAL = TEMP0
-SPRITE_MUX_SORT_INDEX = TEMP3	; index in sorted table
-SPRITE_MUX_NRSPRINIRQ = TEMP1	; uses one byte, nr of sprites in current irq
-SPRITE_MUX_CURRENT_RL = TEMP2	; uses one byte, current rasterline for irq
-SLOT_NR_IRQ_BEGIN = TEMP4
 ; ************************************************************
 sprite_mux_irq_prepare
 !if DEBUG_TIMING { inc VICBGCOL }
@@ -473,7 +471,7 @@ sprite_mux_sort_innerdone
 ; high y coordinate!
 ; Logical consequence is: unroll the loop!
 ; we need to set the correct screen address later!
-	+set8im SPRITE_MUX_XHVAL, 0	; prepare D010 (xh) register
+	+set8im sprite_mux_xhval, 0	; prepare D010 (xh) register
 sprite_mux_set_first8
 !for COUNT, 0, 7 {
 !zone {
@@ -491,16 +489,16 @@ sprite_mux_set_first8
 	sta $D027+COUNT
 	lda vsprite_xh,y
 	beq +
-	lda SPRITE_MUX_XHVAL
+	lda sprite_mux_xhval
 	ora #(1 << COUNT)
-	sta SPRITE_MUX_XHVAL
+	sta sprite_mux_xhval
 +
 .adrend
 FIRST8_SCREEN_ADR = .adrp1 - .adrstart - 1
 FIRST8_SIZE = .adrend - .adrstart
 }
 }
-	lda SPRITE_MUX_XHVAL	; must be loaded again because the beq above may have been taken
+	lda sprite_mux_xhval	; must be loaded again because the beq above may have been taken
 	sta $D010		; save current xhigh value to register
 !if DEBUG_TIMING { inc VICBGCOL }
 
@@ -519,50 +517,50 @@ FIRST8_SIZE = .adrend - .adrstart
 ; it runs from 0 to NR_VIRTUAL_SPRITES - 1 and is 8 after setup of the first
 ; 8 hardware sprites.
 
-	stx SPRITE_MUX_SORT_INDEX	; save current index (some virtual sprites could have been skipped!)
+	stx sprite_mux_sort_index	; save current index (some virtual sprites could have been skipped!)
 	lda #0				; init data for routine
 	tay				; slot nr = 0 initially
-	sty SLOT_NR_IRQ_BEGIN
-	sta SPRITE_MUX_NRSPRINIRQ
-	sta SPRITE_MUX_CURRENT_RL	; first rasterline = 0 as marker, so comparison below is always false for first irq
+	sty slot_nr_irq_begin
+	sta sprite_mux_nr_spr_in_irq
+	sta sprite_mux_current_RL	; first rasterline = 0 as marker, so comparison below is always false for first irq
 sprite_mux_prepare_next_vsprite
-	ldx SPRITE_MUX_SORT_INDEX	; get sort order index
+	ldx sprite_mux_sort_index	; get sort order index
 	lda sprite_sort_order,x		; get sort order. 
 	tax				; put it in x
 	lda vsprite_y,x			; load next virtual sprite y coord
 	cmp #MAX_SPRITE_Y		; check that sprite ycoord is visible
 	bcs sprite_mux_irqs_prepared	; if too big, stop further displaying
-	inc SPRITE_MUX_SORT_INDEX	; advance to next sorted index
+	inc sprite_mux_sort_index	; advance to next sorted index
 	sta sprite_sorted_y+8,y		; save sorted y for later use (overwritten if sprite is skipped)
 	lda sprite_sorted_y,y		; load sorted y of current slot (8 sprites before!)
 	adc #SPRITE_Y_DISTANCE		; C=0 here, also afterwards, compute end of sprite display of that slot
 	cmp sprite_sorted_y+8,y		; compare against current sprite y
 	bcs sprite_mux_prepare_next_vsprite	; sprite would be 9th in rasterline, skip it!
 	; sprite can be displayed - check if in this irq or new irq
-	cmp SPRITE_MUX_CURRENT_RL	; compare y of last slot + 21 < current rasterline ?
+	cmp sprite_mux_current_RL	; compare y of last slot + 21 < current rasterline ?
 	bcc sprite_mux_prepare_same_irq	; same irq can be used if this slot has finished drawing
 	; need new irq
-	lda SPRITE_MUX_CURRENT_RL	; load current raster line
+	lda sprite_mux_current_RL	; load current raster line
 	beq +				; if 0, this is first irq
 	; not first (new) irq, finish last one
 	; read the current irq rasterline start and store it for the slot at irq begin
-	lda SPRITE_MUX_CURRENT_RL
-	ldx SLOT_NR_IRQ_BEGIN
+	lda sprite_mux_current_RL
+	ldx slot_nr_irq_begin
 	sta slot_raster,x
 	; prepare xhigh value
-	lda SPRITE_MUX_XHVAL
+	lda sprite_mux_xhval
 	sta slot_d010,x			; store at matching slot
-	sty SLOT_NR_IRQ_BEGIN		; memorize for next irq
-	+set8im SPRITE_MUX_NRSPRINIRQ, 0	; 0 sprites in this irq
+	sty slot_nr_irq_begin		; memorize for next irq
+	+set8im sprite_mux_nr_spr_in_irq, 0	; 0 sprites in this irq
 	; set highest bit of last written color to flag end of irq!
 	lda slot_col-1,y		; write to slot before, so -1 here
 	ora #$80
 	sta slot_col-1,y
 +
 	lda #$FF			; real value is set later, use neutral value for mininum computation.
-	sta SPRITE_MUX_CURRENT_RL	; save as rasterline
+	sta sprite_mux_current_RL	; save as rasterline
 sprite_mux_prepare_same_irq
-	ldx SPRITE_MUX_SORT_INDEX	; set x again to sort order
+	ldx sprite_mux_sort_index	; set x again to sort order
 	lda sprite_sort_order-1,x	; -1 because y alreadly inc'd
 	tax
 	lda vsprite_xl,x
@@ -571,26 +569,26 @@ sprite_mux_prepare_same_irq
 	sta slot_ptr,y
 	lda vsprite_col,x
 	sta slot_col,y
-	lda SPRITE_MUX_XHVAL		; xhigh
+	lda sprite_mux_xhval		; xhigh
 	and bit_nand_table,y		; slotnumber (NUM_VSPRITES-8 sized!)
-	sta SPRITE_MUX_XHVAL
+	sta sprite_mux_xhval
 	lda vsprite_xh,x
 	beq +
-	lda SPRITE_MUX_XHVAL
+	lda sprite_mux_xhval
 	ora bit_or_table,y
-	sta SPRITE_MUX_XHVAL
+	sta sprite_mux_xhval
 +	
 	; load sprite y and decrease by offset depending on number of sprites in interrupt
 	lda vsprite_y,x
-	ldx SPRITE_MUX_NRSPRINIRQ
+	ldx sprite_mux_nr_spr_in_irq
 	sec
 	sbc sprite_mux_irq_lines_before_sprite,x
 	; compare if that is lower than current irq raster start, if so, use it
-	cmp SPRITE_MUX_CURRENT_RL
+	cmp sprite_mux_current_RL
 	bcs +
-	sta SPRITE_MUX_CURRENT_RL
+	sta sprite_mux_current_RL
 +
-	inc SPRITE_MUX_NRSPRINIRQ	; sprite handled
+	inc sprite_mux_nr_spr_in_irq	; sprite handled
 	iny				; use next slot
 !if DEBUG_TIMING { inc VICBGCOL }
 	jmp sprite_mux_prepare_next_vsprite
@@ -598,11 +596,11 @@ sprite_mux_prepare_same_irq
 sprite_mux_irqs_prepared
 !if DEBUG_TIMING { inc VICBGCOL }
 	; store the irq start raster line for that slot
-	lda SPRITE_MUX_CURRENT_RL
-	ldx SLOT_NR_IRQ_BEGIN
+	lda sprite_mux_current_RL
+	ldx slot_nr_irq_begin
 	sta slot_raster,x				; to slot where irq begun
 	; set xhigh value of last irq
-	lda SPRITE_MUX_XHVAL
+	lda sprite_mux_xhval
 	sta slot_d010,x
 	; if all virtual sprites are handled but not all slots used because some
 	; sprites are skipped because of 9th sprite in a row or too small y coordinates
@@ -626,8 +624,14 @@ sprite_mux_irqs_prepared
 	bne ++	; highbyte is !0, so always jumps
 +	lda slot_raster
 	; we are in irq, so we don't need sei/cli here.
-	; using cli leads to graphical errors, sometimes sprites disappear then.
-	; The reason is unknown, no other irq should happen during that time...
+	; using cli leads to graphical errors, some sprites disappear then.
+	; Reason is that we don't have acknowledged the irq yet so the VIC
+	; will trigger a new IRQ just after the cli no matter what rasterline
+	; is used as trigger, but instantaneously!
+	; This is the first muxer irq that address we have set here.
+	; It would reprogram the sprite registers and thus the first 8 sprites
+	; will disappear. A very tricky error. So no cli in IRQ routines
+	; except after an acknowledge if the irq should be interceptable by other IRQs.
 	sta VICRASTER
 	+set16im $FFFE, sprite_mux_irq	; raster irq visits that address
 	; set end marker for last irq (high bit of color) is not needed
