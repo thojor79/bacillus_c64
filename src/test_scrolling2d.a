@@ -1,0 +1,91 @@
+; Bacillus_c64
+; Copyright (C) 2016-2019  Thorsten Jordan.
+; 
+; This program is free software; you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation; either version 2 of the License, or
+; (at your option) any later version.
+; 
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+; ***************************************************************************************
+;
+; Test code for 2D scrolling (8 directions)
+;
+; ***************************************************************************************
+
+VICBGCOL = $D020
+VICFGCOL = $D021
+VICCTRL2 = $D016
+VICCTRL1 = $D011
+VICRASTER = $D012
+COLORRAM = $D800
+VICBANK = 0
+VICMEMCTRL = $D018
+VICCHARSETBLOCK = 2	; block 2 has offset 4k
+SCREEN0POSITION = 1
+SCREEN1POSITION = 15
+SCREEN0 = VICBANK*$4000+SCREEN0POSITION*$0400
+SCREEN1 = VICBANK*$4000+SCREEN1POSITION*$0400
+CIA1_DATAPORT_A = $DC00
+TEMP0 = $2
+
+!to "test/scrolling2d.prg", cbm
+
+!src "src/macros.a"
+
+*= $0801	; Program start at 2049
+
+; Basic start code 1979 SYS2066:REM TJ
+!byte $10,$08,$BB,$07,$9E,$32,$30,$36,$36,$3A,$8F,$20,$54,$4A,$00,$00,$00
+
+main
+	; set up multicolor mode and scroll situation initially.
+	jsr scrolling_init
+	jsr level_init
+	; wait for raster to be at mid of screen
+--	lda #130
+-	cmp VICRASTER
+	bcs -
+	; call midcode
+!if DEBUG_TIMING { inc VICBGCOL }
+	jsr scrolling_midscreen
+!if DEBUG_TIMING { dec VICBGCOL }
+	; wait for raster to be at end of screen
+	lda #218
+-	cmp VICRASTER
+	bcs -
+	; call endcode
+!if DEBUG_TIMING { inc VICBGCOL }
+	jsr scrolling_endscreen
+!if DEBUG_TIMING { dec VICBGCOL }
+	; read joystick control for scroll testing, joystick bits to direction!
+	lda CIA1_DATAPORT_A	; last four bits are up, down, left, right, fire
+	and #$0F
+	eor #$0F		; negate bits
+	tax
+	lda joy_scrolldir,x
+	sta scroll_active
+	; repeat, but wait first until raster is again near start of screen
+-	lda VICRASTER
+	bmi -
+	lda scroll_vicctrl1
+	sta VICCTRL1
+	lda scroll_vicctrl2
+	sta VICCTRL2
+	jmp --
+
+joy_scrolldir
+!byte 0, 2, 6, 0,  8, 1, 7, 0,  4, 3, 5, 0,  0, 0, 0, 0
+
+!src "src/level2d.a"
+
+!src "src/scrolling2d.a"
+

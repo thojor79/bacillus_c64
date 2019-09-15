@@ -21,17 +21,15 @@
 ;
 ; ***************************************************************************************
 
-NR_OF_VIRTUAL_SPRITES = 32 ; rather test 24 or less sprites, works with 44, min 2 (<8 doesn't make sense though)
-MIN_SPRITE_Y = 30
-MAX_SPRITE_Y = 250
+;define this from outside
+!ifndef NR_OF_VIRTUAL_SPRITES {
+NR_OF_VIRTUAL_SPRITES = 24
+}
 SPRITE_Y_DISTANCE = 21		; This is just the sprite height.
 UNROLL_FULL_IRQ = 0
-SPRITE_PREPARE_RASTERLINE = 250
-
-;TESTING = 1
-;DEBUG_TIMING = 1
-;TEST_STATIC_POS = 1
-;KERNAL_RAND_POS = 1
+SPRITE_PREPARE_RASTERLINE = 250	; IRQ is triggered 1 line before and then stable line with busy waiting
+MIN_SPRITE_Y = 30 ; fixme with 24 line mode we can add 4 more lines here.
+MAX_SPRITE_Y = SPRITE_PREPARE_RASTERLINE-1
 
 ; Preparation of the sprites is done in an IRQ at the bottom of the screen (scorepanel).
 ; Thus it can never be delayed by the screen data transfer when scrolling and the
@@ -113,183 +111,32 @@ SPRITE_PREPARE_RASTERLINE = 250
 ; Note charset blends over sprite data for test from sprite 30 on
 
 
-!if TESTING {
-TEMP0 = 2
-TEMP1 = 3
-TEMP2 = 4
-TEMP3 = 5
-TEMP4 = 6
-TEMP5 = 7
-TEMPADR0 = 8
-TEMPADR1 = 10
-VICBGCOL = $D020
-VICFGCOL = $D021
-VICCTRL2 = $D016
-VICMEMCTRL = $D018
-VICCTRL1 = $D011
-VICRASTER = $D012
-VICIRQMASK = $D01A
-VICSPRITEENABLE = $D015
-CIA1_ICR = $DC0D
-
-!to "test/spritemux.prg", cbm
-
-!src "src/macros.a"
-
-*= $0801	; Program start at 2049
-
-; Basic start code 1979 SYS2066:REM TJ
-!byte $10,$08,$BB,$07,$9E,$32,$30,$36,$36,$3A,$8F,$20,$54,$4A,$00,$00,$00
-
-main
-	jmp +
-; for easier debugging
-!byte sprite_mux_first_zeropage_address
-!byte <vsprite_y
-!byte >vsprite_y
-!byte <(sprite_mux_irq_code_end-sprite_mux_irq)
-!byte >(sprite_mux_irq_code_end-sprite_mux_irq)
-!byte <MUXIRQ_SIZE
-!byte >MUXIRQ_SIZE
-+
-	; Set position and move values with randomness from kernal code
-	; Positions
-!if KERNAL_RAND_POS {
-	ldx #NR_OF_VIRTUAL_SPRITES-1
-main_prep_pos_dxy
-	lda $E000,x
-	sta vsprite_xl,x
-	lda $E018,x
-	and #1
-	sta vsprite_xh,x
-	lda $E030,x
-	sta vsprite_y,x
-	; Deltas
-	lda $E048,x
-	and #3
-	clc
-	adc #1
-	sta vsprite_dx,x
-	lda $E060,x
-	and #1
-	clc
-	adc #1
-	sta vsprite_dy,x
-	dex
-	bpl main_prep_pos_dxy
-}
-	; Set up generic IRQ handling (only raster irqs)
-	sei
-	+set8im VICRASTER, 0
-	+set8im VICCTRL1, $1B	; clear 9th bit of raster line selector, set mc mode
-	+set8im VICIRQMASK, $01	; Set only raster as source for IRQ of VIC (default $F0)
-	lda #$7F		; disable timer IRQs
-	sta CIA1_ICR
-	lda CIA1_ICR		; ack CIA irq
-	asl $D019		; Acknowledge possible pending raster irq
-	+set8im 1, $35		; only I/O, no kernal
-	jsr sprite_mux_init
-	; wait for raster at top, when preparation irq is done
---	lda frame_counter
--	cmp frame_counter
-	beq -
-!if TEST_STATIC_POS {
-	jmp --
-	; even rts is possible, if we allow other irqs and keep kernal etc.
-}
-	; increment x/y and repeat.
-	ldx #NR_OF_VIRTUAL_SPRITES-1
--	lda vsprite_xl,x
-	clc
-	adc vsprite_dx,x
-	sta vsprite_xl,x
-	lda vsprite_xh,x
-	adc #0
-	sta vsprite_xh,x
-	beq +
-	lda vsprite_xl,x
-	cmp #80
-	bcc +
-	; x >= 336, set to 24
-	dec vsprite_xh,x
-	lda #24
-	sta vsprite_xl,x
-+
-	lda vsprite_y,x
-	clc
-	adc vsprite_dy,x
-	; avoid $FF as value! that is end marker - would kill displaying
-	cmp #$FF
-	bne +
-	lda #0
-+
-	sta vsprite_y,x
-	dex
-	bpl -
-	; next frame
-	jmp --
-
-!src "sprites32_sprdata.a"	; sprites32_data
-
-vsprite_dx
-!for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
-	!byte (((COUNT * 789) % 3) + 1)
-}
-
-vsprite_dy
-!for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
-	!byte ((COUNT * 337) & 1) + 1
-}
-
-}
-
 ; ------------ data for sprite muxer -------------
 
 vsprite_y
 !for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
-	!if TESTING {
-		!byte <(50 + 3*COUNT)	; *5
-		;!byte <((COUNT / 8) * 3 + (COUNT % 8) * 13 + 50)
-	} else {
-		!byte 0
-	}
+	!byte 0
 }
-!byte 255	; y value to use as end marker (saves extra check in preparation loop!)
+!byte 0	; y value to use as end marker (saves extra check in preparation loop!), set to 255 on init
 
 vsprite_xl
 !for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
-	!if TESTING {
-		!byte <(24 + (COUNT % 8) * 30 + (COUNT / 8) * 10)
-	} else {
-		!byte 0
-	}
+	!byte 0
 }
 
 vsprite_xh
 !for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
-	!if TESTING {
-		!byte >(24 + (COUNT % 8) * 30 + (COUNT / 8) * 10)
-	} else {
-		!byte 0
-	}
+	!byte 0
 }
 
 vsprite_ptr
 !for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
-	!if TESTING {
-		!byte (sprites32_data/64+COUNT)
-	} else {
-		!byte 0	
-	}
+	!byte 0	
 }
 
 vsprite_col
 !for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
-	!if TESTING {
-		!byte ((COUNT % 15) + 7) & 15
-	} else {
-		!byte 0
-	}
+	!byte 0
 }
 
 bit_nand_table
@@ -365,6 +212,7 @@ sprite_mux_first_zeropage_address = slot_nr_irq_begin
 sprite_mux_init
 	; turn on all sprites
 	+set8im VICSPRITEENABLE, $FF
+	sta vsprite_y+NR_OF_VIRTUAL_SPRITES	; set $FF also as endmarker!
 	; prepare any initial sort order - must be in zeropage!
 	ldy #NR_OF_VIRTUAL_SPRITES	; one more to also set sort index for stop marker!
 -	tya

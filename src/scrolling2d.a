@@ -231,74 +231,15 @@
 ; will take 8kb max, so 8kb for actor logic, AI and so on, that should be enough. And mostly
 ; level data is smaller!
 
-!if TESTING {
-TEMP0 = $2
-VICBGCOL = $D020
-VICFGCOL = $D021
-VICCTRL2 = $D016
-VICCTRL1 = $D011
-VICRASTER = $D012
-COLORRAM = $D800
-VICBANK = 0
-VICMEMCTRL = $D018
-VICCHARSETBLOCK = 2	; block 2 has offset 4k
-SCREEN0POSITION = 1
-SCREEN1POSITION = 15
-SCREEN0 = VICBANK*$4000+SCREEN0POSITION*$0400
-SCREEN1 = VICBANK*$4000+SCREEN1POSITION*$0400
-CIA1_DATAPORT_A = $DC00
-
-!to "test/scrolling2d.prg", cbm
-
-!src "src/macros.a"
-
-*= $0801	; Program start at 2049
-
-; Basic start code 1979 SYS2066:REM TJ
-!byte $10,$08,$BB,$07,$9E,$32,$30,$36,$36,$3A,$8F,$20,$54,$4A,$00,$00,$00
-
-main
-	; set up multicolor mode and scroll situation initially.
-	jsr scrolling_init
-	jsr level_init
-	; wait for raster to be at mid of screen
---	lda #130
--	cmp VICRASTER
-	bcs -
-	; call midcode
-!if DEBUG_TIMING { inc VICBGCOL }
-	jsr scrolling_midscreen
-!if DEBUG_TIMING { dec VICBGCOL }
-	; wait for raster to be at end of screen
-	lda #218
--	cmp VICRASTER
-	bcs -
-	; call endcode
-!if DEBUG_TIMING { inc VICBGCOL }
-	jsr scrolling_endscreen
-!if DEBUG_TIMING { dec VICBGCOL }
-	; read joystick control for scroll testing, joystick bits to direction!
-	lda CIA1_DATAPORT_A	; last four bits are up, down, left, right, fire
-	and #$0F
-	eor #$0F		; negate bits
-	tax
-	lda joy_scrolldir,x
-	sta scroll_active
-	; repeat, but wait first until raster is again near start of screen
--	lda VICRASTER
-	bmi -
-	lda scroll_vicctrl1
-	sta VICCTRL1
-	lda scroll_vicctrl2
-	sta VICCTRL2
-	jmp --
-
-joy_scrolldir
-!byte 0, 2, 6, 0,  8, 1, 7, 0,  4, 3, 5, 0,  0, 0, 0, 0
-
-!src "src/level2d.a"
-
-}
+; switching on 24 line mode for vertical scrolling gives a half line of additional border
+; at the top and bottom. Should we show 19+1 lines except 20+1 ? easier for tile generation
+; and we can avoid one more costly branch/jmp combination. However the branch/jmp pair
+; take 3 or 2+3 cycles so just 3 more, thats acceptable.
+; Showing one line less reduces the space too much. We need to turn off sprites
+; when score panel is reached. Invalid mode certainly doesn't turn them off.
+; So the first 4 lines are border, then 160 visible screen, then have 4 more for transition,
+; then we have 4 char rows for the score panel. Better use same width as screen above (38 chars)
+; For example Turrican1 has 160 lines screen, 8 lines gap, 28 lines score panel with full width (40 chars).
 
 ; implement these functions from outside!
 ;scroll_generate_first_row
