@@ -854,6 +854,7 @@ scrolling_midscreen_active
 scrolling_endscreen
 	+set8im VICCTRL2, $10	; test to avoid scroll, fixme need to reset ctrl1 as well!
 	+set8im VICCTRL1, $70	; MC on
+; this part has to be done before sprite muxing at end of screen!
 	ldy scroll_direction
 	bne +
 	rts
@@ -906,6 +907,8 @@ scrolling_endscreen_adjust_hw_registers
 	lda scroll_vicctrl1_for_offset,x
 	sta scroll_vicctrl1
 ;	sta VICCTRL1
+
+;this part can be done after sprite muxing
 	; increase scroll phase and check for copy operations
 	ldx scroll_phase
 	inx

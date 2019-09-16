@@ -16,6 +16,10 @@ test/spritemux.prg : src/test_spritemux.a Makefile src/spritemux.a src/macros.a
 test/scrolling2d.prg : src/test_scrolling2d.a src/scrolling2d.a Makefile src/macros.a src/level2d.a
 	acme -DDEBUG_TIMING=1 -DHIRES=1 src/test_scrolling2d.a
 
+test/scroll_and_mux.prg : src/test_scroll_and_mux.a src/scrolling2d.a src/spritemux.a Makefile src/macros.a src/level2d.a
+#	acme -DDEBUG_TIMING=1 -DHIRES=1 src/test_scroll_and_mux.a
+	acme -DDEBUG_TIMING=1 -DHIRES=1 -DTEST_STATIC_POS=0 -DKERNAL_RAND_POS=1 src/test_scroll_and_mux.a
+
 test/dcrawl.prg : src/dcrawl.a
 	acme src/dcrawl.a
 	

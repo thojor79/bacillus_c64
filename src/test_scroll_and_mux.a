@@ -1,0 +1,242 @@
+; Bacillus_c64
+; Copyright (C) 2016-2017  Thorsten Jordan.
+; 
+; This program is free software; you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation; either version 2 of the License, or
+; (at your option) any later version.
+; 
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+; 
+; You should have received a copy of the GNU General Public License
+; along with this program; if not, write to the Free Software
+; Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+; ***************************************************************************************
+;
+;    Test program for scrolling and sprite muxing combined!
+;
+; ***************************************************************************************
+
+NR_OF_VIRTUAL_SPRITES = 32 ; rather test 24 sprites
+
+; fixme hw registers need to be programmed earlier. see scroll code for comments
+; fixme sprites use same area as second screen? not from code, something other must be wrong
+; fixme test score panel code realistically, needs bitmap space,
+; collides with 2nd screen space.
+
+TEMP0 = 2
+TEMP1 = 3
+TEMP2 = 4
+TEMP3 = 5
+TEMP4 = 6
+TEMP5 = 7
+TEMPADR0 = 8
+TEMPADR1 = 10
+VICBGCOL = $D020
+VICFGCOL = $D021
+VICCTRL2 = $D016
+VICMEMCTRL = $D018
+VICCTRL1 = $D011
+VICRASTER = $D012
+VICIRQMASK = $D01A
+VICSPRITEENABLE = $D015
+CIA1_ICR = $DC0D
+COLORRAM = $D800
+VICBANK = 0
+VICCHARSETBLOCK = 2	; block 2 has offset 4k
+SCREEN0POSITION = 1
+SCREEN1POSITION = 15
+SCREEN0 = VICBANK*$4000+SCREEN0POSITION*$0400
+SCREEN1 = VICBANK*$4000+SCREEN1POSITION*$0400
+CIA1_DATAPORT_A = $DC00
+
+!to "test/scroll_and_mux.prg", cbm
+
+!src "src/macros.a"
+
+*= $0801	; Program start at 2049
+
+; Basic start code 1979 SYS2066:REM TJ
+!byte $10,$08,$BB,$07,$9E,$32,$30,$36,$36,$3A,$8F,$20,$54,$4A,$00,$00,$00
+
+main
+	; copy the test values to the sprite arrays
+	+memcopy_bytes vsprite_y, vsprite_y_test, NR_OF_VIRTUAL_SPRITES
+	+memcopy_bytes vsprite_xl, vsprite_xl_test, NR_OF_VIRTUAL_SPRITES
+	+memcopy_bytes vsprite_xh, vsprite_xh_test, NR_OF_VIRTUAL_SPRITES
+	+memcopy_bytes vsprite_ptr, vsprite_ptr_test, NR_OF_VIRTUAL_SPRITES
+	+memcopy_bytes vsprite_col, vsprite_col_test, NR_OF_VIRTUAL_SPRITES
+
+	; Set position and move values with randomness from kernal code
+	; Positions
+!if KERNAL_RAND_POS {
+	ldx #NR_OF_VIRTUAL_SPRITES-1
+main_prep_pos_dxy
+	lda $E000,x
+	sta vsprite_xl,x
+	lda $E018,x
+	and #1
+	sta vsprite_xh,x
+	lda $E030,x
+	sta vsprite_y,x
+	; Deltas
+	lda $E048,x
+	and #3
+	clc
+	adc #1
+	sta vsprite_dx,x
+	lda $E060,x
+	and #1
+	clc
+	adc #1
+	sta vsprite_dy,x
+	dex
+	bpl main_prep_pos_dxy
+}
+	; Set up generic IRQ handling (only raster irqs)
+	sei
+	+set8im VICRASTER, 0
+	+set8im VICCTRL1, $1B	; clear 9th bit of raster line selector, set mc mode
+	+set8im VICIRQMASK, $01	; Set only raster as source for IRQ of VIC (default $F0)
+	lda #$7F		; disable timer IRQs
+	sta CIA1_ICR
+	lda CIA1_ICR		; ack CIA irq
+	asl $D019		; Acknowledge possible pending raster irq
+	+set8im 1, $35		; only I/O, no kernal
+	jsr sprite_mux_init
+	jsr scrolling_init
+	jsr level_init
+	; wait for raster at top, when preparation irq is done
+	lda frame_counter
+main_loop
+	; accu has last known state of frame_counter for comparison here!
+-	cmp frame_counter
+	beq -
+	; here the scroll control!
+
+!if TEST_STATIC_POS {
+} else {
+	; increment x/y and repeat.
+	ldx #NR_OF_VIRTUAL_SPRITES-1
+-	lda vsprite_xl,x
+	clc
+	adc vsprite_dx,x
+	sta vsprite_xl,x
+	lda vsprite_xh,x
+	adc #0
+	sta vsprite_xh,x
+	beq +
+	lda vsprite_xl,x
+	cmp #80
+	bcc +
+	; x >= 336, set to 24
+	dec vsprite_xh,x
+	lda #24
+	sta vsprite_xl,x
++
+	lda vsprite_y,x
+	clc
+	adc vsprite_dy,x
+	; avoid $FF as value! that is end marker - would kill displaying
+	cmp #$FF
+	bne +
+	lda #0
++
+	sta vsprite_y,x
+	dex
+	bpl -
+}
+
+	; wait for raster to be at mid of screen
+--	lda #130
+-	cmp VICRASTER
+	bcs -
+	; call midcode
+!if DEBUG_TIMING { inc VICBGCOL }
+	jsr scrolling_midscreen
+!if DEBUG_TIMING { dec VICBGCOL }
+	; wait for raster to be at end of screen
+	lda #218
+-	cmp VICRASTER
+	bcs -
+	; call endcode
+!if DEBUG_TIMING { inc VICBGCOL }
+	; here the sprite mux preperation has rund and we set the registers afterwards, can be a bit late...
+	; but setting them right after score panel is difficult as sprite mux preparation is still
+	; working - or we make that irq interruptible and replace it with a setup hw register irq.
+	; but that is difficult: if the irq line for the first sprite irq is not ready yet, what line that
+	; irq should set when its done?! this would be a race condition.
+	; or the muxer code must check the raster line several times or we just hope that the muxer
+	; will be ready always before the new screen starts... difficult, fixme find a good solution.
+	; The preparation code can check after sorting / set first8 if it can already set the hw
+	; registers or else it must install an irq. we can avoid race conditions with sei/cli then...
+	jsr scrolling_endscreen
+!if DEBUG_TIMING { dec VICBGCOL }
+	; read joystick control for scroll testing, joystick bits to direction!
+	lda CIA1_DATAPORT_A	; last four bits are up, down, left, right, fire
+	and #$0F
+	eor #$0F		; negate bits
+	tax
+	lda joy_scrolldir,x
+	sta scroll_active
+
+	; set hw regs - fixme this is after the copying and too late of course! need it before the copying!
+	lda scroll_vicctrl1
+	sta VICCTRL1
+	lda scroll_vicctrl2
+	sta VICCTRL2
+
+	; next frame
+	lda frame_counter
+	jmp main_loop
+
+!src "sprites32_sprdata.a"	; sprites32_data
+
+vsprite_dx
+!for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
+	!byte (((COUNT * 789) % 3) + 1)
+}
+
+vsprite_dy
+!for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
+	!byte ((COUNT * 337) & 1) + 1
+}
+
+vsprite_y_test
+!for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
+	!byte <(50 + 3*COUNT)
+}
+
+vsprite_xl_test
+!for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
+	!byte <(24 + (COUNT % 8) * 30 + (COUNT / 8) * 10)
+}
+
+vsprite_xh_test
+!for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
+	!byte >(24 + (COUNT % 8) * 30 + (COUNT / 8) * 10)
+}
+
+vsprite_ptr_test
+!for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
+	!byte (sprites32_data/64+COUNT)
+}
+
+vsprite_col_test
+!for COUNT, 0, NR_OF_VIRTUAL_SPRITES-1 {
+	!byte ((COUNT % 15) + 7) & 15
+}
+
+!src "src/spritemux.a"
+
+joy_scrolldir
+!byte 0, 2, 6, 0,  8, 1, 7, 0,  4, 3, 5, 0,  0, 0, 0, 0
+
+!src "src/level2d.a"
+
+!src "src/scrolling2d.a"
+
