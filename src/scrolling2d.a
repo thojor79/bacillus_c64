@@ -24,7 +24,7 @@
 ; Two dimensional scrolling on C64 is implemented with these features:
 ; - Hardware scrolling works for up to 7 pixels in all directions
 ; - Then we need to copy the screen and color ram by one char to any direction
-; - Double buffering can and should be used for screen data
+; - Double buffering is used for screen data
 ; - Color ram must be copied in-place and synchronized with raster
 ; - It takes about half the raster time of a frame to copy the whole screen
 ;   So we can scroll a char every two frames (need screen and color ram copy and spare time)
@@ -35,11 +35,6 @@
 ;   to prepare next position
 ; - Thus the scroll directions must defined by char offsets, hence 8 directions possible!
 
-; fixme The frame that copies char data (between screens) can do that any time.
-; It can even start at top of frame, so it doesn't interfer with sprite muxer.
-; Check if the full muxer works when copying starts at mid of frame, otherwise start
-; copying at begin of frame.
-;
 ; Note that we could also keep two backbuffers for color that we can prepare in advance,
 ; but that doesn't make the code faster or easier.
 ;
@@ -217,13 +212,6 @@
 ; This means when scroll starts we need to check if neutral position is matching
 ; directory and if not we need one preparation frame.
 
-; fixme: raster IRQ to blend out sprites is needed, invalid mode or bitmap on
-; and restored later! so do not directly write vicctrl but to var,
-; and set that later! turn off screen and yscroll first instantly,
-; then modify memory layout (if needed) and set ctrl2 and then ctrl1 again.
-; later restore memory layout (if needed) and set ctrl1/2 to desired values.
-; maybe also implement score panel display here. can be bitmap or char, but without scrolling.
-
 ; Note that the final scroll code is ca. 5.5kb because of the many unrolled code parts.
 ; That is a lot, but a working 8-way scroller that is fast enough is one of the major parts
 ; of a game, so investing that much code is acceptable. Even if the level data eats 32kb and
@@ -256,9 +244,12 @@ screen_pos_x
 screen_pos_y
 !word 0
 
-!word scoll_code_end_adr-scoll_code_begin_adr	;fixme size measurement, 5258 bytes now
+!if DEBUG_TIMING {
+!byte $de, $ad, $be, $ef	; to detect it
+!word scoll_code_end_adr-scoll_code_begin_adr	; code size measurement, 5223 bytes now
+}
 
-scroll_active
+scroll_request_direction
 !byte 0
 
 scroll_direction
@@ -322,45 +313,35 @@ screen_pos_neutral_x = screen_pos_neutral_y + 2
 
 ; Note that the tables alone take 64byte plus alignment.
 !align 15,0
-scroll_jmp_table_midscreen_0to1
-!word scroll_left_up_midscreen_0to1
-!word scroll_up_midscreen_0to1
-!word scroll_right_up_midscreen_0to1
-!word scroll_right_midscreen_0to1
-!word scroll_right_down_midscreen_0to1
-!word scroll_down_midscreen_0to1
-!word scroll_left_down_midscreen_0to1
-!word scroll_left_midscreen_0to1
+scroll_jmp_table_0to1
+!word scroll_left_up_0to1
+!word scroll_up_0to1
+!word scroll_right_up_0to1
+!word scroll_right_0to1
+!word scroll_right_down_0to1
+!word scroll_down_0to1
+!word scroll_left_down_0to1
+!word scroll_left_0to1
 
-scroll_jmp_table_midscreen_1to0
-!word scroll_left_up_midscreen_1to0
-!word scroll_up_midscreen_1to0
-!word scroll_right_up_midscreen_1to0
-!word scroll_right_midscreen_1to0
-!word scroll_right_down_midscreen_1to0
-!word scroll_down_midscreen_1to0
-!word scroll_left_down_midscreen_1to0
-!word scroll_left_midscreen_1to0
+scroll_jmp_table_1to0
+!word scroll_left_up_1to0
+!word scroll_up_1to0
+!word scroll_right_up_1to0
+!word scroll_right_1to0
+!word scroll_right_down_1to0
+!word scroll_down_1to0
+!word scroll_left_down_1to0
+!word scroll_left_1to0
 
-scroll_jmp_table_color_midscreen
-!word scroll_color_left_up_midscreen
-!word scroll_color_up_midscreen
-!word scroll_color_right_up_midscreen
-!word scroll_color_right_midscreen
-!word scroll_color_right_down_midscreen
-!word scroll_color_down_midscreen
-!word scroll_color_left_down_midscreen
-!word scroll_color_left_midscreen
-
-scroll_jmp_table_color_endscreen
-!word scroll_color_left_up_endscreen
-!word scroll_color_up_endscreen
-!word scroll_color_right_up_endscreen
-!word scroll_color_right_endscreen
-!word scroll_color_right_down_endscreen
-!word scroll_color_down_endscreen
-!word scroll_color_left_down_endscreen
-!word scroll_color_left_endscreen
+scroll_jmp_table_color
+!word scroll_color_left_up
+!word scroll_color_up
+!word scroll_color_right_up
+!word scroll_color_right
+!word scroll_color_right_down
+!word scroll_color_down
+!word scroll_color_left_down
+!word scroll_color_left
 
 ; by coincidence we can use the same values for both registers when multicolor is enabled!
 ; vicctrl1: hibit irq off, extended color mode off, bitmap off, screen on
@@ -417,28 +398,28 @@ scroll_copy_color_last_row
 }
 	rts
 
-scroll_copy_color_first_col_midscreen
+scroll_copy_color_first_col_upperhalf
 !for COUNT, 0, 9 {
 	lda scroll_color_newdata_tmpbuf_col+COUNT
 	sta COLORRAM+COUNT*40
 }
 	rts
 
-scroll_copy_color_first_col_endscreen
+scroll_copy_color_first_col_lowerhalf
 !for COUNT, 10, 20 {
 	lda scroll_color_newdata_tmpbuf_col+COUNT
 	sta COLORRAM+COUNT*40
 }
 	rts
 
-scroll_copy_color_last_col_midscreen
+scroll_copy_color_last_col_upperhalf
 !for COUNT, 0, 9 {
 	lda scroll_color_newdata_tmpbuf_col+COUNT
 	sta COLORRAM+COUNT*40+38
 }
 	rts
 
-scroll_copy_color_last_col_endscreen
+scroll_copy_color_last_col_lowerhalf
 !for COUNT, 10, 20 {
 	lda scroll_color_newdata_tmpbuf_col+COUNT
 	sta COLORRAM+COUNT*40+38
@@ -520,7 +501,7 @@ scroll_copy_char_last_col_to1
 ; Use a macro that is called with source/dest offset and number of rows and start row.
 
 !macro screen_part_copy .srcoff, .dstoff, .numcols, .numrows, .srcadr, .dstadr {
-!if DEBUG_TIMING { inc VICBGCOL }
+!if DEBUG_TIMING > 0 { inc VICBGCOL }
 	ldy #.numcols
 .copycode
 !for ROW, 0, .numrows-1 {
@@ -531,11 +512,11 @@ scroll_copy_char_last_col_to1
 	beq +	; just 1 byte too far!
 	jmp .copycode
 +
-!if DEBUG_TIMING { dec VICBGCOL }
+!if DEBUG_TIMING > 0 { dec VICBGCOL }
 }
 
 !macro color_part_copy .srcoff, .dstoff, .numcols, .numrows, .rowoff, .right, .upward {
-!if DEBUG_TIMING { inc VICBGCOL }
+!if DEBUG_TIMING > 0 { inc VICBGCOL }
 !if .right {
 	ldy #1	; reverse has offset 1 so we need to use that on forward too
 } else {
@@ -570,172 +551,157 @@ scroll_copy_char_last_col_to1
 	dey
 }
 	bne .copycode
-!if DEBUG_TIMING { dec VICBGCOL }
+!if DEBUG_TIMING > 0 { dec VICBGCOL }
 }
 
-scroll_left_up_midscreen_0to1
+scroll_left_up_0to1
 	+screen_part_copy 0, 41, 38, 20, SCREEN0, SCREEN1
 	jsr scroll_generate_first_row
 	jsr scroll_generate_first_col
 	jsr scroll_copy_char_first_row_to1
 	jmp scroll_copy_char_first_col_to1
 
-scroll_up_midscreen_0to1
+scroll_up_0to1
 	+screen_part_copy 0, 40, 39, 20, SCREEN0, SCREEN1
 	jsr scroll_generate_first_row
 	jmp scroll_copy_char_first_row_to1
 
-scroll_right_up_midscreen_0to1
+scroll_right_up_0to1
 	+screen_part_copy 1, 40, 38, 20, SCREEN0, SCREEN1
 	jsr scroll_generate_first_row
 	jsr scroll_generate_last_col
 	jsr scroll_copy_char_first_row_to1
 	jmp scroll_copy_char_last_col_to1
 
-scroll_right_midscreen_0to1
+scroll_right_0to1
 	+screen_part_copy 1, 0, 38, 21, SCREEN0, SCREEN1
 	jsr scroll_generate_last_col
 	jmp scroll_copy_char_last_col_to1
 
-scroll_right_down_midscreen_0to1
+scroll_right_down_0to1
 	+screen_part_copy 41, 0, 38, 20, SCREEN0, SCREEN1
 	jsr scroll_generate_last_row
 	jsr scroll_generate_last_col
 	jsr scroll_copy_char_last_row_to1
 	jmp scroll_copy_char_last_col_to1
 
-scroll_down_midscreen_0to1
+scroll_down_0to1
 	+screen_part_copy 40, 0, 39, 20, SCREEN0, SCREEN1
 	jsr scroll_generate_last_row
 	jmp scroll_copy_char_last_row_to1
 
-scroll_left_down_midscreen_0to1
+scroll_left_down_0to1
 	+screen_part_copy 40, 1, 38, 20, SCREEN0, SCREEN1
 	jsr scroll_generate_last_row
 	jsr scroll_generate_first_col
 	jsr scroll_copy_char_last_row_to1
 	jmp scroll_copy_char_first_col_to1
 
-scroll_left_midscreen_0to1
+scroll_left_0to1
 	+screen_part_copy 0, 1, 38, 21, SCREEN0, SCREEN1
 	jsr scroll_generate_first_col
 	jmp scroll_copy_char_first_col_to1
 
-scroll_left_up_midscreen_1to0
+scroll_left_up_1to0
 	+screen_part_copy 0, 41, 38, 20, SCREEN1, SCREEN0
 	jsr scroll_generate_first_row
 	jsr scroll_generate_first_col
 	jsr scroll_copy_char_first_row_to0
 	jmp scroll_copy_char_first_col_to0
 
-scroll_up_midscreen_1to0
+scroll_up_1to0
 	+screen_part_copy 0, 40, 39, 20, SCREEN1, SCREEN0
 	jsr scroll_generate_first_row
 	jmp scroll_copy_char_first_row_to0
 
-scroll_right_up_midscreen_1to0
+scroll_right_up_1to0
 	+screen_part_copy 1, 40, 38, 20, SCREEN1, SCREEN0
 	jsr scroll_generate_first_row
 	jsr scroll_generate_last_col
 	jsr scroll_copy_char_first_row_to0
 	jmp scroll_copy_char_last_col_to0
 
-scroll_right_midscreen_1to0
+scroll_right_1to0
 	+screen_part_copy 1, 0, 38, 21, SCREEN1, SCREEN0
 	jsr scroll_generate_last_col
 	jmp scroll_copy_char_last_col_to1
 
-scroll_right_down_midscreen_1to0
+scroll_right_down_1to0
 	+screen_part_copy 41, 0, 38, 20, SCREEN1, SCREEN0
 	jsr scroll_generate_last_row
 	jsr scroll_generate_last_col
 	jsr scroll_copy_char_last_row_to0
 	jmp scroll_copy_char_last_col_to0
 
-scroll_down_midscreen_1to0
+scroll_down_1to0
 	+screen_part_copy 40, 0, 39, 20, SCREEN1, SCREEN0
 	jsr scroll_generate_last_row
 	jmp scroll_copy_char_last_row_to0
 
-scroll_left_down_midscreen_1to0
+scroll_left_down_1to0
 	+screen_part_copy 40, 1, 38, 20, SCREEN1, SCREEN0
 	jsr scroll_generate_last_row
 	jsr scroll_generate_first_col
 	jsr scroll_copy_char_last_row_to0
 	jmp scroll_copy_char_first_col_to0
 
-scroll_left_midscreen_1to0
+scroll_left_1to0
 	+screen_part_copy 0, 1, 38, 21, SCREEN1, SCREEN0
 	jsr scroll_generate_first_col
 	jmp scroll_copy_char_first_col_to0
 
-scroll_color_left_up_midscreen
+scroll_color_left_up
 	+color_part_copy 0, 41, 38, 10, 0, 0, 1
 	jsr scroll_copy_color_first_row
-	jmp scroll_copy_color_first_col_midscreen
-
-scroll_color_left_up_endscreen
+	jsr scroll_copy_color_first_col_upperhalf
 	+color_part_copy 0, 41, 38, 10, 10, 0, 1
-	jmp scroll_copy_color_first_col_endscreen
+	jmp scroll_copy_color_first_col_lowerhalf
 
-scroll_color_up_midscreen
+scroll_color_up
 	+color_part_copy 0, 40, 39, 10, 0, 0, 1
-	jmp scroll_copy_color_first_row
-
-scroll_color_up_endscreen
+	jsr scroll_copy_color_first_row
 	+color_part_copy 0, 40, 39, 10, 10, 0, 1
 	rts
 
-scroll_color_right_up_midscreen
+scroll_color_right_up
 	+color_part_copy 1, 40, 38, 10, 0, 1, 1
 	jsr scroll_copy_color_first_row
-	jmp scroll_copy_color_last_col_midscreen
-
-scroll_color_right_up_endscreen
+	jsr scroll_copy_color_last_col_upperhalf
 	+color_part_copy 1, 40, 38, 10, 10, 1, 1
-	jmp scroll_copy_color_last_col_endscreen
+	jmp scroll_copy_color_last_col_lowerhalf
 
-scroll_color_right_midscreen
+scroll_color_right
 	+color_part_copy 1, 0, 38, 10, 0, 1, 0
-	jmp scroll_copy_color_last_col_midscreen
-
-scroll_color_right_endscreen
+	jsr scroll_copy_color_last_col_upperhalf
 	+color_part_copy 1, 0, 38, 11, 10, 1, 0
-	jmp scroll_copy_color_last_col_endscreen
+	jmp scroll_copy_color_last_col_lowerhalf
 
-scroll_color_right_down_midscreen
+scroll_color_right_down
 	+color_part_copy 41, 0, 38, 10, 0, 1, 0
-	jmp scroll_copy_color_last_col_midscreen
-
-scroll_color_right_down_endscreen
+	jsr scroll_copy_color_last_col_upperhalf
 	+color_part_copy 41, 0, 38, 10, 10, 1, 0
-	jsr scroll_copy_color_last_col_endscreen
+	jsr scroll_copy_color_last_col_lowerhalf
 	jmp scroll_copy_color_last_row
 
-scroll_color_down_midscreen
+scroll_color_down
+	; here we can not copy all in one call, even if the parameters suggest that.
+	; we need to copy the upper half first or visible artifacts will occur
 	+color_part_copy 40, 0, 39, 10, 0, 0, 0
-	rts
-
-scroll_color_down_endscreen
 	+color_part_copy 40, 0, 39, 10, 10, 0, 0
 	jmp scroll_copy_color_last_row
 
-scroll_color_left_down_midscreen
+scroll_color_left_down
 	+color_part_copy 40, 1, 38, 10, 0, 0, 0
-	jmp scroll_copy_color_first_col_midscreen
-
-scroll_color_left_down_endscreen
+	jsr scroll_copy_color_first_col_upperhalf
 	+color_part_copy 40, 1, 38, 10, 10, 0, 0
-	jsr scroll_copy_color_first_col_endscreen
+	jsr scroll_copy_color_first_col_lowerhalf
 	jmp scroll_copy_color_last_row
 
-scroll_color_left_midscreen
+scroll_color_left
 	+color_part_copy 0, 1, 38, 10, 0, 0, 0
-	jmp scroll_copy_color_first_col_midscreen
-
-scroll_color_left_endscreen
+	jsr scroll_copy_color_first_col_upperhalf
 	+color_part_copy 0, 1, 38, 11, 10, 0, 0
-	jmp scroll_copy_color_first_col_endscreen
+	jmp scroll_copy_color_first_col_lowerhalf
 
 
 !macro scroll_jmp_table_call .tableadr {	; takes 16 cycles.
@@ -763,25 +729,35 @@ scrolling_init
 	sta screen_pos_y
 	; clear all helper variables
 	lda #0
-	sta scroll_active
+	sta scroll_request_direction
 	sta scroll_direction
 	sta scroll_srcdst_flag
 	sta scroll_phase
 	+set8im VICMEMCTRL, SCREEN0POSITION*16+VICCHARSETBLOCK*2
+	sta scroll_vicmemctrl
 	rts
 
-scrolling_midscreen
+scrolling_code
+	; Call this code when a certain raster line is reached so we can
+	; start copying the upper half of screen and then directly the
+	; lower half. The fastest version of lower half color copy
+	; takes N raster lines, so it must be called after line
+	; 50+21*8-N = 218-N. N is somewhere betweeen 60 and 80. Line >= 154 is ok.
 	; in certain scroll phases we need to call code to copy parts of screen
 	; when scrolling is currently active (direction is set) just continue
 	; scrolling in that direction.
-	; If it is not set, check if is requested by scroll_active and transfer
+	; If it is not set, check if is requested by scroll_request_direction and transfer
 	; the value from there. In that case also check for a prepration frame
 	; that is needed when switching to opposite direction.
 	; We need to scroll 1 pixel then and adjust screen_pos.
-	; We detect that here and set a flag to do preparation frame at endscreen.
-	lda scroll_direction
-	bne scrolling_midscreen_active
-	ldy scroll_active
+	; All screen position data and hardware register values for next
+	; frame is computed here. Hardware registers are set after current
+	; frame has finished display, for example early in next frame.
+	; There we can also program first visible sprites when sprite muxer
+	; is used.
+	ldy scroll_direction
+	bne scrolling_already_active
+	ldy scroll_request_direction
 	bne +
 	rts
 +	; no direction set but scroll is requested
@@ -797,29 +773,59 @@ scrolling_midscreen
 	lda screen_pos_x
 	and #$70
 	cmp screen_pos_neutral_x-1,y
-	bne scrolling_midscreen_needs_preparation_frame
+	bne scrolling_needs_preparation_frame
 +	lda screen_pos_neutral_y-1,y
-	beq scrolling_midscreen_phase0	; has don't care value 00, so no prep frame
+	beq scrolling_phase0	; has don't care value 00, so no prep frame
 	lda screen_pos_y
 	and #$70
 	cmp screen_pos_neutral_y-1,y
-	bne scrolling_midscreen_needs_preparation_frame
+	bne scrolling_needs_preparation_frame
 	; normal code, phase=0, we need to start preparations
+scrolling_phase0
+	; adjust screen position and compute vicctrl registers
+	jsr scrolling_adjust_screen_pos
+scrolling_phase0_b
+	+set8im scroll_phase, 1		; next phase is 1.
+	lda scroll_srcdst_flag
+	bmi +
+	tya	; restore direction
+	+scroll_jmp_table_call scroll_jmp_table_0to1
++	tya	; restore direction
+	+scroll_jmp_table_call scroll_jmp_table_1to0
+scrolling_already_active
+	; check phase, can be 0-3, action needed for 0 (screen copy) or 1 (color ram copy)
+	; accu still has direction. phase can be 0 after preparation frame.
+	; We need to adjust the screen position and compute new hardware register values
+	; no matter which phase. In y is scroll direction.
+	jsr scrolling_adjust_screen_pos
+	ldx scroll_phase
+	beq scrolling_phase0_b
+	inx
+	stx scroll_phase
+	cpx #2
+	bne scrolling_phase_now_3or4
+	; next frame we need to switch screens and do the colorram shift now,
+	; so compute new vicmemctrl register here
 	; Toggle flag for source/destination screen
-scrolling_midscreen_phase0
 	lda scroll_srcdst_flag
 	eor #$80
 	sta scroll_srcdst_flag
 	bmi +
 	lda #SCREEN0POSITION*16+VICCHARSETBLOCK*2
-	sta scroll_vicmemctrl
-	tya	; restore direction
-	+scroll_jmp_table_call scroll_jmp_table_midscreen_1to0
+	bne ++	; always jumps, because a is never 0 here
 +	lda #SCREEN1POSITION*16+VICCHARSETBLOCK*2
-	sta scroll_vicmemctrl
-	tya	; restore direction
-	+scroll_jmp_table_call scroll_jmp_table_midscreen_0to1
-scrolling_midscreen_needs_preparation_frame
+++	sta scroll_vicmemctrl
+	tya	; direction to a for jmptable call
+	+scroll_jmp_table_call scroll_jmp_table_color
+scrolling_phase_now_3or4
+	cpx #4
+	bne +
+	; end of scroll reached, so reset scroll phase and direction
+	lda #0
+	sta scroll_phase
+	sta scroll_direction
++	rts	
+scrolling_needs_preparation_frame
 	; adjust screen pos, needs preparation frame
 	; we have to check again whether x and/or y need to be corrected,
 	; or we would need to handle all 3 cases in 3 code parts on first check with
@@ -837,32 +843,10 @@ scrolling_midscreen_needs_preparation_frame
 	and #$8F
 	ora screen_pos_neutral_y-1,y
 	sta screen_pos_y
-+	+set8im scroll_phase, $FF
-	rts
-scrolling_midscreen_active
-	; check phase, can be 0-3, action needed for 0 (screen copy) or 1 (color ram copy)
-	; accu still has direction
-	ldx scroll_phase
-	beq scrolling_midscreen_phase0
-	dex
-	beq +
-	; phase was 2 or 3 or else x would be 0 now, nothing to do
-	rts
-+	; phase 1 means do upper color ram shift
-	+scroll_jmp_table_call scroll_jmp_table_color_midscreen
-
-scrolling_endscreen
-	+set8im VICCTRL2, $10	; test to avoid scroll, fixme need to reset ctrl1 as well!
-	+set8im VICCTRL1, $70	; MC on
-; this part has to be done before sprite muxing at end of screen!
-	ldy scroll_direction
-	bne +
-	rts
-+	; adjust screen_pos and program hardware register
-	; but not for phase FF
-	lda scroll_phase
-	bmi scrolling_endscreen_adjust_hw_registers
-	; shift screen pos by scroll direction
++	+set8im scroll_phase, 0		; next phase is 0
+	beq scrolling_compute_vicctrl_values	; always jumps because a=0 here
+scrolling_adjust_screen_pos
+	; shift screen pos by scroll direction (in Y register!)
 	ldx screen_pos_x+1	; a bit faster to have it in x during computation
 	lda scroll_delta_x-1,y	; y register is direction 1-8
 	bpl +
@@ -883,8 +867,8 @@ scrolling_endscreen
 	bcc +
 	inx
 +	stx screen_pos_y+1
-scrolling_endscreen_adjust_hw_registers
-	; read screen pos and adjust hardware registers
+scrolling_compute_vicctrl_values
+	; read screen pos and adjust hardware register values
 	; when doing that while changing it we can save 2*LDA (8 cycles) but need to double
 	; all this code, so don't do that
 	lda screen_pos_x
@@ -895,7 +879,6 @@ scrolling_endscreen_adjust_hw_registers
 	and #$07
 	tax
 	lda scroll_vicctrl2_for_offset,x
-;	sta VICCTRL2
 	sta scroll_vicctrl2
 	lda screen_pos_y
 	lsr
@@ -906,27 +889,7 @@ scrolling_endscreen_adjust_hw_registers
 	tax
 	lda scroll_vicctrl1_for_offset,x
 	sta scroll_vicctrl1
-;	sta VICCTRL1
-
-;this part can be done after sprite muxing
-	; increase scroll phase and check for copy operations
-	ldx scroll_phase
-	inx
-	stx scroll_phase
-	; x is now 0-4, only for phase 2 and 4 something needs to be done
-	cpx #2
-	bne +
-	; phase 2, do colorram copy and switch screens
-	lda scroll_vicmemctrl
-	sta VICMEMCTRL
-	tya	; direction to a for jump table
-	+scroll_jmp_table_call scroll_jmp_table_color_endscreen
-+	cpx #4
-	bne +
-	; phase 4, scroll reached end, stop by clearing direction
-	+set8im scroll_phase, 0	; reinit to default
-	sta scroll_direction
-+	rts
+	rts
 
 scoll_code_end_adr ; for measuring size
 

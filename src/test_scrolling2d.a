@@ -51,20 +51,12 @@ main
 	jsr scrolling_init
 	jsr level_init
 	; wait for raster to be at mid of screen
---	lda #130
+--	lda #154
 -	cmp VICRASTER
 	bcs -
-	; call midcode
+	; call scroll code
 !if DEBUG_TIMING { inc VICBGCOL }
-	jsr scrolling_midscreen
-!if DEBUG_TIMING { dec VICBGCOL }
-	; wait for raster to be at end of screen
-	lda #218
--	cmp VICRASTER
-	bcs -
-	; call endcode
-!if DEBUG_TIMING { inc VICBGCOL }
-	jsr scrolling_endscreen
+	jsr scrolling_code
 !if DEBUG_TIMING { dec VICBGCOL }
 	; read joystick control for scroll testing, joystick bits to direction!
 	lda CIA1_DATAPORT_A	; last four bits are up, down, left, right, fire
@@ -72,14 +64,14 @@ main
 	eor #$0F		; negate bits
 	tax
 	lda joy_scrolldir,x
-	sta scroll_active
-	; repeat, but wait first until raster is again near start of screen
--	lda VICRASTER
-	bmi -
-	lda scroll_vicctrl1
-	sta VICCTRL1
-	lda scroll_vicctrl2
-	sta VICCTRL2
+	sta scroll_request_direction
+	; repeat, but wait first until raster is at end of screen (9th bit of rasterline set)
+-	lda VICCTRL1	; bit 7 is 9th bit of rasterline
+	bpl -
+	; set hardware registers for next frame
+	+copy8 VICCTRL1, scroll_vicctrl1
+	+copy8 VICCTRL2, scroll_vicctrl2
+	+copy8 VICMEMCTRL, scroll_vicmemctrl
 	jmp --
 
 joy_scrolldir
