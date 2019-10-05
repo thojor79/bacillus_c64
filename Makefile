@@ -8,10 +8,10 @@ bacillus.prg : src/game.a src/macros.a src/actor.a src/diskio.a src/intro.a src/
 	acme src/game.a
 
 test/spritemux.prg : src/test_spritemux.a Makefile src/spritemux.a src/macros.a
-#	acme -DDEBUG_TIMING=0 -DTEST_STATIC_POS=0 -DKERNAL_RAND_POS=1 src/test_spritemux.a
-	acme -DDEBUG_TIMING=1 -DTEST_STATIC_POS=0 -DKERNAL_RAND_POS=1 src/test_spritemux.a
-#	acme -DDEBUG_TIMING=1 -DTEST_STATIC_POS=1 -DKERNAL_RAND_POS=0 src/test_spritemux.a
-#	acme -DDEBUG_TIMING=1 -DTEST_STATIC_POS=1 -DKERNAL_RAND_POS=1 src/test_spritemux.a
+#	acme -DDEBUG_TIMING=0 -DTEST_STATIC_POS=0 -DKERNAL_RAND_POS=1 -DONLY_MUXER=1 src/test_spritemux.a
+	acme -DDEBUG_TIMING=1 -DTEST_STATIC_POS=0 -DKERNAL_RAND_POS=1 -DONLY_MUXER=1 src/test_spritemux.a
+#	acme -DDEBUG_TIMING=1 -DTEST_STATIC_POS=1 -DKERNAL_RAND_POS=0 -DONLY_MUXER=1 src/test_spritemux.a
+#	acme -DDEBUG_TIMING=1 -DTEST_STATIC_POS=1 -DKERNAL_RAND_POS=1 -DONLY_MUXER=1 src/test_spritemux.a
 
 test/scrolling2d.prg : src/test_scrolling2d.a src/scrolling2d.a Makefile src/macros.a src/level2d.a
 	acme -DDEBUG_TIMING=1 -DHIRES=1 src/test_scrolling2d.a

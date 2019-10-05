@@ -811,9 +811,18 @@ scrolling_already_active
 	eor #$80
 	sta scroll_srcdst_flag
 	bmi +
+!ifdef sprite_mux_ptr_page {
+	lda #>(SCREEN0+$3F8)
+	sta sprite_mux_ptr_page
+}
 	lda #SCREEN0POSITION*16+VICCHARSETBLOCK*2
 	bne ++	; always jumps, because a is never 0 here
-+	lda #SCREEN1POSITION*16+VICCHARSETBLOCK*2
++
+!ifdef sprite_mux_ptr_page {
+	lda #>(SCREEN1+$3F8)
+	sta sprite_mux_ptr_page
+}
+	lda #SCREEN1POSITION*16+VICCHARSETBLOCK*2
 ++	sta scroll_vicmemctrl
 	tya	; direction to a for jmptable call
 	+scroll_jmp_table_call scroll_jmp_table_color

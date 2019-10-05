@@ -21,12 +21,40 @@
 ;
 ; ***************************************************************************************
 
-NR_OF_VIRTUAL_SPRITES = 32 ; rather test 24 sprites
+NR_OF_VIRTUAL_SPRITES = 24 ; with 24 it works, with 32 it will be really short on frametime
 
-; fixme hw registers need to be programmed earlier. see scroll code for comments
-; fixme sprites use same area as second screen? not from code, something other must be wrong
-; fixme test score panel code realistically, needs bitmap space,
-; collides with 2nd screen space.
+; fixme switch screen can be done at end of scroll screen but are other characters shown then?
+; or are they fetched when we reprogram the vscroll register anyway?
+; so set vicmemctrl first and then vscroll, then hscroll?
+; other characters surely but color is fetched only every 8th line.
+; try this by giving another vicmemctrl value to the muxer
+
+; fixme in some frames scrolling seems to start when raster line is ~ 255,
+; but not at half of screen! why this?
+
+; fixme plan how the memory is used:
+; $C000-$FFFF is VIC bank.
+; $D000-$DFFF must be char/sprite data.
+; is bitmap first or second? which ram range to use for screen0/1 ? and what for bitmap screen data?
+; Line 20 must be empty pixels, so 320 bytes there at offset 20*320=6400. so 0x1900-0x1A3F.
+; Last position can't be used for sprite pointers? because of the IRQ vectors?
+; where are sprite pointers? $03F8? yes.
+; So last 1k can never be a screen, not even for bitmap. We have to place sprites there.
+; possible spaces for screen:
+; 0-3,8-14. Screen 6 or 14 would contain the bitmap data.
+; More data is needed for the bitmap logo. Address is +7999 or $1F3F.
+; So $1900-$1F3F is bitmap data. This leaves place for 3 sprites, but not when we place it at end of ram.
+; So good idea would be: bitmap at end of ram, so $F900-$FF3F is bitmap, then 2 sprites, then free space
+; and irq vectors.
+; For the screen data we need the last 5 lines free and sprite data, so offset 20*40=800=$0320-$03FF.
+; if screen would be at $F400 (#13) then data would be at $F720-$F7FF. So 1 page free between both.
+; Place for 4 sprites.
+; So normal screens are e.g. 0/1 or 11/12 and rest space for sprites, with 4+2 sprites in between as extra.
+; Where charset? after screens maybe for manipulation.
+; So screens at 0/1 ($C000/$C400) then charset at $C800, then sprites $D000-$F720.
+; So last sprite pointer is 220, first is 64, so 156+4+2=162 sprites.
+
+; Calling the scroll within an irq doesn't work because raster register is programmed by the sprite muxer.
 
 TEMP0 = 2
 TEMP1 = 3
@@ -116,7 +144,6 @@ main_loop
 	; accu has last known state of frame_counter for comparison here!
 -	cmp frame_counter
 	beq -
-	; here the scroll control!
 
 !if TEST_STATIC_POS {
 } else {
@@ -151,47 +178,28 @@ main_loop
 	bpl -
 }
 
-	; wait for raster to be at mid of screen
---	lda #130
--	cmp VICRASTER
-	bcs -
-	; call midcode
-!if DEBUG_TIMING { inc VICBGCOL }
-	jsr scrolling_midscreen
-!if DEBUG_TIMING { dec VICBGCOL }
-	; wait for raster to be at end of screen
-	lda #218
--	cmp VICRASTER
-	bcs -
-	; call endcode
-!if DEBUG_TIMING { inc VICBGCOL }
-	; here the sprite mux preperation has rund and we set the registers afterwards, can be a bit late...
-	; but setting them right after score panel is difficult as sprite mux preparation is still
-	; working - or we make that irq interruptible and replace it with a setup hw register irq.
-	; but that is difficult: if the irq line for the first sprite irq is not ready yet, what line that
-	; irq should set when its done?! this would be a race condition.
-	; or the muxer code must check the raster line several times or we just hope that the muxer
-	; will be ready always before the new screen starts... difficult, fixme find a good solution.
-	; The preparation code can check after sorting / set first8 if it can already set the hw
-	; registers or else it must install an irq. we can avoid race conditions with sei/cli then...
-	jsr scrolling_endscreen
-!if DEBUG_TIMING { dec VICBGCOL }
 	; read joystick control for scroll testing, joystick bits to direction!
 	lda CIA1_DATAPORT_A	; last four bits are up, down, left, right, fire
 	and #$0F
 	eor #$0F		; negate bits
 	tax
 	lda joy_scrolldir,x
-	sta scroll_active
+	sta scroll_request_direction
 
-	; set hw regs - fixme this is after the copying and too late of course! need it before the copying!
-	lda scroll_vicctrl1
-	sta VICCTRL1
-	lda scroll_vicctrl2
-	sta VICCTRL2
-
-	; next frame
+	; wait for raster to be at mid of screen
+--	lda #154
+-	cmp VICRASTER
+	bcs -
+	; load and memorize frame counter here, will be changed by sprite mux code,
+	; that can happen during scrolling or afterwards
 	lda frame_counter
+	pha
+!if DEBUG_TIMING { inc VICBGCOL }
+	; call scrolling code
+	jsr scrolling_code
+!if DEBUG_TIMING { dec VICBGCOL }
+	pla	; get old frame_counter value back
+	; next frame
 	jmp main_loop
 
 !src "sprites32_sprdata.a"	; sprites32_data
